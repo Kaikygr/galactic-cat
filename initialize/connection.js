@@ -6,12 +6,15 @@ const pino = require("pino");
 const { Boom } = require("@hapi/boom");
 
 const pairingCode = process.argv.includes("--code");
+
 async function connectToWhatsApp() {
+  // Define o caminho para salvar os logs de conexão
   const connectionLogs = "./initialize/auth";
   const { state, saveCreds } = await useMultiFileAuthState(connectionLogs);
 
   console.log(colors.cyan("🔌 Iniciando a conexão com o WhatsApp..."));
 
+  // Cria uma instância do cliente WhatsApp
   const client = makeWASocket({
     auth: state,
     logger: pino({ level: "silent" }),
@@ -21,12 +24,19 @@ async function connectToWhatsApp() {
     patchMessageBeforeSending: patchInteractiveMessage
   });
 
+  // Verifica se o emparelhamento via QR Code é necessário
   if (pairingCode && !client.authState.creds.registered) {
     console.log(colors.yellow("🔑 Não registrado, iniciando emparelhamento via QR Code..."));
     await handlePairing(client);
   }
 
+  // Processa eventos do cliente e mostra todos os tipos de eventos em formato JSON
   client.ev.process(async events => {
+    // Log de todos os tipos de eventos com JSON stringfy
+    Object.entries(events).forEach(([tipo, dado]) => {
+      console.log(colors.blue(`\n\nEvento: ${tipo}`), JSON.stringify(dado, null, 2));
+    });
+
     if (events["connection.update"]) {
       await handleConnectionUpdate(events["connection.update"], client);
     }
@@ -43,6 +53,7 @@ async function connectToWhatsApp() {
   });
 }
 
+// Função para modificar mensagens interativas antes de enviá-las
 function patchInteractiveMessage(message) {
   if (message?.interactiveMessage) {
     return {
@@ -60,6 +71,7 @@ function patchInteractiveMessage(message) {
   return message;
 }
 
+// Função para lidar com atualizações de conexão
 async function handleConnectionUpdate(update, client) {
   const { connection, lastDisconnect } = update;
   const shouldReconnect = new Boom(lastDisconnect?.error)?.output.statusCode;
@@ -75,6 +87,7 @@ async function handleConnectionUpdate(update, client) {
   }
 }
 
+// Inicia a conexão com o WhatsApp e trata erros
 connectToWhatsApp().catch(async error => {
   console.error(colors.red.bold(`🚨 Erro na conexão do WhatsApp: ${error.message}`));
   console.error(colors.yellow(`🔧 Stack Trace: \n${error.stack}`));
