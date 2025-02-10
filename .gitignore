@@ -1,0 +1,5 @@
+# Ignorar dependências do Node.js
+node_modules/
+/initialize/auth/
+package-lock.json
+modules/gemini/data/config.json
