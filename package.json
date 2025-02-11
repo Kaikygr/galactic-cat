@@ -4,7 +4,7 @@
   "description": "Base-Bot (Whatsapp)",
   "main": "commands",
   "scripts": {
-    "start": "node initialize/connection.js"
+    "start": "node start.js"
   },
   "author": "Kaallys",
   "license": "MIT",
@@ -59,7 +59,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/Kaallys/cat.git"
+    "url": "https://github.com/Kaikygr/galactic-cat.git"
   },
   "keywords": [
     "whatsapp",
@@ -68,7 +68,7 @@
     "automation"
   ],
   "bugs": {
-    "url": "https://github.com/Kaallys/cat/issues"
+    "url": "https://github.com/Kaikygr/galactic-cat/issues"
   },
-  "homepage": "https://github.com/Kaallys/cat#readme"
+  "homepage": "https://github.com/Kaikygr/galactic-cat#readme"
 }
