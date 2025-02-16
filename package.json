@@ -4,7 +4,7 @@
   "description": "Base-Bot (Whatsapp)",
   "main": "commands",
   "scripts": {
-    "start": "node start.js"
+    "start": "node bin/start.js"
   },
   "author": "Kaallys",
   "license": "MIT",

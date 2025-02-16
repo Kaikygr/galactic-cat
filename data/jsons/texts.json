@@ -1,0 +1,20 @@
+{
+  "not_group": "❌ Este comando só pode ser usado em grupos.",
+  "not_admin": "❌ Apenas administradores podem usar este comando.",
+  "group_help": "Comando: group\nUso:\n1. !group --help                   => Exibe este menu de ajuda.\n2. !group data                     => Exibe os dados atuais do grupo.\n3. !group welcome on|off           => Ativa/desativa mensagens de welcome.\n4. !group welcome settext [mensagem] => Define o texto de welcome.\n5. !group welcome setimage [URL]    => Define a imagem de welcome (somente .jpg).\n6. !group farewell on|off          => Ativa/desativa mensagens de farewell.\n7. !group farewell settext [mensagem] => Define o texto de farewell.\n8. !group farewell setimage [URL]    => Define a imagem de farewell (somente .jpg).\n\nPlaceholders:\n#user         => Menção do usuário.\n#gruponome    => Nome do grupo.\n#data         => Data e hora completa.\n#descrição    => Descrição do grupo.\n#usuários     => Total de membros.\n#hora         => Hora atual.\n#dataSimples  => Data atual.\n#qtdAdmins    => Número de administradores.\n#botNumber    => Número do bot.\n#ownerNumber  => Número do dono do bot.",
+  "cat_perm_denied": "❌ Você não tem permissão para usar este comando aqui.",
+  "cat_invalid_input": "⚠️ You must provide a valid text input.",
+  "cat_unexpected_error": "❌ An unexpected error occurred. Please try again later.",
+  "welcome_on": "✅ Recurso de welcome ativado para este grupo.",
+  "welcome_off": "✅ Recurso de welcome desativado para este grupo.",
+  "welcome_settext_success": "✅ Texto de welcome atualizado.",
+  "welcome_setimage_success": "✅ Imagem de welcome atualizada.",
+  "farewell_on": "✅ Recurso de farewell ativado para este grupo.",
+  "farewell_off": "✅ Recurso de farewell desativado para este grupo.",
+  "farewell_settext_success": "✅ Texto de farewell atualizado.",
+  "farewell_setimage_success": "✅ Imagem de farewell atualizada.",
+  "inform_text": "⚠️ Informe o texto de ",
+  "inform_url": "⚠️ Informe a URL da imagem de ",
+  "invalid_url": "⚠️ URL inválida. Apenas links terminando com .jpg são permitidos.",
+  "invalid_subcommand": "❌ Subcomando inválido. Use !group --help para instruções."
+}

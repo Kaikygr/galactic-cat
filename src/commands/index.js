@@ -4,18 +4,28 @@
 const colors = require("ansi-colors");
 const fs = require("fs-extra");
 const path = require("path");
+const texts = require("../../data/jsons/texts.json");
 
-const printMessage = require("./log/console");
+const printMessage = require("../temp/log/console");
 const { geminiAIModel } = require("./exports");
 
-const { getGroupAdmins } = require("./../utils/functions");
+const { getGroupAdmins } = require("../../utils/functions");
 
-const ConfigfilePath = path.join(__dirname, "data", "options.json");
+const ConfigfilePath = ("../../auth/data/options.json")
 const config = require(ConfigfilePath);
+
+const groupConfigPath = ("../../auth/data/groupConfigs.json");
+let groupConfigs = {};
+try {
+  groupConfigs = JSON.parse(fs.readFileSync(groupConfigPath, "utf8"));
+} catch (error) {
+  console.log("Nenhuma configuração de grupos encontrada, usando padrão.");
+}
 
 async function connectToWhatsApp() {
   module.exports = client = async client => {
     module.exports = upsert = async (upsert, client) => {
+     
       async function WhatsappUpsert() {
         for (const info of upsert?.messages || []) {
           const from = info.key.remoteJid;
@@ -43,7 +53,10 @@ async function connectToWhatsApp() {
           const groupAdmins = isGroup ? getGroupAdmins(groupMembers) : "";
           const messagesC = budy.slice(0).trim().split(/ +/).shift().toLowerCase();
           const isCmd = body.startsWith(prefix);
-          const comando = isCmd ? body.slice(1).trim().split(/ +/).shift().toLocaleLowerCase() : null;
+          let comando = isCmd ? body.slice(1).trim().split(/ +/).shift().toLocaleLowerCase() : null;
+          if (!comando && body.toLowerCase().includes("cat")) {
+            comando = "cat";
+          }
           const args = body.trim().split(/ +/).slice(1);
           const text = args.join(" ");
           const mime = (quoted.info || quoted).mimetype || "";
@@ -104,15 +117,17 @@ async function connectToWhatsApp() {
 
           switch (comando) {
             case "cat":
-              if (!text || typeof text !== "string" || text.trim().length < 1) {
-                enviar("⚠️ You must provide a valid text input.");
+              if (isOwner && info.key.remoteJid !== "120363047659668203@g.us") {
+                enviar(texts.cat_perm_denied);
                 break;
               }
-
+              if (!text || typeof text !== "string" || text.trim().length < 1) {
+                enviar(texts.cat_invalid_input);
+                break;
+              }
               geminiAIModel(text)
                 .then(result => {
                   console.log(result);
-
                   if (result.status === "success") {
                     enviar(result.response);
                   } else {
@@ -121,12 +136,79 @@ async function connectToWhatsApp() {
                 })
                 .catch(error => {
                   console.error("Unexpected error:", error);
-                  enviar("❌ An unexpected error occurred. Please try again later.");
+                  enviar(texts.cat_unexpected_error);
                 });
-
               break;
-
-            default:
+            case "group": {
+              if (!isGroup) {
+                enviar(texts.not_group);
+                break;
+              }
+              if (!isGroupAdmins) {
+                enviar(texts.not_admin);
+                break;
+              }
+              if (args.length === 0 || args.includes("--help")) {
+                enviar(texts.group_help);
+                break;
+              }
+              if (!groupConfigs[from]) {
+                groupConfigs[from] = {
+                  status: "off",
+                  welcome: "",
+                  farewell: "",
+                  welcomeImage: "",
+                  farewellImage: ""
+                };
+              }
+              let grupoConfig = groupConfigs[from];
+              const subcommand = args[0].toLowerCase();
+              if (subcommand === "data") {
+                enviar("📊 Dados do grupo:\n```json\n" + JSON.stringify(grupoConfig, null, 2) + "\n```");
+                break;
+              } else if (subcommand === "welcome" || subcommand === "farewell") {
+                const tipo = subcommand; // "welcome" ou "farewell"
+                if (args.length < 2) {
+                  enviar(`⚠️ Informe o subcomando para ${tipo} (on, off, settext, setimage).`);
+                  break;
+                }
+                const acao = args[1].toLowerCase();
+                if (acao === "on") {
+                  grupoConfig.status = "on";
+                  enviar(tipo === "welcome" ? texts.welcome_on : texts.farewell_on);
+                } else if (acao === "off") {
+                  grupoConfig.status = "off";
+                  enviar(tipo === "welcome" ? texts.welcome_off : texts.farewell_off);
+                } else if (acao === "settext") {
+                  const novoTexto = args.slice(2).join(" ");
+                  if (!novoTexto) {
+                    enviar(texts.inform_text + tipo + ".");
+                    break;
+                  }
+                  grupoConfig[tipo] = novoTexto;
+                  enviar(tipo === "welcome" ? texts.welcome_settext_success : texts.farewell_settext_success);
+                } else if (acao === "setimage") {
+                  const url = args[2];
+                  if (!url) {
+                    enviar(texts.inform_url + tipo + ".");
+                    break;
+                  }
+                  if (!url.toLowerCase().endsWith(".jpg")) {
+                    enviar(texts.invalid_url);
+                    break;
+                  }
+                  grupoConfig[`${tipo}Image`] = url;
+                  enviar(tipo === "welcome" ? texts.welcome_setimage_success : texts.farewell_setimage_success);
+                } else {
+                  enviar(texts.invalid_subcommand);
+                  break;
+                }
+                fs.writeFileSync(groupConfigPath, JSON.stringify(groupConfigs, null, 2));
+              } else {
+                enviar(texts.invalid_subcommand);
+              }
+              break;
+            }
           }
         }
       }

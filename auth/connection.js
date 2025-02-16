@@ -4,15 +4,30 @@ const { default: makeWASocket, useInMemoryStore, DisconnectReason, WAGroupMetada
 const colors = require("colors");
 const pino = require("pino");
 const { Boom } = require("@hapi/boom");
-const options = require("../commands/data/options.json");
+const config = require("./data/options.json");
 const os = require("os");
+const fs = require("fs");
+const path = require("path");
+const axios = require('axios');
 
 const { useMultiFileAuthState } = require("@whiskeysockets/baileys");
 
 const pairingCode = process.argv.includes("--code");
 
+const groupConfigPath = path.join(__dirname, "data","groupConfig.json");
+if (!fs.existsSync(groupConfigPath)) {
+  fs.writeFileSync(groupConfigPath, JSON.stringify({}, null, 2));
+}
+
+let groupConfigs = {};
+try {
+  groupConfigs = JSON.parse(fs.readFileSync(groupConfigPath, "utf8"));
+} catch (error) {
+  console.log("Nenhuma configuração de grupos encontrada, usando mensagens genéricas.");
+}
+
 async function connectToWhatsApp() {
-  const connectionLogs = "./initialize/auth";
+  const connectionLogs = "./auth/temp";
   const { state, saveCreds } = await useMultiFileAuthState(connectionLogs);
 
   console.log(colors.cyan("🔌 Iniciando a conexão com o WhatsApp..."));
@@ -33,7 +48,6 @@ async function connectToWhatsApp() {
 
   client.ev.process(async events => {
     Object.entries(events).forEach(([tipo, dado]) => {
-      console.log(colors.blue(`\n\nEvento: ${tipo}`), JSON.stringify(dado, null, 2));
     });
 
     if (events["connection.update"]) {
@@ -47,7 +61,7 @@ async function connectToWhatsApp() {
 
     if (events["messages.upsert"]) {
       var upsert = events["messages.upsert"];
-      require("./../commands/index")(upsert, client);
+      require("../src/commands/index")(upsert, client);
     }
     
     if (events["group-participants.update"]) {
@@ -86,11 +100,11 @@ async function handleConnectionUpdate(update, client) {
 
   if (connection === "open") {
     console.log(colors.green("✅ Conexão aberta com sucesso. Bot disponível."));
-    const ownerJid = options.owner.number;
+    const ownerJid = config.owner.number;
     const systemInfo = `Sistema: ${os.platform()} ${os.release()}
 Arquitetura: ${os.arch()}
 CPU: ${os.cpus()[0].model}`;
-    const sessionInfo = `Olá ${options.owner.name}, o bot está ativo!
+    const sessionInfo = `Olá ${config.owner.name}, o bot está ativo!
 ID: ${client.user?.id || "N/A"}
 Nome: ${client.user?.name || "N/A"}
 Status: Conectado.
@@ -109,31 +123,82 @@ ${systemInfo}`;
 }
 
 async function handleGroupParticipantsUpdate(event, client) {
+  if (!groupConfigs[event.id]) {
+    groupConfigs[event.id] = {
+      status: "off",
+      welcome: "",
+      farewell: "",
+      welcomeImage: "",
+      farewellImage: ""
+    };
+    fs.writeFileSync(groupConfigPath, JSON.stringify(groupConfigs, null, 2));
+  }
+  
+  const groupCfg = groupConfigs[event.id];
+  if (groupCfg.status === "off") return;
+  
   if (event.action === "add" || event.action === "remove") {
+    let metadata = {};
+    try {
+      metadata = await client.groupMetadata(event.id);
+    } catch (e) {
+      console.log("Erro ao buscar metadados do grupo:", e.message);
+      metadata = { subject: "grupo", desc: "", participants: [] };
+    }
+    const adminCount = Array.isArray(metadata.participants)
+      ? metadata.participants.filter(p => p.admin).length
+      : 0;
+    const botNumber = client.user?.id.split(":")[0] + "@s.whatsapp.net";
+    
     for (const participant of event.participants) {
       let messageText = "";
+      let imageBuffer = null;
+      
       if (event.action === "add") {
-        messageText = `Olá @${participant.split("@")[0]}, seja bem-vindo ao grupo!`;
+        if (groupCfg.welcomeImage) {
+          try {
+            const response = await axios.get(groupCfg.welcomeImage, { responseType: 'arraybuffer' });
+            imageBuffer = Buffer.from(response.data, 'binary');
+          } catch (e) {
+            console.log("Erro ao baixar imagem de welcome:", e.message);
+          }
+        }
+        messageText = groupCfg.welcome || `Olá #user, seja bem-vindo ao #gruponome!`;
       } else if (event.action === "remove") {
-        messageText = `Tchau @${participant.split("@")[0]}, sentimos sua falta!`;
+        if (groupCfg.farewellImage) {
+          try {
+            const response = await axios.get(groupCfg.farewellImage, { responseType: 'arraybuffer' });
+            imageBuffer = Buffer.from(response.data, 'binary');
+          } catch (e) {
+            console.log("Erro ao baixar imagem de farewell:", e.message);
+          }
+        }
+        messageText = groupCfg.farewell || `Tchau #user, sentimos sua falta no #gruponome!`;
       }
-      await client.sendMessage(event.id, { text: messageText, mentions: [participant] });
+      
+      const finalMessageText = messageText
+        .replace(/#user/g, "@" + participant.split("@")[0])
+        .replace(/#gruponome/g, metadata.subject || "")
+        .replace(/#data/g, new Date().toLocaleString("pt-BR"))
+        .replace(/#descrição/g, metadata.desc || "")
+        .replace(/#usuários/g, metadata.participants.length)
+        .replace(/#hora/g, new Date().toLocaleTimeString("pt-BR"))
+        .replace(/#dataSimples/g, new Date().toLocaleDateString("pt-BR"))
+        .replace(/#qtdAdmins/g, adminCount)
+        .replace(/#botNumber/g, botNumber)
+        .replace(/#ownerNumber/g, config.owner.number);
+      
+      if (imageBuffer) {
+        await client.sendMessage(event.id, { image: imageBuffer, caption: finalMessageText, mentions: [participant] });
+      } else {
+        await client.sendMessage(event.id, { text: finalMessageText, mentions: [participant] });
+      }
     }
   } else {
-    if (event.author !== options.owner.number) {
-      const message = `Evento de grupo para outros usuários:
-ID: ${event.id}
-Action: ${event.action}
-Participantes: ${event.participants.join(", ")}
-Author: ${event.author || "N/A"}`;
-      if (options.others && options.others.number) {
-        await client.sendMessage(options.others.number, { text: message });
-      } else {
-        console.log(colors.magenta("Sessão Outros Usuários:"), message);
-      }
-    }
+    console.log("a")
   }
 }
+
 
 connectToWhatsApp().catch(async error => {
   console.error(colors.red.bold(`🚨 Erro na conexão do WhatsApp: ${error.message}`));

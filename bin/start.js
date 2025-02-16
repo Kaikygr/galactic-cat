@@ -1,14 +1,18 @@
+/**
+ * Starts a child process to run the connection.js script.
+ * If the child process exits or encounters an error, it will automatically restart after 5 seconds.
+ */
 const { fork } = require("child_process");
 
 function startConnection() {
-  const child = fork("./initialize/connection.js");
-  
+  const child = fork("auth/connection.js"); // Corrigido o caminho do script
+
   child.on("exit", (code, signal) => {
     console.log(`Processo connection.js finalizado (code: ${code}, signal: ${signal}). Reiniciando em 5 segundos...`);
     setTimeout(startConnection, 5000);
   });
-  
-  child.on("error", (error) => {
+
+  child.on("error", error => {
     console.error("Erro no processo connection.js:", error);
     setTimeout(startConnection, 5000);
   });

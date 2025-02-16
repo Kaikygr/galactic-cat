@@ -1,5 +1,6 @@
 # Ignorar dependências do Node.js
 node_modules/
-/initialize/auth/
 package-lock.json
+auth/temp/
 modules/gemini/data/config.json
+auth/data/groupConfig.json
