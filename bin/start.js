@@ -3,9 +3,11 @@
  * If the child process exits or encounters an error, it will automatically restart after 5 seconds.
  */
 const { fork } = require("child_process");
+const path = require("path");
 
 function startConnection() {
-  const child = fork("auth/connection.js"); // Corrigido o caminho do script
+  const connectionPath = path.join(__dirname, "../auth/connection.js");
+  const child = fork(connectionPath);
 
   child.on("exit", (code, signal) => {
     console.log(`Processo connection.js finalizado (code: ${code}, signal: ${signal}). Reiniciando em 5 segundos...`);

@@ -4,33 +4,63 @@ const { default: makeWASocket, useInMemoryStore, DisconnectReason, WAGroupMetada
 const colors = require("colors");
 const pino = require("pino");
 const { Boom } = require("@hapi/boom");
-const config = require("./data/options.json");
+const path = require("path");
 const os = require("os");
 const fs = require("fs");
-const path = require("path");
 const axios = require('axios');
+const sqlite3 = require('sqlite3').verbose();
+
+const config = require(path.join(__dirname, "data", "options.json"));
 
 const { useMultiFileAuthState } = require("@whiskeysockets/baileys");
 
 const pairingCode = process.argv.includes("--code");
 
-const groupConfigPath = path.join(__dirname, "data","groupConfig.json");
-if (!fs.existsSync(groupConfigPath)) {
-  fs.writeFileSync(groupConfigPath, JSON.stringify({}, null, 2));
+const db = new sqlite3.Database(path.join(__dirname, "data", "groups.db"));
+db.run(`CREATE TABLE IF NOT EXISTS groups (
+  id TEXT PRIMARY KEY,
+  status TEXT,
+  welcome TEXT,
+  farewell TEXT,
+  welcomeImage TEXT,
+  farewellImage TEXT
+)`);
+
+const { logger } = require(path.join(__dirname, "..", "src", "temp/log/console.js"));
+
+// Funções auxiliares assíncronas para manipular a configuração de grupo
+function getGroupConfigAsync(groupId) {
+	return new Promise((resolve, reject) => {
+		db.get("SELECT * FROM groups WHERE id = ?", [groupId], (err, row) => {
+			if (err) return reject(err);
+			resolve(row);
+		});
+	});
 }
 
-let groupConfigs = {};
-try {
-  groupConfigs = JSON.parse(fs.readFileSync(groupConfigPath, "utf8"));
-} catch (error) {
-  console.log("Nenhuma configuração de grupos encontrada, usando mensagens genéricas.");
+function createOrGetGroupConfigAsync(groupId) {
+	return new Promise(async (resolve, reject) => {
+		try {
+			let config = await getGroupConfigAsync(groupId);
+			if (config) return resolve(config);
+			const defaultConfig = { id: groupId, status: "off", welcome: "", farewell: "", welcomeImage: "", farewellImage: "" };
+			db.run("INSERT INTO groups (id, status, welcome, farewell, welcomeImage, farewellImage) VALUES (?, ?, ?, ?, ?, ?)",
+				[groupId, defaultConfig.status, defaultConfig.welcome, defaultConfig.farewell, defaultConfig.welcomeImage, defaultConfig.farewellImage],
+				function(err) {
+					if (err) return reject(err);
+					resolve(defaultConfig);
+				});
+		} catch (err) {
+			reject(err);
+		}
+	});
 }
 
 async function connectToWhatsApp() {
-  const connectionLogs = "./auth/temp";
+  const connectionLogs = path.join(__dirname, "temp");
   const { state, saveCreds } = await useMultiFileAuthState(connectionLogs);
 
-  console.log(colors.cyan("🔌 Iniciando a conexão com o WhatsApp..."));
+  logger.info("🔌 Iniciando a conexão com o WhatsApp...");
 
   const client = makeWASocket({
     auth: state,
@@ -42,7 +72,7 @@ async function connectToWhatsApp() {
   });
   
   if (pairingCode && !client.authState.creds.registered) {
-    console.log(colors.yellow("🔑 Não registrado, iniciando emparelhamento via QR Code..."));
+    logger.warn("🔑 Não registrado, iniciando emparelhamento via QR Code...");
     await handlePairing(client);
   }
 
@@ -55,13 +85,13 @@ async function connectToWhatsApp() {
     }
 
     if (events["creds.update"]) {
-      console.log(colors.magenta("💾 Credenciais atualizadas."));
+      logger.info("💾 Credenciais atualizadas.");
       await saveCreds();
     }
 
     if (events["messages.upsert"]) {
       var upsert = events["messages.upsert"];
-      require("../src/commands/index")(upsert, client);
+      require(path.join(__dirname, "..", "src", "commands", "index.js"))(upsert, client);
     }
     
     if (events["group-participants.update"]) {
@@ -99,7 +129,7 @@ async function handleConnectionUpdate(update, client) {
   const shouldReconnect = new Boom(lastDisconnect?.error)?.output?.statusCode;
 
   if (connection === "open") {
-    console.log(colors.green("✅ Conexão aberta com sucesso. Bot disponível."));
+    logger.info("✅ Conexão aberta com sucesso. Bot disponível.");
     const ownerJid = config.owner.number;
     const systemInfo = `Sistema: ${os.platform()} ${os.release()}
 Arquitetura: ${os.arch()}
@@ -108,41 +138,34 @@ CPU: ${os.cpus()[0].model}`;
 ID: ${client.user?.id || "N/A"}
 Nome: ${client.user?.name || "N/A"}
 Status: Conectado.
+Bot: ${config.bot.name}
+Versão: ${config.bot.version}
+Descrição: ${config.bot.description}
+GitHub: ${config.github}
 ${systemInfo}`;
     await client.sendMessage(ownerJid, { text: sessionInfo });
   }
 
   if (connection === "close") {
-    console.log(colors.red("❌ Conexão fechada. Tentando reconectar..."));
+    logger.error("❌ Conexão fechada. Tentando reconectar...");
     if (lastDisconnect?.error) {
-      console.log(colors.yellow("Erro de desconexão:"), JSON.stringify(lastDisconnect.error, null, 2));
+      logger.warn("Erro de desconexão:" + JSON.stringify(lastDisconnect.error, null, 2));
     }
-    console.log(colors.yellow("⏳ Tentando reconectar em breve..."));
+    logger.warn("⏳ Tentando reconectar em breve...");
     setTimeout(() => connectToWhatsApp(), 5000);
   }
 }
 
 async function handleGroupParticipantsUpdate(event, client) {
-  if (!groupConfigs[event.id]) {
-    groupConfigs[event.id] = {
-      status: "off",
-      welcome: "",
-      farewell: "",
-      welcomeImage: "",
-      farewellImage: ""
-    };
-    fs.writeFileSync(groupConfigPath, JSON.stringify(groupConfigs, null, 2));
-  }
-  
-  const groupCfg = groupConfigs[event.id];
-  if (groupCfg.status === "off") return;
+  let grupoConfig = await createOrGetGroupConfigAsync(event.id);
+  if (grupoConfig.status === "off") return;
   
   if (event.action === "add" || event.action === "remove") {
     let metadata = {};
     try {
       metadata = await client.groupMetadata(event.id);
     } catch (e) {
-      console.log("Erro ao buscar metadados do grupo:", e.message);
+      logger.error("Erro ao buscar metadados do grupo: " + e.message);
       metadata = { subject: "grupo", desc: "", participants: [] };
     }
     const adminCount = Array.isArray(metadata.participants)
@@ -155,25 +178,25 @@ async function handleGroupParticipantsUpdate(event, client) {
       let imageBuffer = null;
       
       if (event.action === "add") {
-        if (groupCfg.welcomeImage) {
+        if (grupoConfig.welcomeImage) {
           try {
-            const response = await axios.get(groupCfg.welcomeImage, { responseType: 'arraybuffer' });
+            const response = await axios.get(grupoConfig.welcomeImage, { responseType: 'arraybuffer' });
             imageBuffer = Buffer.from(response.data, 'binary');
           } catch (e) {
-            console.log("Erro ao baixar imagem de welcome:", e.message);
+            logger.error("Erro ao baixar imagem de welcome: " + e.message);
           }
         }
-        messageText = groupCfg.welcome || `Olá #user, seja bem-vindo ao #gruponome!`;
+        messageText = grupoConfig.welcome || `Olá #user, seja bem-vindo ao #gruponome!`;
       } else if (event.action === "remove") {
-        if (groupCfg.farewellImage) {
+        if (grupoConfig.farewellImage) {
           try {
-            const response = await axios.get(groupCfg.farewellImage, { responseType: 'arraybuffer' });
+            const response = await axios.get(grupoConfig.farewellImage, { responseType: 'arraybuffer' });
             imageBuffer = Buffer.from(response.data, 'binary');
           } catch (e) {
-            console.log("Erro ao baixar imagem de farewell:", e.message);
+            logger.error("Erro ao baixar imagem de farewell: " + e.message);
           }
         }
-        messageText = groupCfg.farewell || `Tchau #user, sentimos sua falta no #gruponome!`;
+        messageText = grupoConfig.farewell || `Tchau #user, sentimos sua falta no #gruponome!`;
       }
       
       const finalMessageText = messageText
@@ -195,14 +218,14 @@ async function handleGroupParticipantsUpdate(event, client) {
       }
     }
   } else {
-    console.log("a")
+    logger.debug("Atualização de participantes não processada.");
   }
 }
 
 
 connectToWhatsApp().catch(async error => {
-  console.error(colors.red.bold(`🚨 Erro na conexão do WhatsApp: ${error.message}`));
-  console.error(colors.yellow(`🔧 Stack Trace: \n${error.stack}`));
-  console.log(colors.magenta("🔄 Tentando reconectar..."));
+  logger.error(`🚨 Erro na conexão do WhatsApp: ${error.message}`);
+  logger.error(`🔧 Stack Trace: \n${error.stack}`);
+  logger.info("🔄 Tentando reconectar...");
   setTimeout(() => connectToWhatsApp(), 5000);
 });

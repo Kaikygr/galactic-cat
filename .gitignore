@@ -4,3 +4,4 @@ package-lock.json
 auth/temp/
 modules/gemini/data/config.json
 auth/data/groupConfig.json
+auth/data/groups.db
