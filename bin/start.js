@@ -1,22 +1,47 @@
-/**
- * Starts a child process to run the connection.js script.
- * If the child process exits or encounters an error, it will automatically restart after 5 seconds.
- */
 const { fork } = require("child_process");
 const path = require("path");
+const fs = require("fs");
+
+const logFilePath = path.join(__dirname, "../logs/connection.log");
+
+function logMessage(message) {
+  const timestamp = new Date().toISOString();
+  const logEntry = `[${timestamp}] ${message}\n`;
+  fs.appendFileSync(logFilePath, logEntry);
+}
 
 function startConnection() {
   const connectionPath = path.join(__dirname, "../auth/connection.js");
   const child = fork(connectionPath);
 
   child.on("exit", (code, signal) => {
-    console.log(`Processo connection.js finalizado (code: ${code}, signal: ${signal}). Reiniciando em 5 segundos...`);
+    const message = `Processo connection.js finalizado (code: ${code}, signal: ${signal}). Reiniciando em 5 segundos...`;
+    console.log(message);
+    logMessage(message);
     setTimeout(startConnection, 5000);
   });
 
   child.on("error", error => {
-    console.error("Erro no processo connection.js:", error);
+    const message = `Erro no processo connection.js: ${error.message}`;
+    console.error(message);
+    logMessage(message);
     setTimeout(startConnection, 5000);
+  });
+
+  child.on("message", msg => {
+    const message = `Mensagem do processo filho: ${msg}`;
+    console.log(message);
+    logMessage(message);
+  });
+
+  process.on("SIGINT", () => {
+    child.kill("SIGINT");
+    process.exit();
+  });
+
+  process.on("SIGTERM", () => {
+    child.kill("SIGTERM");
+    process.exit();
   });
 }
 
