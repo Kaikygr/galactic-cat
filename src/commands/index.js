@@ -200,8 +200,7 @@ async function connectToWhatsApp() {
                 });
               break;
 
-            case "top5":
-              case "rank":
+            case "rank":
               {
                 const { getGeneralRanking } = require('../db/rankings');
                 getGeneralRanking((err, rows) => {
@@ -210,16 +209,67 @@ async function connectToWhatsApp() {
                   } else if (!rows || rows.length === 0) {
                     enviar("Nenhum ranking disponível.");
                   } else {
-                    rows = rows.slice(0, 5);
+                    const totalGeneral = rows.reduce((sum, r) => sum + r.count, 0);
+                    const userId = isGroup ? info.key.participant : info.key.remoteJid;
+                    const userRecord = rows.find(r => r.userId === userId);
+                    const userCount = userRecord ? userRecord.count : 0;
+                    const userPercentage = totalGeneral ? ((userCount / totalGeneral) * 100).toFixed(1) : 0;
+                    const userRankIndex = rows.findIndex(row => row.userId === userId);
+                    const userRank = userRankIndex >= 0 ? userRankIndex + 1 : "Não classificado";
+
+                    const topRows = rows.slice(0, 5);
                     const medalhas = ["🥇", "🥈", "🥉", "🎖", "🏅"];
                     let msg = "📊 *Top 5 Usuários Mais Ativos!* 🚀🔥\n\n";
-                    rows.forEach((row, index) => {
+                    topRows.forEach((row, index) => {
+                      const rowPercentage = totalGeneral ? ((row.count / totalGeneral)*100).toFixed(1) : 0;
                       const userNumber = "@" + row.userId.split('@')[0];
                       const formattedDate = new Date(row.lastMessageDate).toLocaleString('pt-BR');
-                      msg += `${medalhas[index]} *${row.userName}* (${userNumber})\n💬 *${row.count} mensagens*\n⏳ *Última as:*  ${formattedDate}\n\n`;
+                      msg += `${medalhas[index]} *${row.userName}* (${userNumber})\n💬 *${row.count} mensagens* (${rowPercentage}% do total)\n⏳ *Última às:* ${formattedDate}\n\n`;
                     });
-                    msg += "\n📢 *Continue interagindo e suba no ranking!* 🚀💬";
-                    const mentionList = rows.map(row => row.userId);
+                    msg += `\n📢 *Seu rank:* #${userRank}`;
+                    msg += `\n📊 *Seu percentual:* ${userPercentage}% do total de mensagens`;
+                    msg += `\n📢 *Continue interagindo e suba no ranking!* 🚀💬`;
+                    const mentionList = topRows.map(row => row.userId);
+                    client.sendMessage(from, { text: msg, mentions: mentionList }, { quoted: info });
+                  }
+                });
+              }
+              break;
+
+            case "grank":
+              {
+                if (!isGroup) {
+                  enviar("Este comando só pode ser utilizado em grupos.");
+                  break;
+                }
+                const { getGroupRanking } = require('../db/rankings');
+                getGroupRanking(groupId, (err, rows) => {
+                  if (err) {
+                    enviar("Erro ao obter o ranking do grupo.");
+                  } else if (!rows || rows.length === 0) {
+                    enviar("Nenhum ranking disponível para este grupo.");
+                  } else {
+                    const userId = info.key.participant;
+                    const totalGroup = rows.reduce((sum, r) => sum + r.count, 0);
+                    const userRecord = rows.find(r => r.userId === userId);
+                    const userCount = userRecord ? userRecord.count : 0;
+                    const userPercentage = totalGroup ? ((userCount / totalGroup) * 100).toFixed(1) : 0;
+                    const userRankIndex = rows.findIndex(row => row.userId === userId);
+                    const userRank = userRankIndex >= 0 ? userRankIndex + 1 : "Não classificado";
+
+                    const topRows = rows.slice(0, 5);
+                    const medalhas = ["🥇", "🥈", "🥉", "🎖", "🏅"];
+                    let msg = "📊 *Top 5 do Grupo - Ranking de Usuários!* 🚀🔥\n\n";
+                    topRows.forEach((row, index) => {
+                      const rowPercentage = totalGroup ? ((row.count / totalGroup) * 100).toFixed(1) : 0;
+                      const userNumber = "@" + row.userId.split('@')[0];
+                      const formattedDate = new Date(row.lastMessageDate).toLocaleString('pt-BR');
+                      msg += `${medalhas[index]} *${row.userName}* (${userNumber})\n💬 *${row.count} mensagens* (${rowPercentage}% do total)\n⏳ *Última às:* ${formattedDate}\n\n`;
+                    });
+                    msg += `\n📢 *Seu rank no grupo:* #${userRank}`;
+                    msg += `\n📊 *Seu percentual:* ${userPercentage}% do total de mensagens do grupo`;
+                    msg += `\n📢 *Continue interagindo para subir no ranking do grupo!* 🚀💬`;
+                    const mentionList = topRows.map(row => row.userId);
                     client.sendMessage(from, { text: msg, mentions: mentionList }, { quoted: info });
                   }
                 });
