@@ -4,6 +4,11 @@ const path = require("path");
 const dbPath = path.resolve(__dirname, "./database.sqlite");
 const db = new sqlite3.Database(dbPath);
 
+const tableColumns = {
+  general_rank: new Set(),
+  group_rank: new Set()
+};
+
 db.serialize(() => {
   db.run(`CREATE TABLE IF NOT EXISTS general_rank (
     userId TEXT PRIMARY KEY,
@@ -23,35 +28,61 @@ db.serialize(() => {
   )`);
 });
 
-function updateUserRank(userId, userName, lastMessageDate) {
-  if (!userId.endsWith(".net")) return;
-
-  db.run(
-    `INSERT INTO general_rank (userId, userName, count, lastMessageDate) VALUES (?, ?, 1, ?)
-     ON CONFLICT(userId) DO UPDATE SET count = count + 1, userName = excluded.userName, lastMessageDate = excluded.lastMessageDate`,
-    [userId, userName, lastMessageDate]
-  );
+function getColumnForMessageType(messageType) {
+  if (!messageType) return "unknownCount";
+  return messageType + "Count";
 }
 
-function updateGroupRank(
-  groupId,
-  userId,
-  groupName,
-  userName,
-  lastMessageDate
-) {
-  if (!groupId.endsWith("@g.us")) return;
+function ensureColumnExists(table, column, callback) {
+  if (tableColumns[table] && tableColumns[table].has(column)) {
+    callback();
+    return;
+  }
+  db.run(`ALTER TABLE ${table} ADD COLUMN ${column} INTEGER DEFAULT 0`, function(err) {
+    if (!tableColumns[table]) tableColumns[table] = new Set();
+    tableColumns[table].add(column);
+    callback();
+  });
+}
 
-  db.run(
-    `INSERT INTO group_rank (groupId, userId, groupName, userName, count, lastMessageDate) VALUES (?, ?, ?, ?, 1, ?)
-     ON CONFLICT(groupId, userId) DO UPDATE SET count = count + 1, groupName = excluded.groupName, userName = excluded.userName, lastMessageDate = excluded.lastMessageDate`,
-    [groupId, userId, groupName, userName, lastMessageDate]
-  );
+function updateUserRank(userId, userName, lastMessageDate, messageType) {
+  if (!userId.endsWith(".net")) return;
+  const column = getColumnForMessageType(messageType);
+  ensureColumnExists("general_rank", column, () => {
+    db.run(
+      `INSERT INTO general_rank (userId, userName, count, lastMessageDate, ${column})
+       VALUES (?, ?, 1, ?, 1)
+       ON CONFLICT(userId) DO UPDATE SET 
+         count = count + 1, 
+         userName = excluded.userName, 
+         lastMessageDate = excluded.lastMessageDate,
+         ${column} = ${column} + 1`,
+      [userId, userName, lastMessageDate]
+    );
+  });
+}
+
+function updateGroupRank(groupId, userId, groupName, userName, lastMessageDate, messageType) {
+  if (!groupId.endsWith("@g.us")) return;
+  const column = getColumnForMessageType(messageType);
+  ensureColumnExists("group_rank", column, () => {
+    db.run(
+      `INSERT INTO group_rank (groupId, userId, groupName, userName, count, lastMessageDate, ${column})
+       VALUES (?, ?, ?, ?, 1, ?, 1)
+       ON CONFLICT(groupId, userId) DO UPDATE SET 
+         count = count + 1, 
+         groupName = excluded.groupName, 
+         userName = excluded.userName, 
+         lastMessageDate = excluded.lastMessageDate,
+         ${column} = ${column} + 1`,
+      [groupId, userId, groupName, userName, lastMessageDate]
+    );
+  });
 }
 
 function getGeneralRanking(callback) {
   db.all(
-    `SELECT userId, userName, count, lastMessageDate FROM general_rank ORDER BY count DESC`,
+    `SELECT * FROM general_rank ORDER BY count DESC`,
     [],
     (err, rows) => callback(err, rows)
   );
@@ -59,7 +90,7 @@ function getGeneralRanking(callback) {
 
 function getGroupRanking(groupId, callback) {
   db.all(
-    `SELECT userId, userName, groupName, count, lastMessageDate FROM group_rank WHERE groupId = ? ORDER BY count DESC`,
+    `SELECT * FROM group_rank WHERE groupId = ? ORDER BY count DESC`,
     [groupId],
     (err, rows) => callback(err, rows)
   );

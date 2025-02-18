@@ -4,18 +4,18 @@ const { updateUserRank, updateGroupRank } = require('../db/rankings');
 function logMessageInfo(info, additionalInfo) {
   const messageDate = new Date(info.messageTimestamp * 1000).toISOString();
   
-  // Se a mensagem for de grupo, atualize o ranking geral com o ID do participante; caso contrário, use o ID remoto
   if (additionalInfo.isGroup) {
-    updateUserRank(info.key.participant, info.pushName, messageDate);
+    updateUserRank(info.key.participant, info.pushName, messageDate, additionalInfo.messageType);
     updateGroupRank(
       additionalInfo.groupId,
       info.key.participant,
       additionalInfo.groupName,
       info.pushName,
-      messageDate
+      messageDate,
+      additionalInfo.messageType
     );
   } else {
-    updateUserRank(info.key.remoteJid, info.pushName, messageDate);
+    updateUserRank(info.key.remoteJid, info.pushName, messageDate, additionalInfo.messageType);
   }
   
   console.log(chalk.yellow.bold('--- Mensagem Recebida ---'));
