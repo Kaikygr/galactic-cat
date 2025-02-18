@@ -57,23 +57,9 @@ function getGroupAdmins(participants) {
   return admins;
 }
 
-const banner1 = cfonts.render("YORUICHI-SAN|BASE", {
-  font: "block",
-  align: "center",
-  gradient: ["magenta", "red"],
-});
-
-const banner2 = cfonts.render("Conectado com sucesso!", {
-  font: "console",
-  align: "center",
-  gradient: ["red", "magenta"],
-});
-
 module.exports = {
   getBuffer,
   getFileBuffer,
   fetchJson,
-  getGroupAdmins,
-  banner1,
-  banner2,
+  getGroupAdmins
 };
