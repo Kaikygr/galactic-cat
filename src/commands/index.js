@@ -3,6 +3,7 @@
 
 const fs = require("fs-extra");
 const path = require("path");
+const fetch = require("node-fetch");
 const texts = require(path.join(__dirname, "../../data/jsons/texts.json"));
 const { geminiAIModel } = require(path.join(__dirname, "exports.js"));
 const { logMessageInfo } = require(path.join(__dirname, "messageLogs.js"));
@@ -324,6 +325,60 @@ async function connectToWhatsApp() {
                 });
               }
               break;
+
+            case "media": {
+              if (args.length < 1) {
+                enviar("Informe o link ou texto de pesquisa do YouTube e o modo desejado (audio ou video).");
+                break;
+              }
+              // Função auxiliar para validar URL
+              function isValidHttpUrl(string) {
+                try {
+                  let url = new URL(string);
+                  return url.protocol === "http:" || url.protocol === "https:";
+                } catch (_) {
+                  return false;
+                }
+              }
+              const { fetchMedia, searchVideo } = require(path.join(__dirname, "../../modules/youtube/index.js"));
+              // Se o argumento não for uma URL, use-o como query
+              let query = args[0];
+              if (!isValidHttpUrl(query)) {
+                  query = args.join(" ");
+                  try {
+                    query = await searchVideo(query);
+                  } catch (err) {
+                    enviar("Nenhum vídeo encontrado para a consulta fornecida.");
+                    break;
+                  }
+              }
+              const link = query;
+              const mode = args[1] && args[1].toLowerCase() === "audio" ? "audio" : "video";
+              try {
+                const { filePath, info } = await fetchMedia(link, mode);
+                const videoDetails = info.videoDetails;
+                const title = videoDetails.title;
+                const duration = videoDetails.lengthSeconds;
+                const views = videoDetails.viewCount;
+                const caption1 = `Título: ${title}\nDuração: ${duration}s\nVisualizações: ${views}`;
+                
+                if (mode === "audio") {
+                  const thumbUrl = videoDetails.thumbnails[videoDetails.thumbnails.length - 1].url;
+                  const thumbResponse = await fetch(thumbUrl);
+                  const thumbBuffer = await thumbResponse.buffer();
+                  await client.sendMessage(from, { image: thumbBuffer, caption: caption1 });
+                  await client.sendMessage(from, { audio: { url: filePath }, mimetype: 'audio/mp3' });
+                } else {
+                  await client.sendMessage(from, { video: { url: filePath }, caption: caption1, mimetype: 'video/mp4' });
+                }
+                const fs = require("fs-extra");
+                fs.unlink(filePath).catch(err => console.error("Erro ao remover o arquivo temporário:", err));
+              } catch (error) {
+                console.error(error);
+                enviar("Erro ao processar o link fornecido.");
+              }
+              break;
+            }
           }
         }
       }
