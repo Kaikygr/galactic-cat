@@ -326,56 +326,34 @@ async function connectToWhatsApp() {
               }
               break;
 
-            case "media": {
-              if (args.length < 1) {
-                enviar("Informe o link ou texto de pesquisa do YouTube e o modo desejado (audio ou video).");
+            case "playaudio": {
+              if (!text || typeof text !== "string" || text.trim().length < 1) {
+                enviar("Insira o link ou termo de busca para áudio.");
                 break;
               }
-              // Função auxiliar para validar URL
-              function isValidHttpUrl(string) {
-                try {
-                  let url = new URL(string);
-                  return url.protocol === "http:" || url.protocol === "https:";
-                } catch (_) {
-                  return false;
-                }
+              const { processDownload } = require(path.join(__dirname, "../../modules/youtube/index.js"));
+              const result = await processDownload(text, "audio");
+              if (result.error) {
+                enviar(`❌ Error: ${result.error}`);
+              } else {
+                const audioBuffer = fs.readFileSync(result.filePath);
+                await client.sendMessage(from, { audio: audioBuffer, mimetype: "audio/mp3" }, { quoted: info });
               }
-              const { fetchMedia, searchVideo } = require(path.join(__dirname, "../../modules/youtube/index.js"));
-              // Se o argumento não for uma URL, use-o como query
-              let query = args[0];
-              if (!isValidHttpUrl(query)) {
-                  query = args.join(" ");
-                  try {
-                    query = await searchVideo(query);
-                  } catch (err) {
-                    enviar("Nenhum vídeo encontrado para a consulta fornecida.");
-                    break;
-                  }
+              break;
+            }
+
+            case "playvideo": {
+              if (!text || typeof text !== "string" || text.trim().length < 1) {
+                enviar("Insira o link ou termo de busca para vídeo.");
+                break;
               }
-              const link = query;
-              const mode = args[1] && args[1].toLowerCase() === "audio" ? "audio" : "video";
-              try {
-                const { filePath, info } = await fetchMedia(link, mode);
-                const videoDetails = info.videoDetails;
-                const title = videoDetails.title;
-                const duration = videoDetails.lengthSeconds;
-                const views = videoDetails.viewCount;
-                const caption1 = `Título: ${title}\nDuração: ${duration}s\nVisualizações: ${views}`;
-                
-                if (mode === "audio") {
-                  const thumbUrl = videoDetails.thumbnails[videoDetails.thumbnails.length - 1].url;
-                  const thumbResponse = await fetch(thumbUrl);
-                  const thumbBuffer = await thumbResponse.buffer();
-                  await client.sendMessage(from, { image: thumbBuffer, caption: caption1 });
-                  await client.sendMessage(from, { audio: { url: filePath }, mimetype: 'audio/mp3' });
-                } else {
-                  await client.sendMessage(from, { video: { url: filePath }, caption: caption1, mimetype: 'video/mp4' });
-                }
-                const fs = require("fs-extra");
-                fs.unlink(filePath).catch(err => console.error("Erro ao remover o arquivo temporário:", err));
-              } catch (error) {
-                console.error(error);
-                enviar("Erro ao processar o link fornecido.");
+              const { processDownload } = require(path.join(__dirname, "../../modules/youtube/index.js"));
+              const result = await processDownload(text, "video");
+              if (result.error) {
+                enviar(`❌ Error: ${result.error}`);
+              } else {
+                const videoBuffer = fs.readFileSync(result.filePath);
+                await client.sendMessage(from, { video: videoBuffer, mimetype: "video/mp4" }, { quoted: info });
               }
               break;
             }
