@@ -326,37 +326,7 @@ async function connectToWhatsApp() {
               }
               break;
 
-            case "playaudio": {
-              if (!text || typeof text !== "string" || text.trim().length < 1) {
-                enviar("Insira o link ou termo de busca para áudio.");
-                break;
-              }
-              const { processDownload } = require(path.join(__dirname, "../../modules/youtube/index.js"));
-              const result = await processDownload(text, "audio");
-              if (result.error) {
-                enviar(`❌ Error: ${result.error}`);
-              } else {
-                const audioBuffer = fs.readFileSync(result.filePath);
-                await client.sendMessage(from, { audio: audioBuffer, mimetype: "audio/mp3" }, { quoted: info });
-              }
-              break;
-            }
-
-            case "playvideo": {
-              if (!text || typeof text !== "string" || text.trim().length < 1) {
-                enviar("Insira o link ou termo de busca para vídeo.");
-                break;
-              }
-              const { processDownload } = require(path.join(__dirname, "../../modules/youtube/index.js"));
-              const result = await processDownload(text, "video");
-              if (result.error) {
-                enviar(`❌ Error: ${result.error}`);
-              } else {
-                const videoBuffer = fs.readFileSync(result.filePath);
-                await client.sendMessage(from, { video: videoBuffer, mimetype: "video/mp4" }, { quoted: info });
-              }
-              break;
-            }
+          
           }
         }
       }
