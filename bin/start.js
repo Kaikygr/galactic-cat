@@ -2,11 +2,18 @@ const { fork } = require("child_process");
 const path = require("path");
 const fs = require("fs");
 
-const logFilePath = path.join(__dirname, "../logs/connection.log");
+const logFilePath = path.join(__dirname, "./logs/connection.log");
 
 function logMessage(message) {
   const timestamp = new Date().toISOString();
   const logEntry = `[${timestamp}] ${message}\n`;
+
+  // Cria o diretório de logs se não existir
+  const logDir = path.dirname(logFilePath);
+  if (!fs.existsSync(logDir)) {
+    fs.mkdirSync(logDir, { recursive: true });
+  }
+
   fs.appendFileSync(logFilePath, logEntry);
 }
 
