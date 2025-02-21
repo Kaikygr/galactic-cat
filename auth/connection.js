@@ -7,16 +7,25 @@ const { Boom } = require("@hapi/boom");
 const path = require("path");
 const NodeCache = require("node-cache");
 const chalk = require("chalk");
-
+const os = require("os");
 const { useMultiFileAuthState } = require("@whiskeysockets/baileys");
+const fs = require("fs");
+const logFilePath = path.join(__dirname, "temp", "connection.log");
 
 const pairingCode = process.argv.includes("--code");
 const RECONNECT_TIMEOUT = 5000;
 const groupCache = new NodeCache({ stdTTL: 5 * 60, useClones: false });
 
+/**
+ * Loga mensagens no console e em arquivo.
+ * @param {string} message - Mensagem a ser logada.
+ * @param {string} [level='INFO'] - Nível do log: INFO, WARN, ERROR.
+ */
 function logMessage(message, level = "INFO") {
-  let coloredMsg;
-  switch(level) {
+  const date = new Date().toISOString();
+  let coloredMsg, plainMsg;
+  // Escolhe a cor do log conforme o nível
+  switch (level) {
     case "ERROR":
       coloredMsg = chalk.red(message);
       break;
@@ -26,13 +35,19 @@ function logMessage(message, level = "INFO") {
     default:
       coloredMsg = chalk.green(message);
   }
-  console.log(chalk.gray(`[${new Date().toISOString()}]`), coloredMsg);
+  plainMsg = `[${date}] ${level}: ${message}\n`;
+  console.log(chalk.gray(`[${date}]`), coloredMsg);
+  fs.appendFileSync(logFilePath, plainMsg); // Registra log em arquivo
 }
 
+/**
+ * Estabelece conexão com o WhatsApp utilizando o baileys.
+ * Gerencia reconexão, processamento de mensagens e outros eventos.
+ */
 async function connectToWhatsApp() {
   try {
     const connectionLogs = path.join(__dirname, "temp");
-    const storePath = path.join(connectionLogs, 'baileys_store.json'); // novo caminho para o arquivo
+    const storePath = path.join(connectionLogs, "baileys_store.json");
     const { state, saveCreds } = await useMultiFileAuthState(connectionLogs);
 
     logMessage("Iniciando a conexão com o WhatsApp...");
@@ -44,32 +59,30 @@ async function connectToWhatsApp() {
       mobile: false,
       browser: Browsers.macOS("Desktop"),
       syncFullHistory: true,
-      cachedGroupMetadata: async (jid) => groupCache.get(jid),
+      cachedGroupMetadata: async jid => groupCache.get(jid), // Recupera cache de grupo
       patchMessageBeforeSending: patchInteractiveMessage
     });
 
-    // INÍCIO: Inicialização do store em memória com arquivo na pasta "temp"
+    // Cria/ler store em memória de chats
     const store = makeInMemoryStore({});
     store.readFromFile(storePath);
     setInterval(() => {
       store.writeToFile(storePath);
     }, 10_000);
     store.bind(client.ev);
-    client.ev.on('chats.upsert', () => {
-      console.log('got chats', store.chats.all());
+    client.ev.on("chats.upsert", () => {
+      console.log("got chats", store.chats.all());
     });
-    client.ev.on('contacts.upsert', () => {
-      console.log('got contacts', Object.values(store.contacts));
+    client.ev.on("contacts.upsert", () => {
+      console.log("got contacts", Object.values(store.contacts));
     });
-    // FIM: Inicialização do store em memória
 
-    // Atualiza o cache quando ocorrer alterações de grupos e participantes
-    client.ev.on('groups.update', async ([event]) => {
+    client.ev.on("groups.update", async ([event]) => {
       const metadata = await client.groupMetadata(event.id);
       groupCache.set(event.id, metadata);
     });
 
-    client.ev.on('group-participants.update', async (event) => {
+    client.ev.on("group-participants.update", async event => {
       const metadata = await client.groupMetadata(event.id);
       groupCache.set(event.id, metadata);
     });
@@ -107,8 +120,9 @@ async function connectToWhatsApp() {
       } catch (error) {
         logMessage("Erro ao processar mensagens: " + error.message, "ERROR");
       }
-      // Tratamentos adicionais para eventos do Baileys
+
       try {
+        // Processa eventos adicionais e realiza logs
         if (events["blocklist.set"]) {
           logMessage("Evento blocklist.set recebido: " + JSON.stringify(events["blocklist.set"]), "INFO");
         }
@@ -185,6 +199,11 @@ async function connectToWhatsApp() {
   }
 }
 
+/**
+ * Ajusta mensagens interativas para compatibilidade.
+ * @param {Object} message - Objeto da mensagem.
+ * @returns {Object} - Mensagem modificada se interativa ou a original.
+ */
 function patchInteractiveMessage(message) {
   if (message?.interactiveMessage) {
     return {
@@ -202,11 +221,19 @@ function patchInteractiveMessage(message) {
   return message;
 }
 
+/**
+ * Agenda uma nova tentativa de conexão.
+ */
 function scheduleReconnect() {
   logMessage("⏳ Tentando reconectar em breve...", "WARN");
   setTimeout(() => connectToWhatsApp(), RECONNECT_TIMEOUT);
 }
 
+/**
+ * Processa os updates de conexão e gerencia envio de notificações.
+ * @param {Object} update - Evento de atualização da conexão.
+ * @param {Object} client - Instância do cliente WhatsApp.
+ */
 async function handleConnectionUpdate(update, client) {
   try {
     const { connection, lastDisconnect } = update;
@@ -214,6 +241,51 @@ async function handleConnectionUpdate(update, client) {
 
     if (connection === "open") {
       logMessage("✅ Conexão aberta com sucesso. Bot disponível.");
+
+      // Função para formatar uptime
+      const formatUptime = seconds => {
+        const pad = s => (s < 10 ? "0" + s : s);
+        const hrs = Math.floor(seconds / 3600);
+        const mins = Math.floor((seconds % 3600) / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${pad(hrs)}:${pad(mins)}:${pad(secs)}`;
+      };
+
+      const config = require(path.join(__dirname, "..", "auth", "data", "options.json"));
+      const botInfo = `Nome: ${config.bot.name}\nVersão: ${config.bot.version}\nDescrição: ${config.bot.description}`;
+      const systemInfo = `Plataforma: ${process.platform}\nArquitetura: ${process.arch}\nNode: ${process.version}`;
+
+      const totalMem = (os.totalmem() / 1024 / 1024).toFixed(2);
+      const freeMem = (os.freemem() / 1024 / 1024).toFixed(2);
+      const processMem = (process.memoryUsage().rss / 1024 / 1024).toFixed(2);
+      const memoryInfo = `Memória Total: ${totalMem} MB\nMemória Disponível: ${freeMem} MB\nUso do Processo: ${processMem} MB`;
+
+      const uptimeInfo = `Uptime do Sistema: ${formatUptime(os.uptime())}\nUptime do Processo: ${formatUptime(process.uptime())}`;
+
+      const cpus = os.cpus();
+      const cpuInfo = `CPU: ${cpus[0].model}\nCores: ${cpus.length}\nLoad Average: ${os
+        .loadavg()
+        .map(n => n.toFixed(2))
+        .join(", ")}`;
+
+      const hostname = os.hostname();
+      let ipAddress = "Indisponível";
+      const networkInterfaces = os.networkInterfaces();
+      for (const iface of Object.values(networkInterfaces)) {
+        for (const alias of iface) {
+          if (alias.family === "IPv4" && !alias.internal) {
+            ipAddress = alias.address;
+            break;
+          }
+        }
+        if (ipAddress !== "Indisponível") break;
+      }
+      const hostInfo = `Hostname: ${hostname}\nIP: ${ipAddress}`;
+
+      const completeMessage = `Status da Conexão: Aberta\n\n${botInfo}\n\n${systemInfo}\n\n${memoryInfo}\n\n${uptimeInfo}\n\n${cpuInfo}\n\n${hostInfo}`;
+
+      // Notifica o dono da conexão aberta
+      await client.sendMessage(config.owner.number, { text: `Conexão aberta com sucesso.\n${completeMessage}` });
     }
 
     if (connection === "close") {
