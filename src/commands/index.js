@@ -1,6 +1,8 @@
 /* eslint-disable no-unused-vars */
 /* eslint-disable no-undef */
 
+require("dotenv").config();
+
 const fs = require("fs-extra");
 const path = require("path");
 const texts = require(path.join(__dirname, "../../data/jsons/texts.json"));
@@ -16,10 +18,12 @@ const config = require(ConfigfilePath);
 const util = require("util");
 const exec = require("child_process").exec;
 const execProm = util.promisify(exec);
+const fetch = require("node-fetch");
 
 async function handleWhatsAppUpdate(upsert, client) {
   for (const info of upsert?.messages || []) {
     const from = info.key.remoteJid;
+    await client.readMessages([info.key]);
 
     if (!info.message) return;
     if (upsert.type == "append") return;
@@ -32,7 +36,6 @@ async function handleWhatsAppUpdate(upsert, client) {
 
     var body = info.message?.conversation || info.message?.viewOnceMessageV2?.message?.imageMessage?.caption || info.message?.viewOnceMessageV2?.message?.videoMessage?.caption || info.message?.imageMessage?.caption || info.message?.videoMessage?.caption || info.message?.extendedTextMessage?.text || info.message?.viewOnceMessage?.message?.videoMessage?.caption || info.message?.viewOnceMessage?.message?.imageMessage?.caption || info.message?.documentWithCaptionMessage?.message?.documentMessage?.caption || info.message?.buttonsMessage?.imageMessage?.caption || info.message?.buttonsResponseMessage?.selectedButtonId || info.message?.listResponseMessage?.singleSelectReply?.selectedRowId || info.message?.templateButtonReplyMessage?.selectedId || (info.message?.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson ? JSON.parse(info.message?.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson)?.id : null) || info?.text || "";
     var budy = type === "conversation" ? info.message?.conversation : type === "extendedTextMessage" ? info.message?.extendedTextMessage?.text : "";
-    
 
     const prefixes = Array.isArray(config.prefix) ? config.prefix : [config.prefix];
     const isCmd = prefixes.some(p => body.startsWith(p));
@@ -52,7 +55,7 @@ async function handleWhatsAppUpdate(upsert, client) {
     const sleep = async ms => {
       return new Promise(resolve => setTimeout(resolve, ms));
     };
-  
+
     const isOwner = config.owner.number.includes(sender);
     const BotNumber = client.user.id.split(":")[0] + "@s.whatsapp.net";
     const isGroupAdmins = groupAdmins.includes(sender) || false;
@@ -126,7 +129,7 @@ async function handleWhatsAppUpdate(upsert, client) {
           }
         }
       });
-      
+
       const typeDescriptions = {
         conversation: "Texto",
         extendedTextMessage: "Texto de resposta",
@@ -148,15 +151,12 @@ async function handleWhatsAppUpdate(upsert, client) {
         textMessage: "Texto",
         text: "Texto"
       };
-      
+
       return typeDescriptions[topType] || topType || "N/A";
     }
 
- 
-
     switch (comando) {
       case "cat":
-        
         if (!isOwner && info.key.remoteJid !== "120363047659668203@g.us") {
           enviar(texts.cat_perm_denied);
           break;
@@ -232,7 +232,7 @@ async function handleWhatsAppUpdate(upsert, client) {
               enviar("Nenhum ranking disponível para este grupo.");
             } else {
               const totalGroup = rows.reduce((sum, r) => sum + r.count, 0);
-              
+
               let aggregated = {};
               rows.forEach(r => {
                 Object.keys(r).forEach(key => {
@@ -271,7 +271,7 @@ async function handleWhatsAppUpdate(upsert, client) {
                 text: "Texto"
               };
               const groupTopMessage = typeDescriptions[groupTopType] || groupTopType || "N/A";
-              
+
               const userId = info.key.participant;
               const userRecord = rows.find(r => r.userId === userId);
               const userCount = userRecord ? userRecord.count : 0;
@@ -301,17 +301,14 @@ async function handleWhatsAppUpdate(upsert, client) {
         }
         break;
 
-        case "sticker": 
-        case "s": {
+      case "sticker":
+      case "s":
+        {
           // Se for vídeo (para sticker animado)
           if ((isMedia && info.message.videoMessage) || isQuotedVideo) {
-            const videoDuration = isMedia && info.message.videoMessage
-              ? info.message.videoMessage.seconds
-              : (isQuotedVideo ? info.message.extendedTextMessage.contextInfo.quotedMessage.videoMessage.seconds : 0);
+            const videoDuration = isMedia && info.message.videoMessage ? info.message.videoMessage.seconds : isQuotedVideo ? info.message.extendedTextMessage.contextInfo.quotedMessage.videoMessage.seconds : 0;
             if (videoDuration < 11 || (isQuotedVideo && videoDuration < 35)) {
-              let encmedia = isQuotedVideo
-                ? info.message.extendedTextMessage.contextInfo.quotedMessage.videoMessage
-                : info.message.videoMessage;
+              let encmedia = isQuotedVideo ? info.message.extendedTextMessage.contextInfo.quotedMessage.videoMessage : info.message.videoMessage;
               const mediaBuffer = await getFileBuffer(encmedia, "video");
               const mediaPath = path.join("src", "temp", `temp_${Date.now()}.mp4`);
               fs.writeFileSync(mediaPath, mediaBuffer);
@@ -320,18 +317,11 @@ async function handleWhatsAppUpdate(upsert, client) {
                 await execProm(`ffmpeg -i "${mediaPath}" -vcodec libwebp -filter:v fps=fps=15 -lossless 1 -loop 0 -preset default -an -vsync 0 -s 200:200 "${outputPath}"`);
                 // Cria o JSON com informações separadas: do usuário e do owner
                 const dateFormatted = new Date().toLocaleString("pt-BR");
-                const json = { 
-                  "sticker-pack-name": `User: ${info.pushName || sender}`, 
+                const json = {
+                  "sticker-pack-name": `User: ${info.pushName || sender}`,
                   "sticker-pack-publisher": `Owner: ${config.owner.name}`
                 };
-                const exifAttr = Buffer.from([
-                  0x49,0x49,0x2a,0x00,
-                  0x08,0x00,0x00,0x00,
-                  0x01,0x00,0x41,0x57,
-                  0x07,0x00,0x00,0x00,
-                  0x00,0x00,0x16,0x00,
-                  0x00,0x00
-                ]);
+                const exifAttr = Buffer.from([0x49, 0x49, 0x2a, 0x00, 0x08, 0x00, 0x00, 0x00, 0x01, 0x00, 0x41, 0x57, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x16, 0x00, 0x00, 0x00]);
                 const jsonBuff = Buffer.from(JSON.stringify(json), "utf-8");
                 const exif = Buffer.concat([exifAttr, jsonBuff]);
                 exif.writeUIntLE(jsonBuff.length, 14, 4);
@@ -355,11 +345,8 @@ async function handleWhatsAppUpdate(upsert, client) {
             } else {
               enviar("Vídeo muito longo para sticker animada.");
             }
-          }
-          else if ((isMedia && !info.message.videoMessage) || isQuotedImage) {
-            let encmedia = isQuotedImage
-              ? info.message.extendedTextMessage.contextInfo.quotedMessage.imageMessage
-              : info.message.imageMessage;
+          } else if ((isMedia && !info.message.videoMessage) || isQuotedImage) {
+            let encmedia = isQuotedImage ? info.message.extendedTextMessage.contextInfo.quotedMessage.imageMessage : info.message.imageMessage;
             const mediaBuffer = await getFileBuffer(encmedia, "image");
             const mediaPath = path.join("src", "temp", `temp_${Date.now()}.jpg`);
             fs.writeFileSync(mediaPath, mediaBuffer);
@@ -399,7 +386,214 @@ async function handleWhatsAppUpdate(upsert, client) {
         }
         break;
       }
-    
+
+      case "instadl": {
+        if (!args.length) {
+          enviar("Forneça o link do Instagram.");
+          break;
+        }
+        // Novo retorno para o usuário
+        enviar("Aguarde, processando...");
+        const instaUrl = args[0];
+        try {
+          const apiKey = process.env.INSTA_API_KEY;
+          if (!apiKey) {
+            enviar("INSTA_API_KEY não configurado.");
+            break;
+          }
+          const apiEndpoint = `https://zero-two.online/api/dl/multidl?url=${encodeURIComponent(instaUrl)}&apikey=${apiKey}`;
+          const response = await fetch(apiEndpoint);
+          const result = await response.json();
+          if (!result.medias || result.medias.length === 0) {
+            enviar("Nenhuma mídia encontrada.");
+            break;
+          }
+          if (result.medias.length > 1) {
+            // Suporte para múltiplas mídias
+            for (let i = 0; i < result.medias.length; i++) {
+              const media = result.medias[i];
+              if (media.videoAvailable) {
+                await client.sendMessage(from, { video: { url: media.url }, caption: i === 0 ? result.title || "" : "" }, { quoted: info });
+              } else {
+                await client.sendMessage(from, { image: { url: media.url }, caption: i === 0 ? result.title || "" : "" }, { quoted: info });
+              }
+            }
+          } else {
+            // Tratamento para única mídia
+            const media = result.medias[0];
+            if (media.videoAvailable) {
+              await client.sendMessage(from, { video: { url: media.url }, caption: result.title || "" }, { quoted: info });
+            } else {
+              await client.sendMessage(from, { image: { url: media.url }, caption: result.title || "" }, { quoted: info });
+            }
+          }
+        } catch (error) {
+          console.error(error);
+          enviar("Erro ao baixar o conteúdo do Instagram.");
+        }
+        break;
+      }
+      case "tiktok": {
+        if (!args.length) {
+          enviar("Forneça o link do TikTok.");
+          break;
+        }
+        enviar("Aguarde, processando...");
+        const tiktokUrl = args[0];
+        try {
+          const apiKey = process.env.TIKTOK_API_KEY;
+          if (!apiKey) {
+            enviar("TIKTOK_API_KEY não configurado.");
+            break;
+          }
+          const apiEndpoint = `https://zero-two.online/download/tiktok?url=${encodeURIComponent(tiktokUrl)}&apikey=${apiKey}`;
+          const response = await fetch(apiEndpoint);
+          const result = await response.json();
+          if (!result.status || !result.resultado) {
+            enviar("Erro ao processar o TikTok.");
+            break;
+          }
+          const videoUrl = result.resultado.videoSemMarca;
+          await client.sendMessage(from, { video: { url: videoUrl }, caption: `Vídeo sem marca` }, { quoted: info });
+        } catch (error) {
+          console.error(error);
+          enviar("Erro ao baixar o conteúdo do TikTok.");
+        }
+        break;
+      }
+      case "ytaudio": {
+        if (!args.length) {
+          enviar("Forneça o link do YouTube.");
+          break;
+        }
+        enviar("Aguarde, processando...");
+        const ytUrl = args[0];
+        try {
+          const apiKey = process.env.YTAUDIO_API_KEY;
+          if (!apiKey) {
+            enviar("YTAUDIO_API_KEY não configurado.");
+            break;
+          }
+          const apiEndpoint = `https://zero-two.online/api/dl/ytaudio2?url=${encodeURIComponent(ytUrl)}&apikey=${apiKey}`;
+          // Como a API retorna o audio diretamente, obtenha o buffer da resposta
+          const response = await fetch(apiEndpoint);
+          const audioBuffer = await response.buffer();
+          await client.sendMessage(from, { audio: audioBuffer, mimetype: "audio/mpeg" }, { quoted: info });
+        } catch (error) {
+          console.error(error);
+          enviar("Erro ao baixar o áudio do YouTube.");
+        }
+        break;
+      }
+      case "ytvideo": {
+        if (!args.length) {
+          enviar("Forneça o link do YouTube.");
+          break;
+        }
+        enviar("Aguarde, processando...");
+        const ytUrl = args[0];
+        try {
+          const apiKey = process.env.YTVIDEO_API_KEY;
+          if (!apiKey) {
+            enviar("YTVIDEO_API_KEY não configurado.");
+            break;
+          }
+          const apiEndpoint = `https://zero-two.online/api/dl/ytvideo2?url=${encodeURIComponent(ytUrl)}&apikey=${apiKey}`;
+          const response = await fetch(apiEndpoint);
+          const videoBuffer = await response.buffer();
+          await client.sendMessage(from, { video: videoBuffer, mimetype: "video/mp4" }, { quoted: info });
+        } catch (error) {
+          console.error(error);
+          enviar("Erro ao baixar o vídeo do YouTube.");
+        }
+        break;
+      }
+      case "play": {
+        if (!args.length) {
+          enviar("Forneça o nome para pesquisa no YouTube e a opção desejada: 'video', 'audio' ou 'ambos'. Ex: play nome_da_musica video");
+          break;
+        }
+        const validOptions = ["video", "audio", "ambos"];
+        let option = args[args.length - 1].toLowerCase();
+        if (!validOptions.includes(option)) {
+          enviar("Escolha o formato que deseja receber: 'video', 'audio' ou 'ambos'. Exemplo: play nome_da_musica video ou audio");
+          break;
+        }
+        const query = args.slice(0, -1).join(" ");
+        if (!query) {
+          enviar("Forneça o nome para pesquisa no YouTube.");
+          break;
+        }
+        enviar("Aguarde, processando sua busca...");
+        try {
+          const searchApiKey = process.env.YTSRC_API_KEY;
+          if (!searchApiKey) {
+            enviar("YTSRC_API_KEY não configurado.");
+            break;
+          }
+          const searchEndpoint = `https://zero-two.online/api/ytsrc?q=${encodeURIComponent(query)}&apikey=${searchApiKey}`;
+          const searchRes = await fetch(searchEndpoint);
+          const contentType = searchRes.headers.get("content-type") || "";
+          let searchResult;
+          if (contentType.includes("application/json")) {
+            searchResult = await searchRes.json();
+          } else {
+            const textResult = await searchRes.text();
+            console.error("Resposta não JSON:", textResult);
+            enviar("Erro: resposta inválida da busca.");
+            break;
+          }
+          if (!searchResult.status || !searchResult.resultado || searchResult.resultado.length === 0) {
+            enviar("Nenhum vídeo encontrado para essa pesquisa.");
+            break;
+          }
+          const videoInfo = searchResult.resultado[0];
+          const caption = `Título: ${videoInfo.title}
+Duração: ${videoInfo.duration.timestamp}
+Visto: ${videoInfo.views} vezes
+Autor: ${videoInfo.author.name}
+Link: ${videoInfo.url}
+Desc: ${videoInfo.description.substring(0, 20)}...`;
+
+          // Enviar vídeo se a opção for "video" ou "ambos"
+          if (option === "video" || option === "ambos") {
+            const ytVideoApiKey = process.env.YTVIDEO_API_KEY;
+            if (!ytVideoApiKey) {
+              enviar("YTVIDEO_API_KEY não configurado.");
+              break;
+            }
+            const videoDownloadEndpoint = `https://zero-two.online/api/dl/ytvideo2?url=${encodeURIComponent(videoInfo.url)}&apikey=${ytVideoApiKey}`;
+            const videoRes = await fetch(videoDownloadEndpoint);
+            if (!videoRes.ok) {
+              enviar("Erro ao baixar o vídeo.");
+              break;
+            }
+            const videoBuffer = await videoRes.buffer();
+            await client.sendMessage(from, { video: videoBuffer, mimetype: "video/mp4", caption: option === "video" ? caption : "" }, { quoted: info });
+          }
+          // Enviar áudio se a opção for "audio" ou "ambos"
+          if (option === "audio" || option === "ambos") {
+            const ytAudioApiKey = process.env.YTAUDIO_API_KEY;
+            if (!ytAudioApiKey) {
+              enviar("YTAUDIO_API_KEY não configurado.");
+              break;
+            }
+            const audioDownloadEndpoint = `https://zero-two.online/api/dl/ytaudio2?url=${encodeURIComponent(videoInfo.url)}&apikey=${ytAudioApiKey}`;
+            const audioRes = await fetch(audioDownloadEndpoint);
+            if (!audioRes.ok) {
+              enviar("Erro ao baixar o áudio.");
+              break;
+            }
+            const audioBuffer = await audioRes.buffer();
+            const audioMsg = option === "audio" ? caption : `Áudio de: ${videoInfo.title}`;
+            await client.sendMessage(from, { audio: audioBuffer, mimetype: "audio/mpeg", caption: audioMsg }, { quoted: info });
+          }
+        } catch (error) {
+          console.error(error);
+          enviar("Erro ao processar a pesquisa do YouTube.");
+        }
+        break;
+      }
     }
   }
 }

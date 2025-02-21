@@ -7,3 +7,4 @@ auth/data/groupConfig.json
 auth/data/groups.db
 src/db/database.sqlite
 bin/logs/connection.log
+.env
