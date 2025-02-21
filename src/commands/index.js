@@ -510,16 +510,19 @@ async function handleWhatsAppUpdate(upsert, client) {
       }
       case "play": {
         if (!args.length) {
-          enviar("Forneça o nome para pesquisa no YouTube e a opção desejada: 'video', 'audio' ou 'ambos'. Ex: play nome_da_musica video");
+          enviar("Forneça o nome para pesquisa no YouTube. Ex: play nome_da_musica video");
           break;
         }
         const validOptions = ["video", "audio", "ambos"];
-        let option = args[args.length - 1].toLowerCase();
-        if (!validOptions.includes(option)) {
-          enviar("Escolha o formato que deseja receber: 'video', 'audio' ou 'ambos'. Exemplo: play nome_da_musica video ou audio");
-          break;
+        let potentialOption = args[args.length - 1].toLowerCase();
+        let option, query;
+        if (validOptions.includes(potentialOption)) {
+          option = potentialOption;
+          query = args.slice(0, -1).join(" ");
+        } else {
+          option = "audio";
+          query = args.join(" ");
         }
-        const query = args.slice(0, -1).join(" ");
         if (!query) {
           enviar("Forneça o nome para pesquisa no YouTube.");
           break;
@@ -548,14 +551,13 @@ async function handleWhatsAppUpdate(upsert, client) {
             break;
           }
           const videoInfo = searchResult.resultado[0];
-          const caption = `Título: ${videoInfo.title}
-Duração: ${videoInfo.duration.timestamp}
-Visto: ${videoInfo.views} vezes
-Autor: ${videoInfo.author.name}
-Link: ${videoInfo.url}
-Desc: ${videoInfo.description.substring(0, 20)}...`;
-
-          // Enviar vídeo se a opção for "video" ou "ambos"
+          const caption = `🎵 Título: ${videoInfo.title}
+⏱ Duração: ${videoInfo.duration.timestamp}
+👁 Visualizações: ${videoInfo.views}
+✍️ Autor: ${videoInfo.author.name}
+🔗 Link: ${videoInfo.url}
+📝 Descrição: ${videoInfo.description.substring(0, 20)}...`;
+          
           if (option === "video" || option === "ambos") {
             const ytVideoApiKey = process.env.YTVIDEO_API_KEY;
             if (!ytVideoApiKey) {
@@ -571,7 +573,7 @@ Desc: ${videoInfo.description.substring(0, 20)}...`;
             const videoBuffer = await videoRes.buffer();
             await client.sendMessage(from, { video: videoBuffer, mimetype: "video/mp4", caption: option === "video" ? caption : "" }, { quoted: info });
           }
-          // Enviar áudio se a opção for "audio" ou "ambos"
+          
           if (option === "audio" || option === "ambos") {
             const ytAudioApiKey = process.env.YTAUDIO_API_KEY;
             if (!ytAudioApiKey) {
@@ -585,8 +587,10 @@ Desc: ${videoInfo.description.substring(0, 20)}...`;
               break;
             }
             const audioBuffer = await audioRes.buffer();
-            const audioMsg = option === "audio" ? caption : `Áudio de: ${videoInfo.title}`;
-            await client.sendMessage(from, { audio: audioBuffer, mimetype: "audio/mpeg", caption: audioMsg }, { quoted: info });
+            // Envia imagem com thumbnail e descrição
+            await client.sendMessage(from, { image: { url: videoInfo.thumbnail }, caption: caption }, { quoted: info });
+            // Envia o áudio
+            await client.sendMessage(from, { audio: audioBuffer, mimetype: "audio/mpeg" }, { quoted: info });
           }
         } catch (error) {
           console.error(error);
