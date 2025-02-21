@@ -1,5 +1,10 @@
 # Galactic-Cat - Chatbot para WhatsApp
 
+![Banner](https://static.tumblr.com/f76d0c37c94757b5b0c3cceb73a1664b/ftrdqzb/cZSorgwba/tumblr_static_tumblr_static_akjaybqi5ggg8o4sgwowggogc_640.gif)
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Node.js Version](https://img.shields.io/badge/Node.js-%3E=14-blue.svg)](https://nodejs.org/)
+
 _Galactic-Cat_ é um chatbot open-source para integração com o WhatsApp, desenvolvido em _Node.js_. Ele utiliza a API _@whiskeysockets/baileys_ e um banco de dados _SQLite_ para armazenar e gerenciar as interações. Este projeto é ideal para quem busca criar automações e interações personalizadas no WhatsApp de forma simples e eficiente.
 
 ## Funcionalidades
@@ -43,6 +48,14 @@ _Galactic-Cat_ é um chatbot open-source para integração com o WhatsApp, desen
 ### Contribuições
 
 Contribuições são bem-vindas! Para adicionar novas funcionalidades, corrija bugs ou melhore a documentação, basta criar uma branch e submeter um pull request.
+
+## Informações Adicionais
+
+Nesta versão, o Galactic-Cat traz melhorias na integração com o WhatsApp, 
+oferecendo um melhor desempenho e novas funcionalidades no gerenciamento de interações.
+• Agora o bot inclui badges e informações visuais para facilitar a identificação de status.
+• Maior explicação sobre as funcionalidades e a arquitetura do projeto foi adicionada
+para auxiliar tanto em contribuições quanto no uso da ferramenta.
 
 ### Autor
 
