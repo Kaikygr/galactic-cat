@@ -157,7 +157,17 @@ async function handleWhatsAppUpdate(upsert, client) {
 
     // Função auxiliar para processar o comando sticker.
     const processStickerCommand = async (info, sender, from) => {
-      let encmedia, mediaBuffer, mediaPath, mediaExtension, outputSize;
+      let encmedia, mediaBuffer, mediaPath, mediaExtension;
+      
+      // Define o tamanho padrão
+      let outputSize = "512:512";
+      // Se os argumentos do comando incluírem "original", usa esse valor
+      if (!text.includes("original")) {
+        outputSize = "original";
+        // Opcionalmente remova a palavra "original" dos args para evitar conflitos
+        // args = args.filter(arg => arg !== "original");
+      }
+      
       // Verifica se é um sticker animado (vídeo)
       if ((isMedia && info.message.videoMessage) || isQuotedVideo) {
         const videoDuration = isMedia && info.message.videoMessage
@@ -166,7 +176,6 @@ async function handleWhatsAppUpdate(upsert, client) {
         if (videoDuration >= (isQuotedVideo ? 35 : 11)) {
           return enviar("Vídeo muito longo para sticker animada.");
         }
-        outputSize = "512:512";
         encmedia = isQuotedVideo
           ? info.message.extendedTextMessage.contextInfo.quotedMessage.videoMessage
           : info.message.videoMessage;
@@ -175,7 +184,6 @@ async function handleWhatsAppUpdate(upsert, client) {
       }
       // Caso de imagem
       else if ((isMedia && !info.message.videoMessage) || isQuotedImage) {
-        outputSize = "512:512";
         encmedia = isQuotedImage
           ? info.message.extendedTextMessage.contextInfo.quotedMessage.imageMessage
           : info.message.imageMessage;
@@ -191,7 +199,7 @@ async function handleWhatsAppUpdate(upsert, client) {
       fs.writeFileSync(mediaPath, mediaBuffer);
       
       try {
-        // Cria o sticker e obtém o caminho final do arquivo
+        // Cria o sticker e obtém o caminho final do arquivo, passando o outputSize determinado
         const stickerPath = await createSticker(
           mediaPath,
           `User: ${info.pushName || sender}`,

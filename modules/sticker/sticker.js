@@ -12,8 +12,11 @@ if (!fs.existsSync(tempDir)) {
 /**
  * Converte um arquivo de mídia (imagem ou vídeo) em um sticker WebP com metadados personalizados.
  *
+ * Se o parâmetro "size" for "original", o sticker será gerado mantendo o tamanho original da mídia,
+ * sem aplicar redimensionamento.
+ *
  * A função realiza os seguintes passos:
- * 1. Converte a mídia para o formato WebP usando ffmpeg com a resolução passada.
+ * 1. Converte a mídia para o formato WebP usando ffmpeg com a resolução especificada (ou original).
  * 2. Cria um cabeçalho EXIF contendo os dados do pacote de sticker.
  * 3. Chama o comando "webpmux" para embutir os metadados EXIF no arquivo WebP.
  * 4. Retorna o caminho do arquivo final (mantido na pasta temp).
@@ -23,17 +26,20 @@ if (!fs.existsSync(tempDir)) {
  * @param {string} mediaPath - Caminho do arquivo de mídia a ser convertido.
  * @param {string} [userLeg="User"] - Nome do pacote de sticker (geralmente o usuário).
  * @param {string} [ownerLeg="Owner"] - Nome do publicador do pacote de sticker (geralmente o owner).
- * @param {string} [size="800:800"] - Resolução desejada no formato "largura:altura".
+ * @param {string} [size="800:800"] - Resolução desejada no formato "largura:altura" ou "original" para manter o tamanho original.
  * @returns {Promise<string>} - Caminho do sticker finalizado.
  * @throws {Error} Se ocorrer algum erro durante o processamento.
  */
-async function createSticker(mediaPath, userLeg = "User", ownerLeg = "Owner", size = "800:800") {
+async function createSticker(mediaPath, userLeg = "User", ownerLeg = "Owner", size = "512:512") {
   try {
     console.log(mediaPath);
     const outputPath = path.join(tempDir, `sticker_${Date.now()}.webp`);
     
-    // Converte a mídia para WebP usando ffmpeg
-    await execProm(`ffmpeg -i "${mediaPath}" -vcodec libwebp -filter:v fps=fps=15 -lossless 1 -loop 0 -preset default -an -vsync 0 -s ${size} "${outputPath}"`);
+    // Se "size" for "original", não aplica redimensionamento; caso contrário, usa -s.
+    const sizeParam = (size !== "original") ? ` -s ${size}` : "";
+    
+    // Comando ffmpeg ajustado conforme a condição
+    await execProm(`ffmpeg -i "${mediaPath}" -vcodec libwebp -filter:v fps=fps=15 -lossless 1 -loop 0 -preset default -an -vsync 0${sizeParam} "${outputPath}"`);
     
     // Prepara os metadados EXIF
     const json = { 
