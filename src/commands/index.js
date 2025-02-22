@@ -28,7 +28,7 @@ async function handleWhatsAppUpdate(upsert, client) {
     if (!info.message) return;
     if (upsert.type == "append") return;
     if (info.key.fromMe) return;
-
+   
     const baileys = require("@whiskeysockets/baileys");
     const content = JSON.stringify(info.message);
     const quoted = info.quoted ? info.quoted : info;
@@ -303,69 +303,61 @@ async function handleWhatsAppUpdate(upsert, client) {
 
       case "sticker":
       case "s":
-        {
-          // Se for vídeo (para sticker animado)
-          if ((isMedia && info.message.videoMessage) || isQuotedVideo) {
-            const videoDuration = isMedia && info.message.videoMessage ? info.message.videoMessage.seconds : isQuotedVideo ? info.message.extendedTextMessage.contextInfo.quotedMessage.videoMessage.seconds : 0;
-            if (videoDuration < 11 || (isQuotedVideo && videoDuration < 35)) {
-              let encmedia = isQuotedVideo ? info.message.extendedTextMessage.contextInfo.quotedMessage.videoMessage : info.message.videoMessage;
-              const mediaBuffer = await getFileBuffer(encmedia, "video");
-              const mediaPath = path.join("src", "temp", `temp_${Date.now()}.mp4`);
-              fs.writeFileSync(mediaPath, mediaBuffer);
-              try {
-                const outputPath = path.join("src", "temp", `sticker_${Date.now()}.webp`);
-                await execProm(`ffmpeg -i "${mediaPath}" -vcodec libwebp -filter:v fps=fps=15 -lossless 1 -loop 0 -preset default -an -vsync 0 -s 200:200 "${outputPath}"`);
-                // Cria o JSON com informações separadas: do usuário e do owner
-                const dateFormatted = new Date().toLocaleString("pt-BR");
-                const json = {
-                  "sticker-pack-name": `User: ${info.pushName || sender}`,
-                  "sticker-pack-publisher": `Owner: ${config.owner.name}`
-                };
-                const exifAttr = Buffer.from([0x49, 0x49, 0x2a, 0x00, 0x08, 0x00, 0x00, 0x00, 0x01, 0x00, 0x41, 0x57, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x16, 0x00, 0x00, 0x00]);
-                const jsonBuff = Buffer.from(JSON.stringify(json), "utf-8");
-                const exif = Buffer.concat([exifAttr, jsonBuff]);
-                exif.writeUIntLE(jsonBuff.length, 14, 4);
-                const metaPath = path.join("src", "temp", `meta_${Date.now()}.temp.exif`);
-                fs.writeFileSync(metaPath, exif);
-                let webpmuxPath = "";
-                try {
-                  webpmuxPath = (await execProm("which webpmux")).stdout.trim();
-                  if (!webpmuxPath) throw new Error();
-                } catch (e) {
-                  throw new Error("webpmux não encontrado. Por favor, instale-o no seu sistema.");
-                }
-                await execProm(`"${webpmuxPath}" -set exif "${metaPath}" "${outputPath}" -o "${outputPath}"`);
-                fs.unlinkSync(metaPath);
-                await client.sendMessage(from, { sticker: fs.readFileSync(outputPath) }, { quoted: info });
-                fs.unlinkSync(outputPath);
-              } catch (error) {
-                enviar(`Erro: ${error.message}`);
-              }
-              fs.unlinkSync(mediaPath);
-            } else {
-              enviar("Vídeo muito longo para sticker animada.");
-            }
-          } else if ((isMedia && !info.message.videoMessage) || isQuotedImage) {
-            let encmedia = isQuotedImage ? info.message.extendedTextMessage.contextInfo.quotedMessage.imageMessage : info.message.imageMessage;
-            const mediaBuffer = await getFileBuffer(encmedia, "image");
-            const mediaPath = path.join("src", "temp", `temp_${Date.now()}.jpg`);
+      {
+        if ((isMedia && info.message.videoMessage) || isQuotedVideo) {
+          const videoDuration = isMedia && info.message.videoMessage
+            ? info.message.videoMessage.seconds
+            : info.message.extendedTextMessage.contextInfo.quotedMessage.videoMessage.seconds;
+          if (videoDuration < 11 || (isQuotedVideo && videoDuration < 35)) {
+            const encmedia = isQuotedVideo
+              ? info.message.extendedTextMessage.contextInfo.quotedMessage.videoMessage
+              : info.message.videoMessage;
+            const mediaBuffer = await getFileBuffer(encmedia, "video");
+            const mediaPath = path.join("src", "temp", `temp_${Date.now()}.mp4`);
             fs.writeFileSync(mediaPath, mediaBuffer);
             try {
-              const dateFormatted = new Date().toLocaleString("pt-BR");
-              const userDesc = `User: ${info.pushName || sender}`;
-              const ownerDesc = `Owner: ${config.owner.name}`;
-              const stickerPath = await createSticker(mediaPath, userDesc, ownerDesc);
+              // Chama createSticker e recebe o caminho do arquivo finalizado
+              const stickerPath = await createSticker(
+                mediaPath,
+                `User: ${info.pushName || sender}`,
+                `Owner: ${config.owner.name}`,
+                "200:200"
+              );
+              // Lê e envia o sticker a partir do arquivo final
               await client.sendMessage(from, { sticker: fs.readFileSync(stickerPath) }, { quoted: info });
-              fs.unlinkSync(stickerPath);
             } catch (error) {
               enviar(`Erro: ${error.message}`);
             }
             fs.unlinkSync(mediaPath);
           } else {
-            enviar("Envie ou cite uma imagem ou vídeo para criar o sticker.");
+            enviar("Vídeo muito longo para sticker animada.");
           }
         }
-        break;
+        else if ((isMedia && !info.message.videoMessage) || isQuotedImage) {
+          const encmedia = isQuotedImage
+            ? info.message.extendedTextMessage.contextInfo.quotedMessage.imageMessage
+            : info.message.imageMessage;
+          const mediaBuffer = await getFileBuffer(encmedia, "image");
+          const mediaPath = path.join("src", "temp", `temp_${Date.now()}.jpg`);
+          fs.writeFileSync(mediaPath, mediaBuffer);
+          try {
+            // Chama createSticker e recebe o caminho do arquivo finalizado
+            const stickerPath = await createSticker(
+              mediaPath,
+              `User: ${info.pushName || sender}`,
+              `Owner: ${config.owner.name}`
+            );
+            // Lê e envia o sticker a partir do arquivo final
+            await client.sendMessage(from, { sticker: fs.readFileSync(stickerPath) }, { quoted: info });
+          } catch (error) {
+            enviar(`Erro: ${error.message}`);
+          }
+          fs.unlinkSync(mediaPath);
+        } else {
+          enviar("Envie ou cite uma imagem ou vídeo para criar o sticker.");
+        }
+      }
+      break;
 
       case "exec": {
         if (!isOwner) {
@@ -557,7 +549,7 @@ async function handleWhatsAppUpdate(upsert, client) {
 ✍️ Autor: ${videoInfo.author.name}
 🔗 Link: ${videoInfo.url}
 📝 Descrição: ${videoInfo.description.substring(0, 20)}...`;
-          
+
           if (option === "video" || option === "ambos") {
             const ytVideoApiKey = process.env.YTVIDEO_API_KEY;
             if (!ytVideoApiKey) {
@@ -573,7 +565,7 @@ async function handleWhatsAppUpdate(upsert, client) {
             const videoBuffer = await videoRes.buffer();
             await client.sendMessage(from, { video: videoBuffer, mimetype: "video/mp4", caption: option === "video" ? caption : "" }, { quoted: info });
           }
-          
+
           if (option === "audio" || option === "ambos") {
             const ytAudioApiKey = process.env.YTAUDIO_API_KEY;
             if (!ytAudioApiKey) {
