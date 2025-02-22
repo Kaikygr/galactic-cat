@@ -46,7 +46,7 @@
     "multistream": "^4.1.0",
     "node-cache": "^5.1.2",
     "node-fetch": "^2.7.0",
-    "node-webpmux": "^3.1.1",
+    "node-webpmux": "^3.2.0",
     "parse-ms": "^3.0.0",
     "performance-now": "^2.1.0",
     "pino": "^7.11.0",
