@@ -1,0 +1,19 @@
+{
+    "prefix": [".", "!", "#", "$"],
+    "github": "https://github.com/Kaikygr/kaikygr",
+    "owner": {
+        "number": "559591264582@s.whatsapp.net",
+        "name": "Kaiky Gomes",
+        "city": "Boa Vista",
+        "state": "Roraima",
+        "country": "Brasil",
+        "email": "kaikygomesribeiroof@gmail.com",
+        "phone": "+55 95 91234-5678",
+        "instagram": "https://instagram.com/kaikygr"
+    },
+    "bot": {
+        "name": "Galactic Cat Bot",
+        "version": "1.0.0",
+        "description": "Bot criado e mantido por Kaiky Gomes."
+    }
+}

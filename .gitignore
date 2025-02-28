@@ -1,0 +1,10 @@
+# Ignorar dependências do Node.js
+node_modules/
+.env
+src/modules/gemini/data/
+src/modules/sticker/temp
+src/sessions/
+src/auth/temp
+/logs
+/src/temp
+package-lock.json
