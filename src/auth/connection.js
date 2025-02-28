@@ -94,7 +94,6 @@ const scheduleReconnect = () => {
     RECONNECT_INITIAL_DELAY * 2 ** reconnectAttempts,
     RECONNECT_MAX_DELAY
   );
-  logMessage(`⏳ Tentando reconectar em ${delay / 1000} segundos...`, "WARN");
   setTimeout(() => connectToWhatsApp(), delay);
 };
 
@@ -111,7 +110,6 @@ const reportMetrics = () => {
     .map(n => n.toFixed(2))
     .join(", ");
   const metricsMessage = `Métricas -> Uptime: ${uptime}, RSS: ${rss} MB, Total Mem: ${totalMem} MB, Load: ${loadAvg}`;
-  logMessage(metricsMessage, "INFO");
 };
 
 /**
@@ -121,9 +119,8 @@ const reportMetrics = () => {
  */
 const registerAllEventHandlers = (client, saveCreds) => {
   const simpleEvents = {
-    "chats.upsert": () => logMessage("Evento chats.upsert ocorreu", "INFO"),
-    "contacts.upsert": () =>
-      logMessage("Evento contacts.upsert ocorreu", "INFO")
+    "chats.upsert": () => {},
+    "contacts.upsert": () => {}
   };
   Object.entries(simpleEvents).forEach(([event, handler]) =>
     client.ev.on(event, handler)
@@ -148,11 +145,9 @@ const registerAllEventHandlers = (client, saveCreds) => {
       "connection.update": async data =>
         await handleConnectionUpdate(data, client),
       "creds.update": async data => {
-        logMessage("Evento creds.update ocorreu", "INFO");
         await saveCreds();
       },
       "messages.upsert": async data => {
-        logMessage("Evento messages.upsert ocorreu", "INFO");
         messageRateLimiter.enqueue(() =>
           require(path.join(
             __dirname,
@@ -167,12 +162,8 @@ const registerAllEventHandlers = (client, saveCreds) => {
       try {
         if (eventHandlers[event]) {
           await eventHandlers[event](data);
-        } else {
-          logMessage(`Evento ${event} ocorreu`, "INFO");
         }
-      } catch (error) {
-        logMessage(`Erro no evento ${event}: ${error.message}`, "ERROR");
-      }
+      } catch (error) {}
     }
   });
 };
@@ -203,14 +194,6 @@ const handleConnectionUpdate = async (update, client) => {
       });
     }
     if (connection === "close") {
-      logMessage("❌ Conexão fechada. Tentando reconectar...", "WARN");
-      if (lastDisconnect?.error) {
-        logMessage(
-          "Erro de desconexão: " +
-            JSON.stringify(lastDisconnect.error, null, 2),
-          "ERROR"
-        );
-      }
       if (metricsIntervalId) {
         clearInterval(metricsIntervalId);
         metricsIntervalId = null;
@@ -218,7 +201,6 @@ const handleConnectionUpdate = async (update, client) => {
       scheduleReconnect();
     }
   } catch (error) {
-    logMessage("Erro no handleConnectionUpdate: " + error.message, "ERROR");
     scheduleReconnect();
   }
 };
@@ -254,19 +236,13 @@ const connectToWhatsApp = async () => {
       );
       try {
         await handlePairing(client);
-      } catch (error) {
-        logMessage("Erro durante o emparelhamento: " + error.message, "ERROR");
-      }
+      } catch (error) {}
     }
   } catch (error) {
-    logMessage("Falha na função connectToWhatsApp: " + error.message, "ERROR");
     scheduleReconnect();
   }
 };
 
 connectToWhatsApp().catch(async error => {
-  logMessage("🚨 Erro na conexão do WhatsApp: " + error.message, "ERROR");
-  logMessage("🔧 Stack Trace: \n" + error.stack, "ERROR");
-  logMessage("🔄 Tentando reconectar...", "WARN");
   scheduleReconnect();
 });

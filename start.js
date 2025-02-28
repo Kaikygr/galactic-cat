@@ -1,14 +1,18 @@
 const { fork } = require("child_process");
 const path = require("path");
 const fs = require("fs");
+const dns = require("dns");
 
 const logFilePath = path.join(__dirname, "./logs/connection.log");
+
+// Adiciona variáveis globais de controle de tentativas
+const MAX_ATTEMPTS = 5;
+let attemptCount = 0;
 
 function logMessage(message) {
   const timestamp = new Date().toISOString();
   const logEntry = `[${timestamp}] ${message}\n`;
 
-  // Cria o diretório de logs se não existir
   const logDir = path.dirname(logFilePath);
   if (!fs.existsSync(logDir)) {
     fs.mkdirSync(logDir, { recursive: true });
@@ -17,22 +21,64 @@ function logMessage(message) {
   fs.appendFileSync(logFilePath, logEntry);
 }
 
+// Função para identificar erro de rede
+function isNetworkError(error) {
+  return error.code === 'ENETDOWN' || error.code === 'ENETUNREACH' || (error.message && error.message.toLowerCase().includes('network'));
+}
+
+// Função para aguardar a rede
+function waitForNetwork(callback) {
+  function check() {
+    dns.resolve('www.google.com', function(err) {
+      if (err) {
+        console.log("Rede indisponível. Aguardando rede...");
+        setTimeout(check, 5000);
+      } else {
+        console.log("Rede disponível. Retomando a conexão...");
+        callback();
+      }
+    });
+  }
+  check();
+}
+
 function startConnection() {
+  if (attemptCount >= MAX_ATTEMPTS) {
+    const message = "Limite de tentativas atingido. Encerrando...";
+    console.log(message);
+    logMessage(message);
+    process.exit(1);
+  }
+  
+  attemptCount++;
+  
   const connectionPath = path.join(__dirname, "./src/auth/connection.js");
   const child = fork(connectionPath);
 
   child.on("exit", (code, signal) => {
-    const message = `Processo connection.js finalizado (code: ${code}, signal: ${signal}). Reiniciando em 5 segundos...`;
-    console.log(message);
-    logMessage(message);
-    setTimeout(startConnection, 5000);
+    if (code !== 0) {
+      const message = `Processo connection.js finalizado com erro (code: ${code}, signal: ${signal}). Tentativa ${attemptCount}/${MAX_ATTEMPTS}. Reiniciando em 5 segundos...`;
+      console.log(message);
+      logMessage(message);
+      setTimeout(startConnection, 5000);
+    } else {
+      // Em caso de saída normal, reseta o contador
+      attemptCount = 0;
+    }
   });
 
   child.on("error", error => {
-    const message = `Erro no processo connection.js: ${error.message}`;
-    console.error(message);
-    logMessage(message);
-    setTimeout(startConnection, 5000);
+    if (isNetworkError(error)) {
+      const message = `Erro de rede detectado: ${error.message}. Aguardando rede...`;
+      console.error(message);
+      logMessage(message);
+      waitForNetwork(startConnection);
+    } else {
+      const message = `Erro no processo connection.js: ${error.message}. Tentativa ${attemptCount}/${MAX_ATTEMPTS}.`;
+      console.error(message);
+      logMessage(message);
+      setTimeout(startConnection, 5000);
+    }
   });
 
   child.on("message", msg => {
