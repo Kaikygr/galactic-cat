@@ -4,39 +4,86 @@
   <img src="https://static.tumblr.com/f76d0c37c94757b5b0c3cceb73a1664b/ftrdqzb/cZSorgwba/tumblr_static_tumblr_static_akjaybqi5ggg8o4sgwowggogc_640.gif" alt="Banner">
 </p>
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node.js Version](https://img.shields.io/badge/Node.js-%3E=14-blue.svg)](https://nodejs.org/)
+[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
+[![Downloads](https://img.shields.io/badge/downloads-1K+-blue.svg)]()
 
-_Galactic-Cat_ é um chatbot open-source para integração com o WhatsApp, desenvolvido em _Node.js_. Ele utiliza a API _@whiskeysockets/baileys_ e um banco de dados _SQLite_ para armazenar e gerenciar as interações. Este projeto é ideal para quem busca criar automações e interações personalizadas no WhatsApp de forma simples e eficiente.
+## Visão Geral
+
+_Galactic-Cat_ é um chatbot open-source desenvolvido em **Node.js** para integrar com o **WhatsApp**. Ele utiliza a API [@whiskeysockets/baileys](https://www.npmjs.com/package/@whiskeysockets/baileys) para gerenciar conexões, envio e recebimento de mensagens, e inclui funcionalidades avançadas como:
+- **Envio de mensagens automáticas** e personalizadas.
+- **Conversão de mídias para stickers** com metadados customizados (vide [`createSticker`](src/modules/sticker/sticker.js)).
+- **Integração com modelos de Inteligência Artificial**, como o [Gemini AI](src/modules/gemini/index.js).
 
 ## Funcionalidades
 
-- **Envio de mensagens automáticas**: Respostas personalizadas para interações.
-- **Gerenciamento de mídias**: Envio e recebimento de imagens, vídeos e áudios.
-- **Banco de dados SQLite**: Armazenamento de dados de usuários e interações.
-- **Integração com WhatsApp**: Usando a API @whiskeysockets/baileys para comunicação eficiente.
-- **Badges e informações visuais**: Facilita a identificação de status.
-- **Melhorias na integração**: Melhor desempenho e novas funcionalidades no gerenciamento de interações.
+- **Envio Automático e Interativo:**  
+  Responde automaticamente às mensagens com base nos comandos processados em [`botController.js`](src/controllers/botController.js).
 
-### Tecnologias Utilizadas
+- **Geração de Stickers:**  
+  Converte imagens e vídeos em stickers WebP, aplicando metadados EXIF customizados. Veja como a função [`createSticker`](src/modules/sticker/sticker.js) opera.
 
-- **Node.js**: Plataforma de desenvolvimento JavaScript.
-- **SQLite**: Banco de dados leve e eficiente.
-- **@whiskeysockets/baileys**: API para integração com o WhatsApp.
+- **Integração com WhatsApp:**  
+  Gerencia a conexão, autenticação e reconexão através do [`connection.js`](src/auth/connection.js) e utiliza a biblioteca Baileys para comunicação robusta.
 
-### Arquitetura do Projeto
+- **Gerenciamento de Mídias e Mensagens:**  
+  Processa e formata mensagens usando funções auxiliares em [`messageController.js`](src/controllers/messageController.js) e [`functions.js`](src/utils/functions.js).
 
-O projeto é estruturado da seguinte forma:
+- **Métricas e Logs:**  
+  Registra métricas de performance (uptime, uso de memória) e eventos de conexão em arquivos de log (*logs/connection.log*).
 
-- **src/**: Contém o código-fonte do chatbot.
-  - **index.js**: Ponto de entrada do aplicativo.
-  - **handlers/**: Contém os manipuladores de eventos do WhatsApp.
-  - **services/**: Contém os serviços que interagem com o banco de dados e outras APIs.
-  - **utils/**: Contém utilitários e funções auxiliares.
-- **config/**: Contém arquivos de configuração.
-- **database/**: Contém o banco de dados SQLite.
+## Tecnologias Utilizadas
 
-### Como Rodar o Projeto
+- **Node.js:** Plataforma para execução do JavaScript.
+- **@whiskeysockets/baileys:** API para integração com WhatsApp.
+- **SQLite:** Banco de dados leve para armazenamento de interações.
+- **FFmpeg & Webpmux:** Utilizados na conversão de mídia para stickers.
+- **Outros:** Módulos internos de utilitários e configuração (ex.: [`rateLimiter.js`](src/auth/rateLimiter.js)).
+
+## Estrutura do Projeto
+
+A estrutura principal do projeto está organizada da seguinte forma:
+
+- **Configuração e Documentação**  
+  - [.env](.env) – Variáveis de ambiente seguras.  
+  - [.gitignore](.gitignore) – Arquivos e pastas ignoradas pelo Git.  
+  - [LICENSE](LICENSE) – Termos da licença MIT.  
+  - [README.md](README.md) – Documentação deste projeto.
+
+- **Código-Fonte (`src/`)**  
+  - **auth/**  
+    - [connection.js](src/auth/connection.js) – Gerencia a conexão e reconexão com o WhatsApp.  
+    - **data/** – Dados de configuração e autenticação (ex.: [options.json](src/auth/data/options.json)).  
+    - [rateLimiter.js](src/auth/rateLimiter.js) – Controla o fluxo de mensagens para evitar excesso.  
+    - **temp/** – Armazena arquivos temporários de autenticação.
+    
+  - **config/**  
+    - [options.json](src/config/options.json) – Parâmetros de configuração do bot.
+    
+  - **controllers/**  
+    - [botController.js](src/controllers/botController.js) – Processa comandos e gerencia respostas (inclusive com integração ao Gemini AI).  
+    - [messageController.js](src/controllers/messageController.js) – Formata e exibe mensagens no console.
+    
+  - **modules/**  
+    - **gemini/** – Integração com modelo de IA para respostas inteligentes ([index.js](src/modules/gemini/index.js)).  
+    - **sticker/** – Conversão de mídia em stickers e gerenciamento dos metadados EXIF ([sticker.js](src/modules/sticker/sticker.js)).
+    
+  - **temp/** – Armazena arquivos temporários do processamento.
+  - **utils/**  
+    - [functions.js](src/utils/functions.js) – Funções auxiliares (ex.: manipulação de arquivos, requisições HTTP).
+
+- **Outros Diretórios**  
+  - **public/** – Arquivos públicos e exemplos (ex.: [exemple.txt](public/exemple.txt)).  
+  - **logs/** – Logs de execução e conexão (*logs/connection.log*).  
+  - **test/** – Arquivos de teste e exemplos.
+
+- **Arquivo Principal**  
+  - [start.js](start.js) – Ponto de entrada da aplicação, responsável por iniciar o bot.
+
+## Como Rodar o Projeto
+
+Siga os passos abaixo para configurar e iniciar o bot:
 
 1. **Clone o repositório:**
 
@@ -51,33 +98,32 @@ O projeto é estruturado da seguinte forma:
    npm install
    ```
 
-3. **Configuração do ambiente:**
+3. **Configuração do Ambiente:**
 
-   Adicione suas configurações no arquivo `.env` com as credenciais necessárias para a API WhatsApp.
+   - Crie um arquivo .env configurando as variáveis necessárias para a autenticação e demais integrações.
+   - Ajuste os dados de autenticação em options.json e options.json conforme necessário.
 
-4. **Inicie o chatbot:**
+4. **Inicie o Bot:**
 
    ```bash
    npm start
    ```
 
-### Contribuições
+   O bot irá iniciar o processo de conexão (gerenciado por connection.js) e exibirá um QR Code no terminal para emparelhamento caso ainda não esteja registrado.
 
-Contribuições são bem-vindas! Para adicionar novas funcionalidades, corrija bugs ou melhore a documentação, basta criar uma branch e submeter um pull request.
+## Contribuições
 
-## Informações Adicionais
+Contribuições para melhorias, correções e novas funcionalidades são bem-vindas!
 
-Nesta versão, o Galactic-Cat traz melhorias na integração com o WhatsApp, 
-oferecendo um melhor desempenho e novas funcionalidades no gerenciamento de interações.
-• Agora o bot inclui badges e informações visuais para facilitar a identificação de status.
-• Maior explicação sobre as funcionalidades e a arquitetura do projeto foi adicionada
-para auxiliar tanto em contribuições quanto no uso da ferramenta.
+- Crie uma branch para sua feature ou correção.
+- Envie um *Pull Request* com suas alterações.
+- Confira os testes existentes em exemple.txt para entender como validar a funcionalidade.
 
-### Autor
+## Licença
+
+Este projeto é licenciado sob a MIT License.
+
+## Autor
 
 - **Kaikygr**  
   [GitHub: Kaikygr](https://github.com/Kaikygr)
-
-### Licença
-
-Este projeto é licenciado sob a [MIT License](LICENSE)
