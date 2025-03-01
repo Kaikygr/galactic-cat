@@ -5,7 +5,6 @@ const dns = require("dns");
 
 const logFilePath = path.join(__dirname, "./logs/connection.log");
 
-// Adiciona variáveis globais de controle de tentativas
 const MAX_ATTEMPTS = 500;
 let attemptCount = 0;
 
@@ -21,12 +20,10 @@ function logMessage(message) {
   fs.appendFileSync(logFilePath, logEntry);
 }
 
-// Função para identificar erro de rede
 function isNetworkError(error) {
   return error.code === 'ENETDOWN' || error.code === 'ENETUNREACH' || (error.message && error.message.toLowerCase().includes('network'));
 }
 
-// Função para aguardar a rede
 function waitForNetwork(callback) {
   function check() {
     dns.resolve('www.google.com', function(err) {
