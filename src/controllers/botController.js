@@ -4,15 +4,22 @@ const fs = require("fs-extra");
 const path = require("path");
 const geminiAIModel = require(path.join(__dirname, "../modules/gemini/index"));
 const { processSticker } = require(path.join(__dirname, "../modules/sticker/sticker"));
-
 const { getGroupAdmins, getFileBuffer } = require(path.join(__dirname, "../utils/functions"));
-
 const ConfigfilePath = path.join(__dirname, "../config/options.json");
 const config = require(ConfigfilePath);
-
-const fetch = require("node-fetch");
-
 const messageController = require(path.join(__dirname, "./consoleMessage"));
+
+const winston = require("winston");
+const logger = winston.createLogger({
+  level: "info",
+  transports: [new winston.transports.Console()]
+});
+
+// Configurações de envio
+const maxAttempts = 3;
+const delayMs = 1000;
+const sendTimeoutMs = 5000;
+const WA_DEFAULT_EPHEMERAL = 86400; // 24 horas em segundos
 
 function parseMessageInfo(info) {
   const baileys = require("@whiskeysockets/baileys");
@@ -93,15 +100,31 @@ async function handleWhatsAppUpdate(upsert, client) {
 
     const text = args.join(" ");
     const sleep = async ms => new Promise(resolve => setTimeout(resolve, ms));
-    const BotNumber = client.user.id.split(":")[0] + "@s.whatsapp.net";
-    const context = {
-      isOwner: config.owner.number.includes(sender),
-      isGroupAdmins: groupAdmins ? groupAdmins.includes(sender) : false,
-      isBotGroupAdmins: groupAdmins ? groupAdmins.includes(BotNumber) : false
-    };
 
     const enviar = async texto => {
-      await client.sendMessage(from, { text: texto }, { quoted: info });
+      if (typeof texto !== "string") {
+        texto = String(texto);
+      }
+      texto = texto.trim();
+      if (!texto) {
+        logger.warn("Enviar: texto vazio após sanitização");
+        return;
+      }
+      let attempts = 0;
+      while (attempts < maxAttempts) {
+        attempts++;
+        try {
+          await Promise.race([client.sendMessage(from, { text: texto }, { quoted: info, ephemeralExpiration: WA_DEFAULT_EPHEMERAL }), new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout no envio")), sendTimeoutMs))]);
+          return;
+        } catch (error) {
+          logger.error(`Tentativa ${attempts} falhou: ${error.message}`);
+          if (attempts < maxAttempts) {
+            await sleep(delayMs);
+          } else {
+            logger.error("Todas as tentativas de envio falharam.");
+          }
+        }
+      }
     };
 
     const quotedTypes = {
@@ -124,15 +147,14 @@ async function handleWhatsAppUpdate(upsert, client) {
     const { isQuotedMsg, isQuotedImage, isQuotedVideo, isQuotedDocument, isQuotedAudio, isQuotedSticker, isQuotedContact, isQuotedLocation, isQuotedProduct } = quotedChecks;
 
     switch (comando) {
-
       case "sticker":
       case "s": {
         await processSticker(client, info, sender, from, text, isMedia, isQuotedVideo, isQuotedImage, config, getFileBuffer);
         break;
       }
-      
+
       case "cat":
-        if (!context.isOwner && info.key.remoteJid !== "120363047659668203@g.us") {
+        if (!content.isOwner && info.key.remoteJid !== "120363047659668203@g.us") {
           enviar("ops, você não tem permissão para usar este comando.");
           break;
         }
@@ -142,7 +164,7 @@ async function handleWhatsAppUpdate(upsert, client) {
         }
         geminiAIModel(text)
           .then(result => {
-            console.log(result, "info");
+            logger.info(result);
             if (result.status === "success") {
               enviar(result.response);
             } else {
@@ -150,15 +172,13 @@ async function handleWhatsAppUpdate(upsert, client) {
             }
           })
           .catch(error => {
-            console.log("Unexpected error:", "error");
+            logger.error("Unexpected error:", error);
             enviar("ops ocorreu um erro inesperado.");
           });
         break;
 
-      
-
       case "exec": {
-        if (!context.isOwner) {
+        if (!content.isOwner) {
           enviar("Este comando é restrito ao owner.");
           break;
         }
@@ -170,7 +190,7 @@ async function handleWhatsAppUpdate(upsert, client) {
         try {
           let result = await eval(`(async () => { ${codeToExecute} })()`);
           if (typeof result !== "string") result = JSON.stringify(result, null, 2);
-          console.log(result);
+          logger.info(result);
           enviar(`Operação executada com sucesso:\n${result}`);
         } catch (error) {
           enviar(`Erro na execução: ${error.message}`);
@@ -195,17 +215,17 @@ const watcher = fs.watch(file, eventType => {
   if (eventType === "change") {
     if (debounceTimeout) clearTimeout(debounceTimeout);
     debounceTimeout = setTimeout(() => {
-      console.info(`O arquivo "${file}" foi atualizado.`);
+      logger.info(`O arquivo "${file}" foi atualizado.`);
       try {
         delete require.cache[file];
         require(file);
       } catch (err) {
-        console.error(`Erro ao recarregar o arquivo ${file}:`, err);
+        logger.error(`Erro ao recarregar o arquivo ${file}:`, err);
       }
     }, 100);
   }
 });
 
 watcher.on("error", err => {
-  console.error(`Watcher error no arquivo ${file}:`, err);
+  logger.error(`Watcher error no arquivo ${file}:`, err);
 });
