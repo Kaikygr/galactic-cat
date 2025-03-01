@@ -6,7 +6,7 @@ const dns = require("dns");
 const logFilePath = path.join(__dirname, "./logs/connection.log");
 
 // Adiciona variáveis globais de controle de tentativas
-const MAX_ATTEMPTS = 5;
+const MAX_ATTEMPTS = 500;
 let attemptCount = 0;
 
 function logMessage(message) {
