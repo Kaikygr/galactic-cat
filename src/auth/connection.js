@@ -109,15 +109,19 @@ const handleConnectionUpdate = async (update, client) => {
   try {
     const { connection, lastDisconnect } = update;
     if (connection === "open") {
-      logMessage("✅ Conexão aberta com sucesso. Bot disponível.");
+      logMessage("✅ Conexão aberta com sucesso. Bot disponível.", "INFO");
       reconnectAttempts = 0;
       if (!metricsIntervalId) {
         metricsIntervalId = setInterval(reportMetrics, 60000);
       }
-      const config = require(path.join(__dirname, "..", "auth", "data", "options.json"));
-      await client.sendMessage(config.owner.number, {
-        text: "Status: Conexão aberta."
-      });
+      const config = require("../config/options.json");
+      await client.sendMessage(
+        config.owner.number,
+        {
+          text: "Status: Conexão aberta."
+        },
+        logMessage("Mensagem de status enviada para o proprietário.", "INFO")
+      );
     }
     if (connection === "close") {
       if (metricsIntervalId) {
@@ -135,7 +139,7 @@ const connectToWhatsApp = async () => {
   try {
     const connectionLogs = path.join(__dirname, "temp");
     const { state, saveCreds } = await useMultiFileAuthState(connectionLogs);
-    logMessage("Iniciando a conexão com o WhatsApp...");
+    logMessage("Iniciando a conexão com o WhatsApp...", "INFO");
 
     const client = makeWASocket({
       auth: state,
