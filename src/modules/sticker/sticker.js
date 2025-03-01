@@ -13,8 +13,8 @@ if (!fs.existsSync(tempDir)) {
 
 async function processSticker(client, info, sender, from, text, isMedia, isQuotedVideo, isQuotedImage, config, getFileBuffer) {
   try {
-    // Define filtro fixo para tamanho 512x512
-    const filtro = "fps=10,scale=512:512";
+    // Alteração na declaração do filtro para permitir reatribuição
+    let filtro = "fps=10,scale=512:512";
       
     const enviar = async msg => {
       await client.sendMessage(from, { text: msg }, { quoted: info });
@@ -41,6 +41,11 @@ async function processSticker(client, info, sender, from, text, isMedia, isQuote
       mediaExtension = ".jpg";
     } else {
       return enviar("Envie ou cite uma imagem ou vídeo para criar o sticker.");
+    }
+
+    // Nova condição para tratar imagem estática:
+    if (mediaExtension === ".jpg") {
+      filtro = "scale=512:512";
     }
 
     const mediaPath = path.join(tempDir, `temp_${Date.now()}${mediaExtension}`);
@@ -81,7 +86,8 @@ async function processSticker(client, info, sender, from, text, isMedia, isQuote
     await client.sendMessage(from, { sticker: fs.readFileSync(outputPath) }, { quoted: info });
     fs.unlinkSync(mediaPath);
   } catch (error) {
-    await client.sendMessage(from, { text: `Erro: ${error.message}` }, { quoted: info });
+   // await client.sendMessage(from, { text: `Erro: ${error.message}` }, { quoted: info });
+   console.log(error);
   }
 }
 
