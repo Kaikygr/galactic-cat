@@ -85,6 +85,7 @@ async function getGroupContext(client, from, info) {
 
 async function handleWhatsAppUpdate(upsert, client) {
   for (const info of upsert?.messages || []) {
+
     if (!info || !info.key || !info.message) continue;
 
     await client.readMessages([info.key]);
