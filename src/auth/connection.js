@@ -115,13 +115,10 @@ const handleConnectionUpdate = async (update, client) => {
         metricsIntervalId = setInterval(reportMetrics, 60000);
       }
       const config = require("../config/options.json");
-      await client.sendMessage(
-        config.owner.number,
-        {
-          text: "Status: Conexão aberta."
-        },
-        logMessage("Mensagem de status enviada para o proprietário.", "INFO")
-      );
+      await client.sendMessage(config.owner.number, {
+        text: "Status: Conexão aberta."
+      });
+      logMessage("Mensagem de status enviada para o proprietário.", "INFO");
     }
     if (connection === "close") {
       if (metricsIntervalId) {
@@ -169,4 +166,6 @@ const connectToWhatsApp = async () => {
 
 connectToWhatsApp().catch(async error => {
   scheduleReconnect();
+  logMessage(`Erro ao iniciar a conexão: ${error.message}`, "ERROR");
+  process.exit(1);
 });
