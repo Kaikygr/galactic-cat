@@ -15,21 +15,16 @@ const logger = winston.createLogger({
   transports: [new winston.transports.Console()]
 });
 
-// Configurações de envio
 const maxAttempts = 3;
 const delayMs = 1000;
 const sendTimeoutMs = 5000;
-const WA_DEFAULT_EPHEMERAL = 86400; // 24 horas em segundos
+const WA_DEFAULT_EPHEMERAL = 86400;
 
-// Nova função retryOperation para operações assíncronas com tentativas e timeout
 async function retryOperation(operation, options = {}) {
   const { retries = 3, delay = 1000, timeout = 5000 } = options;
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      return await Promise.race([
-        operation(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), timeout))
-      ]);
+      return await Promise.race([operation(), new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), timeout))]);
     } catch (error) {
       if (attempt === retries) throw error;
       await new Promise(resolve => setTimeout(resolve, delay));
@@ -182,8 +177,6 @@ async function handleWhatsAppUpdate(upsert, client) {
             enviar("ops ocorreu um erro inesperado.");
           });
         break;
-
-    
     }
   }
 }
