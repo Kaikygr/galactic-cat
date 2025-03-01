@@ -21,6 +21,22 @@ const delayMs = 1000;
 const sendTimeoutMs = 5000;
 const WA_DEFAULT_EPHEMERAL = 86400; // 24 horas em segundos
 
+// Nova função retryOperation para operações assíncronas com tentativas e timeout
+async function retryOperation(operation, options = {}) {
+  const { retries = 3, delay = 1000, timeout = 5000 } = options;
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      return await Promise.race([
+        operation(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), timeout))
+      ]);
+    } catch (error) {
+      if (attempt === retries) throw error;
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+}
+
 function parseMessageInfo(info) {
   const baileys = require("@whiskeysockets/baileys");
   const from = info.key.remoteJid;
@@ -110,20 +126,10 @@ async function handleWhatsAppUpdate(upsert, client) {
         logger.warn("Enviar: texto vazio após sanitização");
         return;
       }
-      let attempts = 0;
-      while (attempts < maxAttempts) {
-        attempts++;
-        try {
-          await Promise.race([client.sendMessage(from, { text: texto }, { quoted: info, ephemeralExpiration: WA_DEFAULT_EPHEMERAL }), new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout no envio")), sendTimeoutMs))]);
-          return;
-        } catch (error) {
-          logger.error(`Tentativa ${attempts} falhou: ${error.message}`);
-          if (attempts < maxAttempts) {
-            await sleep(delayMs);
-          } else {
-            logger.error("Todas as tentativas de envio falharam.");
-          }
-        }
+      try {
+        await retryOperation(() => client.sendMessage(from, { text: texto }, { quoted: info, ephemeralExpiration: WA_DEFAULT_EPHEMERAL }), { retries: maxAttempts, delay: delayMs, timeout: sendTimeoutMs });
+      } catch (error) {
+        logger.error("Todas as tentativas de envio falharam.");
       }
     };
 
@@ -177,31 +183,7 @@ async function handleWhatsAppUpdate(upsert, client) {
           });
         break;
 
-      case "exec": {
-        if (!content.isOwner) {
-          enviar("Este comando é restrito ao owner.");
-          break;
-        }
-        if (!args.length) {
-          enviar("Envie o código para executar.");
-          break;
-        }
-        const codeToExecute = args.join(" ");
-        try {
-          let result = await eval(`(async () => { ${codeToExecute} })()`);
-          if (typeof result !== "string") result = JSON.stringify(result, null, 2);
-          logger.info(result);
-          enviar(`Operação executada com sucesso:\n${result}`);
-        } catch (error) {
-          enviar(`Erro na execução: ${error.message}`);
-        }
-        break;
-      }
-      case "teste":
-        {
-          await enviar("testando");
-        }
-        break;
+    
     }
   }
 }
