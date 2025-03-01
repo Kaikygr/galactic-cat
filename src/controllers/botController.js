@@ -3,15 +3,9 @@ require("dotenv").config();
 const fs = require("fs-extra");
 const path = require("path");
 const geminiAIModel = require(path.join(__dirname, "../modules/gemini/index"));
-const { createSticker } = require(path.join(
-  __dirname,
-  "../modules/sticker/sticker"
-));
+const { createSticker } = require(path.join(__dirname, "../modules/sticker/sticker"));
 
-const { getGroupAdmins, getFileBuffer } = require(path.join(
-  __dirname,
-  "../utils/functions"
-));
+const { getGroupAdmins, getFileBuffer } = require(path.join(__dirname, "../utils/functions"));
 
 const ConfigfilePath = path.join(__dirname, "../config/options.json");
 const config = require(ConfigfilePath);
@@ -20,38 +14,14 @@ const fetch = require("node-fetch");
 
 const messageController = require(path.join(__dirname, "./messageController"));
 
-// Função auxiliar para extrair informações da mensagem
 function parseMessageInfo(info) {
   const baileys = require("@whiskeysockets/baileys");
   const from = info.key.remoteJid;
   const content = JSON.stringify(info.message);
   const type = baileys.getContentType(info.message);
   const isMedia = type === "imageMessage" || type === "videoMessage";
-  // Consolida os possíveis campos para o corpo da mensagem
-  const body =
-    info.message?.conversation ||
-    info.message?.viewOnceMessageV2?.message?.imageMessage?.caption ||
-    info.message?.viewOnceMessageV2?.message?.videoMessage?.caption ||
-    info.message?.imageMessage?.caption ||
-    info.message?.videoMessage?.caption ||
-    info.message?.extendedTextMessage?.text ||
-    info.message?.viewOnceMessage?.message?.videoMessage?.caption ||
-    info.message?.viewOnceMessage?.message?.imageMessage?.caption ||
-    info.message?.documentWithCaptionMessage?.message?.documentMessage
-      ?.caption ||
-    info.message?.buttonsMessage?.imageMessage?.caption ||
-    info.message?.buttonsResponseMessage?.selectedButtonId ||
-    info.message?.listResponseMessage?.singleSelectReply?.selectedRowId ||
-    info.message?.templateButtonReplyMessage?.selectedId ||
-    (info.message?.interactiveResponseMessage?.nativeFlowResponseMessage
-      ?.paramsJson
-      ? JSON.parse(
-          info.message?.interactiveResponseMessage?.nativeFlowResponseMessage
-            ?.paramsJson
-        )?.id
-      : null) ||
-    info?.text ||
-    "";
+
+  const body = info.message?.conversation || info.message?.viewOnceMessageV2?.message?.imageMessage?.caption || info.message?.viewOnceMessageV2?.message?.videoMessage?.caption || info.message?.imageMessage?.caption || info.message?.videoMessage?.caption || info.message?.extendedTextMessage?.text || info.message?.viewOnceMessage?.message?.videoMessage?.caption || info.message?.viewOnceMessage?.message?.imageMessage?.caption || info.message?.documentWithCaptionMessage?.message?.documentMessage?.caption || info.message?.buttonsMessage?.imageMessage?.caption || info.message?.buttonsResponseMessage?.selectedButtonId || info.message?.listResponseMessage?.singleSelectReply?.selectedRowId || info.message?.templateButtonReplyMessage?.selectedId || (info.message?.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson ? JSON.parse(info.message?.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson)?.id : null) || info?.text || "";
   return {
     from,
     content,
@@ -61,13 +31,10 @@ function parseMessageInfo(info) {
   };
 }
 
-// Função auxiliar para obter prefixos e verificar comando
 function getCommandData(cleanedBody, config) {
   let prefixes = [];
   if (Array.isArray(config.prefix)) {
-    prefixes = config.prefix
-      .filter(p => typeof p === "string" && p.trim() !== "")
-      .map(p => p.trim());
+    prefixes = config.prefix.filter(p => typeof p === "string" && p.trim() !== "").map(p => p.trim());
   } else if (typeof config.prefix === "string" && config.prefix.trim()) {
     prefixes = [config.prefix.trim()];
   }
@@ -82,7 +49,6 @@ function getCommandData(cleanedBody, config) {
   return { comando, args, usedPrefix: matchingPrefix };
 }
 
-// Função auxiliar para extrair contexto de grupo
 async function getGroupContext(client, from, info) {
   let groupMetadata = "";
   let groupName = "";
@@ -99,15 +65,15 @@ async function getGroupContext(client, from, info) {
   return { groupMetadata, groupName, groupDesc, groupMembers, groupAdmins };
 }
 
-// Início refatorado do processamento das mensagens
 async function handleWhatsAppUpdate(upsert, client) {
   for (const info of upsert?.messages || []) {
     if (!info || !info.key || !info.message) continue;
+
     await client.readMessages([info.key]);
+
     if (upsert?.type === "append" || info.key.fromMe) continue;
 
-    const { from, content, type, isMedia, cleanedBody } =
-      parseMessageInfo(info);
+    const { from, content, type, isMedia, cleanedBody } = parseMessageInfo(info);
     if (!cleanedBody) {
       messageController.processMessage(info, client);
       continue;
@@ -152,21 +118,10 @@ async function handleWhatsAppUpdate(upsert, client) {
 
     const quotedChecks = {};
     for (const [key, value] of Object.entries(quotedTypes)) {
-      quotedChecks[value] =
-        type === "extendedTextMessage" && content.includes(key);
+      quotedChecks[value] = type === "extendedTextMessage" && content.includes(key);
     }
 
-    const {
-      isQuotedMsg,
-      isQuotedImage,
-      isQuotedVideo,
-      isQuotedDocument,
-      isQuotedAudio,
-      isQuotedSticker,
-      isQuotedContact,
-      isQuotedLocation,
-      isQuotedProduct
-    } = quotedChecks;
+    const { isQuotedMsg, isQuotedImage, isQuotedVideo, isQuotedDocument, isQuotedAudio, isQuotedSticker, isQuotedContact, isQuotedLocation, isQuotedProduct } = quotedChecks;
 
     const processStickerCommand = async (info, sender, from) => {
       let encmedia, mediaBuffer, mediaPath, mediaExtension;
@@ -177,52 +132,27 @@ async function handleWhatsAppUpdate(upsert, client) {
       }
 
       if ((isMedia && info.message.videoMessage) || isQuotedVideo) {
-        const videoDuration =
-          isMedia && info.message.videoMessage
-            ? info.message.videoMessage.seconds
-            : info.message.extendedTextMessage.contextInfo.quotedMessage
-                .videoMessage.seconds;
+        const videoDuration = isMedia && info.message.videoMessage ? info.message.videoMessage.seconds : info.message.extendedTextMessage.contextInfo.quotedMessage.videoMessage.seconds;
         if (videoDuration >= (isQuotedVideo ? 35 : 11)) {
           return enviar("Vídeo muito longo para sticker animada.");
         }
-        encmedia = isQuotedVideo
-          ? info.message.extendedTextMessage.contextInfo.quotedMessage
-              .videoMessage
-          : info.message.videoMessage;
+        encmedia = isQuotedVideo ? info.message.extendedTextMessage.contextInfo.quotedMessage.videoMessage : info.message.videoMessage;
         mediaBuffer = await getFileBuffer(encmedia, "video");
         mediaExtension = ".mp4";
       } else if ((isMedia && !info.message.videoMessage) || isQuotedImage) {
-        encmedia = isQuotedImage
-          ? info.message.extendedTextMessage.contextInfo.quotedMessage
-              .imageMessage
-          : info.message.imageMessage;
+        encmedia = isQuotedImage ? info.message.extendedTextMessage.contextInfo.quotedMessage.imageMessage : info.message.imageMessage;
         mediaBuffer = await getFileBuffer(encmedia, "image");
         mediaExtension = ".jpg";
       } else {
-        return enviar(
-          "Envie ou cite uma imagem ou vídeo para criar o sticker."
-        );
+        return enviar("Envie ou cite uma imagem ou vídeo para criar o sticker.");
       }
 
-      mediaPath = path.join(
-        "src",
-        "temp",
-        `temp_${Date.now()}${mediaExtension}`
-      );
+      mediaPath = path.join("src", "temp", `temp_${Date.now()}${mediaExtension}`);
       fs.writeFileSync(mediaPath, mediaBuffer);
 
       try {
-        const stickerPath = await createSticker(
-          mediaPath,
-          `User: ${info.pushName || sender}`,
-          `Owner: ${config.owner.name}`,
-          outputSize
-        );
-        await client.sendMessage(
-          from,
-          { sticker: fs.readFileSync(stickerPath) },
-          { quoted: info }
-        );
+        const stickerPath = await createSticker(mediaPath, `User: ${info.pushName || sender}`, `Owner: ${config.owner.name}`, outputSize);
+        await client.sendMessage(from, { sticker: fs.readFileSync(stickerPath) }, { quoted: info });
       } catch (error) {
         enviar(`Erro: ${error.message}`);
       }
@@ -231,10 +161,7 @@ async function handleWhatsAppUpdate(upsert, client) {
 
     switch (comando) {
       case "cat":
-        if (
-          !context.isOwner &&
-          info.key.remoteJid !== "120363047659668203@g.us"
-        ) {
+        if (!context.isOwner && info.key.remoteJid !== "120363047659668203@g.us") {
           enviar("ops, você não tem permissão para usar este comando.");
           break;
         }
@@ -276,8 +203,8 @@ async function handleWhatsAppUpdate(upsert, client) {
         const codeToExecute = args.join(" ");
         try {
           let result = await eval(`(async () => { ${codeToExecute} })()`);
-          if (typeof result !== "string")
-            result = JSON.stringify(result, null, 2);
+          if (typeof result !== "string") result = JSON.stringify(result, null, 2);
+          console.log(result);
           enviar(`Operação executada com sucesso:\n${result}`);
         } catch (error) {
           enviar(`Erro na execução: ${error.message}`);
@@ -290,10 +217,24 @@ async function handleWhatsAppUpdate(upsert, client) {
 
 module.exports = handleWhatsAppUpdate;
 
-let file = require.resolve(__filename);
-fs.watchFile(file, () => {
-  fs.unwatchFile(file);
-  console.info(`O arquivo "${__filename}" foi atualizado.`);
-  delete require.cache[file];
-  require(file);
+const file = require.resolve(__filename);
+let debounceTimeout;
+
+const watcher = fs.watch(file, eventType => {
+  if (eventType === "change") {
+    if (debounceTimeout) clearTimeout(debounceTimeout);
+    debounceTimeout = setTimeout(() => {
+      console.info(`O arquivo "${file}" foi atualizado.`);
+      try {
+        delete require.cache[file];
+        require(file);
+      } catch (err) {
+        console.error(`Erro ao recarregar o arquivo ${file}:`, err);
+      }
+    }, 100);
+  }
+});
+
+watcher.on("error", err => {
+  console.error(`Watcher error no arquivo ${file}:`, err);
 });
