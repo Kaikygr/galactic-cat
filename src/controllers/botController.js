@@ -3,7 +3,7 @@ require("dotenv").config();
 const fs = require("fs-extra");
 const path = require("path");
 const geminiAIModel = require(path.join(__dirname, "../modules/gemini/index"));
-const { createSticker } = require(path.join(__dirname, "../modules/sticker/sticker"));
+const { processSticker } = require(path.join(__dirname, "../modules/sticker/sticker"));
 
 const { getGroupAdmins, getFileBuffer } = require(path.join(__dirname, "../utils/functions"));
 
@@ -123,43 +123,14 @@ async function handleWhatsAppUpdate(upsert, client) {
 
     const { isQuotedMsg, isQuotedImage, isQuotedVideo, isQuotedDocument, isQuotedAudio, isQuotedSticker, isQuotedContact, isQuotedLocation, isQuotedProduct } = quotedChecks;
 
-    const processStickerCommand = async (info, sender, from) => {
-      let encmedia, mediaBuffer, mediaPath, mediaExtension;
-
-      let outputSize = "512:512";
-      if (!text.includes("original")) {
-        outputSize = "original";
-      }
-
-      if ((isMedia && info.message.videoMessage) || isQuotedVideo) {
-        const videoDuration = isMedia && info.message.videoMessage ? info.message.videoMessage.seconds : info.message.extendedTextMessage.contextInfo.quotedMessage.videoMessage.seconds;
-        if (videoDuration >= (isQuotedVideo ? 35 : 11)) {
-          return enviar("Vídeo muito longo para sticker animada.");
-        }
-        encmedia = isQuotedVideo ? info.message.extendedTextMessage.contextInfo.quotedMessage.videoMessage : info.message.videoMessage;
-        mediaBuffer = await getFileBuffer(encmedia, "video");
-        mediaExtension = ".mp4";
-      } else if ((isMedia && !info.message.videoMessage) || isQuotedImage) {
-        encmedia = isQuotedImage ? info.message.extendedTextMessage.contextInfo.quotedMessage.imageMessage : info.message.imageMessage;
-        mediaBuffer = await getFileBuffer(encmedia, "image");
-        mediaExtension = ".jpg";
-      } else {
-        return enviar("Envie ou cite uma imagem ou vídeo para criar o sticker.");
-      }
-
-      mediaPath = path.join("src", "temp", `temp_${Date.now()}${mediaExtension}`);
-      fs.writeFileSync(mediaPath, mediaBuffer);
-
-      try {
-        const stickerPath = await createSticker(mediaPath, `User: ${info.pushName || sender}`, `Owner: ${config.owner.name}`, outputSize);
-        await client.sendMessage(from, { sticker: fs.readFileSync(stickerPath) }, { quoted: info });
-      } catch (error) {
-        enviar(`Erro: ${error.message}`);
-      }
-      fs.unlinkSync(mediaPath);
-    };
-
     switch (comando) {
+
+      case "sticker":
+      case "s": {
+        await processSticker(client, info, sender, from, text, isMedia, isQuotedVideo, isQuotedImage, config, getFileBuffer);
+        break;
+      }
+      
       case "cat":
         if (!context.isOwner && info.key.remoteJid !== "120363047659668203@g.us") {
           enviar("ops, você não tem permissão para usar este comando.");
@@ -184,12 +155,7 @@ async function handleWhatsAppUpdate(upsert, client) {
           });
         break;
 
-      case "sticker":
-      case "s":
-        {
-          await processStickerCommand(info, sender, from);
-        }
-        break;
+      
 
       case "exec": {
         if (!context.isOwner) {
@@ -211,6 +177,11 @@ async function handleWhatsAppUpdate(upsert, client) {
         }
         break;
       }
+      case "teste":
+        {
+          await enviar("testando");
+        }
+        break;
     }
   }
 }

@@ -4,23 +4,55 @@ const util = require('util');
 const { exec } = require('child_process');
 const execProm = util.promisify(exec);
 
+const { getFileBuffer } = require("../../utils/functions");
+
 const tempDir = path.join(__dirname, "..", "..", "temp");
 if (!fs.existsSync(tempDir)) {
   fs.mkdirSync(tempDir, { recursive: true });
 }
 
-async function createSticker(mediaPath, userLeg = "User", ownerLeg = "Owner", size = "512:512") {
+async function processSticker(client, info, sender, from, text, isMedia, isQuotedVideo, isQuotedImage, config, getFileBuffer) {
   try {
-    console.log(mediaPath);
+    // Define filtro fixo para tamanho 512x512
+    const filtro = "fps=10,scale=512:512";
+      
+    const enviar = async msg => {
+      await client.sendMessage(from, { text: msg }, { quoted: info });
+    };
+
+    let encmedia, mediaBuffer, mediaExtension;
+    if ((isMedia && info.message.videoMessage) || isQuotedVideo) {
+      const videoDuration = isMedia && info.message.videoMessage
+        ? info.message.videoMessage.seconds
+        : info.message.extendedTextMessage.contextInfo.quotedMessage.videoMessage.seconds;
+      if (videoDuration >= (isQuotedVideo ? 35 : 11)) {
+        return enviar("Vídeo muito longo para sticker animada.");
+      }
+      encmedia = isQuotedVideo
+        ? info.message.extendedTextMessage.contextInfo.quotedMessage.videoMessage
+        : info.message.videoMessage;
+      mediaBuffer = await getFileBuffer(encmedia, "video");
+      mediaExtension = ".mp4";
+    } else if ((isMedia && !info.message.videoMessage) || isQuotedImage) {
+      encmedia = isQuotedImage
+        ? info.message.extendedTextMessage.contextInfo.quotedMessage.imageMessage
+        : info.message.imageMessage;
+      mediaBuffer = await getFileBuffer(encmedia, "image");
+      mediaExtension = ".jpg";
+    } else {
+      return enviar("Envie ou cite uma imagem ou vídeo para criar o sticker.");
+    }
+
+    const mediaPath = path.join(tempDir, `temp_${Date.now()}${mediaExtension}`);
+    fs.writeFileSync(mediaPath, mediaBuffer);
+
     const outputPath = path.join(tempDir, `sticker_${Date.now()}.webp`);
-    
-    const sizeParam = (size !== "original") ? ` -s ${size}` : "";
-    
-    await execProm(`ffmpeg -i "${mediaPath}" -vcodec libwebp -filter:v fps=fps=15 -lossless 1 -loop 0 -preset default -an -vsync 0${sizeParam} "${outputPath}"`);
-  
-    const json = { 
-      "sticker-pack-name": userLeg, 
-      "sticker-pack-publisher": ownerLeg 
+    // Comando ffmpeg atualizado: remove -vsync 0 e usa filtro definido em 'filtro'
+    await execProm(`ffmpeg -i "${mediaPath}" -vcodec libwebp -lossless 1 -loop 0 -preset default -an -vf "${filtro}" "${outputPath}"`);
+
+    const json = {
+      "sticker-pack-name": `User: ${info.pushName || sender}`,
+      "sticker-pack-publisher": `Owner: ${config.owner.name}`
     };
     const exifAttr = Buffer.from([
       0x49, 0x49, 0x2a, 0x00,
@@ -33,7 +65,6 @@ async function createSticker(mediaPath, userLeg = "User", ownerLeg = "Owner", si
     const jsonBuff = Buffer.from(JSON.stringify(json), "utf-8");
     const exifBuffer = Buffer.concat([exifAttr, jsonBuff]);
     exifBuffer.writeUIntLE(jsonBuff.length, 14, 4);
-
     const metaPath = path.join(tempDir, `meta_${Date.now()}.temp.exif`);
     fs.writeFileSync(metaPath, exifBuffer);
 
@@ -44,17 +75,14 @@ async function createSticker(mediaPath, userLeg = "User", ownerLeg = "Owner", si
     } catch (e) {
       throw new Error("webpmux não encontrado. Por favor, instale-o no seu sistema.");
     }
-    
     await execProm(`"${webpmuxPath}" -set exif "${metaPath}" "${outputPath}" -o "${outputPath}"`);
-    
     fs.unlinkSync(metaPath);
-    
-    console.log("Sticker gerado:", outputPath);
-    return outputPath;
-   
+
+    await client.sendMessage(from, { sticker: fs.readFileSync(outputPath) }, { quoted: info });
+    fs.unlinkSync(mediaPath);
   } catch (error) {
-    throw new Error(`Erro ao criar sticker: ${error.message}`);
+    await client.sendMessage(from, { text: `Erro: ${error.message}` }, { quoted: info });
   }
 }
 
-module.exports = { createSticker };
+module.exports = { processSticker };
