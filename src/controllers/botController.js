@@ -12,7 +12,7 @@ const config = require(ConfigfilePath);
 
 const fetch = require("node-fetch");
 
-const messageController = require(path.join(__dirname, "./messageController"));
+const messageController = require(path.join(__dirname, "./consoleMessage"));
 
 function parseMessageInfo(info) {
   const baileys = require("@whiskeysockets/baileys");

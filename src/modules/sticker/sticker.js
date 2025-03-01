@@ -24,7 +24,7 @@ async function processSticker(client, info, sender, from, text, isMedia, isQuote
     };
 
     let encmedia, mediaBuffer, mediaExtension;
-    // Processamento da mídia, verifica se é vídeo ou imagem e aplica limitações de duração
+    // Processamento da mídia, verifica se é vídeo ou imagem e aplica limitações de duração 
     if ((isMedia && info.message.videoMessage) || isQuotedVideo) {
       // Obtém a duração do vídeo
       const videoDuration = isMedia && info.message.videoMessage ? info.message.videoMessage.seconds : info.message.extendedTextMessage.contextInfo.quotedMessage.videoMessage.seconds;
