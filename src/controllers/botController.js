@@ -1,6 +1,3 @@
-/* eslint-disable no-unused-vars */
-/* eslint-disable no-undef */
-
 require("dotenv").config();
 
 const fs = require("fs-extra");
