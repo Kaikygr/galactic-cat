@@ -12,6 +12,7 @@
 ## Visão Geral
 
 _Galactic-Cat_ é um chatbot open-source desenvolvido em **Node.js** para integrar com o **WhatsApp**. Ele utiliza a API [@whiskeysockets/baileys](https://www.npmjs.com/package/@whiskeysockets/baileys) para gerenciar conexões, envio e recebimento de mensagens, e inclui funcionalidades avançadas como:
+
 - **Envio de mensagens automáticas** e personalizadas.
 - **Conversão de mídias para stickers** com metadados customizados (vide [`createSticker`](src/modules/sticker/sticker.js)).
 - **Integração com modelos de Inteligência Artificial**, como o [Gemini AI](src/modules/gemini/index.js).
@@ -31,7 +32,7 @@ _Galactic-Cat_ é um chatbot open-source desenvolvido em **Node.js** para integr
   Processa e formata mensagens usando funções auxiliares em [`messageController.js`](src/controllers/messageController.js) e [`functions.js`](src/utils/functions.js).
 
 - **Métricas e Logs:**  
-  Registra métricas de performance (uptime, uso de memória) e eventos de conexão em arquivos de log (*logs/connection.log*).
+  Registra métricas de performance (uptime, uso de memória) e eventos de conexão em arquivos de log (_logs/connection.log_).
 
 ## Tecnologias Utilizadas
 
@@ -45,40 +46,38 @@ _Galactic-Cat_ é um chatbot open-source desenvolvido em **Node.js** para integr
 
 A estrutura principal do projeto está organizada da seguinte forma:
 
-- **Configuração e Documentação**  
-  - [.env](.env) – Variáveis de ambiente seguras.  
-  - [.gitignore](.gitignore) – Arquivos e pastas ignoradas pelo Git.  
-  - [LICENSE](LICENSE) – Termos da licença MIT.  
+- **Configuração e Documentação**
+
+  - [.env](.env) – Variáveis de ambiente seguras.
+  - [.gitignore](.gitignore) – Arquivos e pastas ignoradas pelo Git.
+  - [LICENSE](LICENSE) – Termos da licença MIT.
   - [README.md](README.md) – Documentação deste projeto.
 
-- **Código-Fonte (`src/`)**  
-  - **auth/**  
-    - [connection.js](src/auth/connection.js) – Gerencia a conexão e reconexão com o WhatsApp.  
-    - **data/** – Dados de configuração e autenticação (ex.: [options.json](src/auth/data/options.json)).  
-    - [rateLimiter.js](src/auth/rateLimiter.js) – Controla o fluxo de mensagens para evitar excesso.  
+- **Código-Fonte (`src/`)**
+
+  - **auth/**
+    - [connection.js](src/auth/connection.js) – Gerencia a conexão e reconexão com o WhatsApp.
+    - **data/** – Dados de configuração e autenticação (ex.: [options.json](src/auth/data/options.json)).
     - **temp/** – Armazena arquivos temporários de autenticação.
-    
-  - **config/**  
+  - **config/**
     - [options.json](src/config/options.json) – Parâmetros de configuração do bot.
-    
-  - **controllers/**  
-    - [botController.js](src/controllers/botController.js) – Processa comandos e gerencia respostas (inclusive com integração ao Gemini AI).  
+  - **controllers/**
+    - [botController.js](src/controllers/botController.js) – Processa comandos e gerencia respostas (inclusive com integração ao Gemini AI).
     - [messageController.js](src/controllers/messageController.js) – Formata e exibe mensagens no console.
-    
-  - **modules/**  
-    - **gemini/** – Integração com modelo de IA para respostas inteligentes ([index.js](src/modules/gemini/index.js)).  
+  - **modules/**
+    - **gemini/** – Integração com modelo de IA para respostas inteligentes ([index.js](src/modules/gemini/index.js)).
     - **sticker/** – Conversão de mídia em stickers e gerenciamento dos metadados EXIF ([sticker.js](src/modules/sticker/sticker.js)).
-    
   - **temp/** – Armazena arquivos temporários do processamento.
-  - **utils/**  
+  - **utils/**
     - [functions.js](src/utils/functions.js) – Funções auxiliares (ex.: manipulação de arquivos, requisições HTTP).
 
-- **Outros Diretórios**  
-  - **public/** – Arquivos públicos e exemplos (ex.: [exemple.txt](public/exemple.txt)).  
-  - **logs/** – Logs de execução e conexão (*logs/connection.log*).  
+- **Outros Diretórios**
+
+  - **public/** – Arquivos públicos e exemplos (ex.: [example.txt](public/example.txt)).
+  - **logs/** – Logs de execução e conexão (_logs/connection.log_).
   - **test/** – Arquivos de teste e exemplos.
 
-- **Arquivo Principal**  
+- **Arquivo Principal**
   - [start.js](start.js) – Ponto de entrada da aplicação, responsável por iniciar o bot.
 
 ## Como Rodar o Projeto
@@ -116,8 +115,8 @@ Siga os passos abaixo para configurar e iniciar o bot:
 Contribuições para melhorias, correções e novas funcionalidades são bem-vindas!
 
 - Crie uma branch para sua feature ou correção.
-- Envie um *Pull Request* com suas alterações.
-- Confira os testes existentes em exemple.txt para entender como validar a funcionalidade.
+- Envie um _Pull Request_ com suas alterações.
+- Confira os testes existentes em [example.txt](public/example.txt) para entender como validar a funcionalidade.
 
 ## Licença
 
@@ -127,3 +126,7 @@ Este projeto é licenciado sob a MIT License.
 
 - **Kaikygr**  
   [GitHub: Kaikygr](https://github.com/Kaikygr)
+
+```
+
+```
