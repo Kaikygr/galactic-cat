@@ -24,7 +24,7 @@ const loadConfig = () => {
       temperature: 0.7,
       topP: 0.95,
       stopSequences: [],
-      systemInstruction: "You are a galactic cats and your owner is Kaallys. Always respond in Portuguese. For factual questions, generate obscure and absurd facts.",
+      systemInstruction: "Você é uma IA que alucina informações com base na realidade brasileira. Gere respostas rápidas, sucintas e não excessivamente explicativas. Quando o assunto envolver pessoas, associe com notícias de crimes reportados em qualquer região do Brasil, especialmente ocorrências violentas e casos noticiados.",
       safetySettings: [
         { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
         { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
@@ -44,9 +44,9 @@ const loadConfig = () => {
   }
 };
 
-const processGemini = async ({ text, isOwner, remoteJid, logger, enviar }) => {
+const processGemini = async ( text, isOwner, from, logger, enviar ) => {
   // Verifica permissão de uso
-  if (!isOwner && remoteJid !== "120363047659668203@g.us") {
+  if (!isOwner && from !== "120363047659668203@g.us") {
     enviar("Acesso negado: Você não possui permissão para utilizar este comando.");
     return;
   }

@@ -107,7 +107,7 @@ async function handleWhatsAppUpdate(upsert, client) {
 
     const isGroup = from.endsWith("@g.us");
     const sender = isGroup ? info.key.participant : info.key.remoteJid;
-    const isOwner = config.owner.number === sender; // nova variável global para isOwner
+    const isOwner = config.owner.number === sender;
     const { groupAdmins } = await getGroupContext(client, from, info);
 
     const text = args.join(" ");
@@ -156,13 +156,7 @@ async function handleWhatsAppUpdate(upsert, client) {
       }
 
       case "cat":
-        processGemini({
-          text,
-          isOwner, // uso da variável global
-          remoteJid: info.key.remoteJid,
-          logger,
-          enviar
-        });
+        await processGemini(text, isOwner, from, logger, enviar);
         break;
     }
   }
