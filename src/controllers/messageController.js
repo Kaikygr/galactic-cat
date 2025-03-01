@@ -28,8 +28,7 @@ function getMessageType(message) {
 
 function formatMessage(info, groupInfo) {
   const isGroup = info.key.remoteJid.endsWith('@g.us');
-  return `
-  ||========================||
+  return `||=============================||
 ${chalk.blue('Mensagem recebida:')}
 ${chalk.green('Remote JID:')} ${info.key.remoteJid}
 ${chalk.green('From Me:')} ${info.key.fromMe}
@@ -41,7 +40,7 @@ ${chalk.green('Broadcast:')} ${info.broadcast}
 ${isGroup ? formatGroupInfo(groupInfo) : ''}
 ${chalk.green('Message:')}
 ${formatMessageContent(info.message)}
-`;
+\n\n`;
 }
 
 function formatGroupInfo(groupInfo) {
