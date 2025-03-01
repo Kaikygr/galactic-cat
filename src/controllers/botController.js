@@ -2,7 +2,7 @@ require("dotenv").config();
 
 const fs = require("fs-extra");
 const path = require("path");
-const geminiAIModel = require(path.join(__dirname, "../modules/gemini/index"));
+const { processGemini } = require(path.join(__dirname, "../modules/gemini/index"));
 const { processSticker } = require(path.join(__dirname, "../modules/sticker/sticker"));
 const { getGroupAdmins, getFileBuffer } = require(path.join(__dirname, "../utils/functions"));
 const ConfigfilePath = path.join(__dirname, "../config/options.json");
@@ -85,7 +85,6 @@ async function getGroupContext(client, from, info) {
 
 async function handleWhatsAppUpdate(upsert, client) {
   for (const info of upsert?.messages || []) {
-
     if (!info || !info.key || !info.message) continue;
 
     await client.readMessages([info.key]);
@@ -108,6 +107,7 @@ async function handleWhatsAppUpdate(upsert, client) {
 
     const isGroup = from.endsWith("@g.us");
     const sender = isGroup ? info.key.participant : info.key.remoteJid;
+    const isOwner = config.owner.number === sender; // nova variável global para isOwner
     const { groupAdmins } = await getGroupContext(client, from, info);
 
     const text = args.join(" ");
@@ -156,27 +156,13 @@ async function handleWhatsAppUpdate(upsert, client) {
       }
 
       case "cat":
-        if (!content.isOwner && info.key.remoteJid !== "120363047659668203@g.us") {
-          enviar("ops, você não tem permissão para usar este comando.");
-          break;
-        }
-        if (!text || typeof text !== "string" || text.trim().length < 1) {
-          enviar("ops você não enviou o texto para ser processado.");
-          break;
-        }
-        geminiAIModel(text)
-          .then(result => {
-            logger.info(result);
-            if (result.status === "success") {
-              enviar(result.response);
-            } else {
-              enviar(`❌ Error: ${result.message}`);
-            }
-          })
-          .catch(error => {
-            logger.error("Unexpected error:", error);
-            enviar("ops ocorreu um erro inesperado.");
-          });
+        processGemini({
+          text,
+          isOwner, // uso da variável global
+          remoteJid: info.key.remoteJid,
+          logger,
+          enviar
+        });
         break;
     }
   }

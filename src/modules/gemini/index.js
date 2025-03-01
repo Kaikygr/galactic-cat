@@ -16,9 +16,7 @@ const ensureDirectory = () => {
 
 const loadConfig = () => {
   ensureDirectory();
-
   if (cachedConfig) return cachedConfig;
-
   if (!fs.existsSync(CONFIG_PATH)) {
     const defaultConfig = {
       model: "gemini-1.5-flash",
@@ -34,12 +32,10 @@ const loadConfig = () => {
         { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" }
       ]
     };
-
     fs.writeFileSync(CONFIG_PATH, JSON.stringify(defaultConfig, null, 2), "utf8");
     cachedConfig = defaultConfig;
     return defaultConfig;
   }
-
   try {
     cachedConfig = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
     return cachedConfig;
@@ -48,22 +44,32 @@ const loadConfig = () => {
   }
 };
 
-const geminiAIModel = async text => {
-  const config = loadConfig();
+const processGemini = async ({ text, isOwner, remoteJid, logger, enviar }) => {
+  // Verifica permissão de uso
+  if (!isOwner && remoteJid !== "120363047659668203@g.us") {
+    enviar("Acesso negado: Você não possui permissão para utilizar este comando.");
+    return;
+  }
+  // Valida o texto
+  if (!text || typeof text !== "string" || text.trim().length < 1) {
+    enviar("Por favor, insira um texto válido para ser processado.");
+    return;
+  }
 
+  // Carrega a configuração disponível
+  const config = loadConfig();
   if (config.status === "error") {
-    return config;
+    enviar(`Erro ao carregar a configuração: ${config.message}`);
+    return;
+  }
+
+  // Verifica a API key
+  if (!process.env.GEMINI_APIKEY || process.env.GEMINI_APIKEY.trim() === "") {
+    enviar("Erro: A chave de API (GEMINI_APIKEY) não foi configurada. Verifique seu arquivo .env.");
+    return;
   }
 
   try {
-    if (!process.env.GEMINI_APIKEY || process.env.GEMINI_APIKEY.trim() === "") {
-      return { status: "error", message: "The API key (GEMINI_APIKEY) is not set in the .env file." };
-    }
-
-    if (!text || typeof text !== "string" || text.trim().length < 1) {
-      return { status: "error", message: "The text must contain at least one character." };
-    }
-
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_APIKEY);
     const model = genAI.getGenerativeModel({
       model: config.model,
@@ -74,22 +80,22 @@ const geminiAIModel = async text => {
       stopSequences: config.stopSequences,
       systemInstruction: config.systemInstruction
     });
-
     if (!model) {
-      return { status: "error", message: "Failed to initialize the AI model. Please check the model configuration." };
+      enviar("Erro: Não foi possível inicializar o modelo de IA. Verifique a configuração do modelo.");
+      return;
     }
-
     const result = await model.generateContent(text);
     if (!result || !result.response) {
-      return { status: "error", message: "The AI model returned an empty response." };
+      enviar("Erro: O modelo de IA retornou uma resposta vazia.");
+      return;
     }
-
     const response = result.response.text().replace(/([*#])\1+/g, "$1");
-    return { status: "success", response };
+    logger.info(result);
+    enviar(response);
   } catch (error) {
-    console.error(error);
-    return { status: "error", message: `An error occurred while processing the request: ${error.message}` };
+    logger.error("Ocorreu um erro inesperado:", error);
+    enviar(`Ocorreu um erro inesperado: ${error.message}`);
   }
 };
 
-module.exports = geminiAIModel;
+module.exports = { processGemini };
