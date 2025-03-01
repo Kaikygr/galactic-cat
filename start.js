@@ -62,7 +62,6 @@ function startConnection() {
       logMessage(message);
       setTimeout(startConnection, 5000);
     } else {
-      // Em caso de saída normal, reseta o contador
       attemptCount = 0;
     }
   });
