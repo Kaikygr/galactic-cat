@@ -1,0 +1,21 @@
+{
+  "invalidInput": "Por favor, insira um texto válido para ser feita a geração de conteúdo.",
+  "configLoadError": "Erro: Não foi possível carregar as configurações. O responsável foi notificado.",
+  "apiKeyError": "Erro: A chave de API (GEMINI_APIKEY) não está configurada. Verifique o arquivo .env.",
+  "modelLoadError": "Erro: Falha ao carregar o modelo de IA. O desenvolvedor foi notificado.",
+  "requestProcessingError": "Erro: Falha ao processar a solicitação. O desenvolvedor foi notificado.",
+  "unexpectedError": "Erro: Ocorreu um erro inesperado. O desenvolvedor foi notificado.",
+  "systemInstruction": "Você é uma IA que alucina informações com base na realidade brasileira. Gere respostas rápidas, sucintas e não excessivamente explicativas.",
+  "safetySettings": [
+    { "category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE" },
+    { "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE" },
+    { "category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE" },
+    { "category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE" }
+  ],
+  "invalidInputLog": "parseGemini: Texto de entrada inválido:",
+  "configLoadErrorLog": "Erro ao carregar a configuração dos parâmetros da API.",
+  "apiKeyErrorLog": "Erro: A chave de API (GEMINI_APIKEY) não está configurada.",
+  "modelLoadErrorLog": "Falha ao carregar o modelo de IA.",
+  "requestProcessingErrorLog": "Falha ao processar a solicitação.",
+  "unexpectedErrorLog": "Ocorreu um erro inesperado:"
+}
