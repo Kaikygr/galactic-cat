@@ -174,7 +174,6 @@ async function handleWhatsAppUpdate(upsert, client) {
 
     switch (comando) {
       case "cat":
-        logger.info("Comando cat está sendo processado...");
         await processGemini(text, logger, userMessageReport, ownerReport);
         break;
 
@@ -183,11 +182,6 @@ async function handleWhatsAppUpdate(upsert, client) {
         await processSticker(client, info, sender, from, text, isMedia, isQuotedVideo, isQuotedImage, config, getFileBuffer);
         break;
       }
-
-      case "t":
-        //ownerReport(JSON.stringify(info, null, 2));
-        //userMessageReport("Informações da mensagem enviadas ao proprietário.");
-        break;
     }
   }
 }

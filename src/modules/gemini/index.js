@@ -5,8 +5,10 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const DATA_DIR = path.resolve(__dirname, "data");
 const CONFIG_PATH = path.join(DATA_DIR, "config.json");
+const OPTIONS_PATH = path.join(DATA_DIR, "options.json");
 
 let cachedConfig = null;
+let cachedOptions = null;
 
 const ensureDirectory = () => {
   if (!fs.existsSync(DATA_DIR)) {
@@ -17,6 +19,7 @@ const ensureDirectory = () => {
 const loadConfig = () => {
   ensureDirectory();
   if (cachedConfig) return cachedConfig;
+  const options = loadOptions();
   if (!fs.existsSync(CONFIG_PATH)) {
     const defaultConfig = {
       model: "gemini-1.5-flash",
@@ -24,13 +27,8 @@ const loadConfig = () => {
       temperature: 0.7,
       topP: 0.95,
       stopSequences: [],
-      systemInstruction: "Você é uma IA que alucina informações com base na realidade brasileira. Gere respostas rápidas, sucintas e não excessivamente explicativas.",
-      safetySettings: [
-        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-        { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-        { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
-        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" }
-      ]
+      systemInstruction: options.systemInstruction,
+      safetySettings: options.safetySettings
     };
     fs.writeFileSync(CONFIG_PATH, JSON.stringify(defaultConfig, null, 2), "utf8");
     cachedConfig = defaultConfig;
@@ -44,25 +42,47 @@ const loadConfig = () => {
   }
 };
 
+const loadOptions = () => {
+  if (cachedOptions) return cachedOptions;
+  if (!fs.existsSync(OPTIONS_PATH)) {
+    return { status: "error", message: "Arquivo de opções não encontrado." };
+  }
+  try {
+    cachedOptions = JSON.parse(fs.readFileSync(OPTIONS_PATH, "utf8"));
+    return cachedOptions;
+  } catch (error) {
+    return { status: "error", message: "Falha ao analisar o arquivo de opções. Verifique o formato do arquivo." };
+  }
+};
+
 const processGemini = async (text, logger, userMessageReport, ownerReport) => {
+  const options = loadOptions();
+
+  if (options.status === "error") {
+    userMessageReport(options.message);
+    ownerReport(options.message);
+    logger.error(options.message);
+    return;
+  }
+
   if (!text || typeof text !== "string" || text.trim().length < 1) {
-    logger.info("parseGemini: Texto de entrada inválido:", text);
-    userMessageReport("Por favor, insira um texto válido para ser feita a geração de conteúdo.");
+    logger.info(options.invalidInputLog, text);
+    userMessageReport(options.invalidInput);
     return;
   }
 
   const config = loadConfig();
   if (config.status === "error") {
-    userMessageReport("Erro: Não foi possível carregar as configurações. O responsável foi notificado.");
+    userMessageReport(options.configLoadError);
     ownerReport(config.message);
-    logger.error("Erro ao carregar a configuração dos parâmetros da API.", config.message);
+    logger.error(options.configLoadErrorLog, config.message);
     return;
   }
 
   if (!process.env.GEMINI_APIKEY || process.env.GEMINI_APIKEY.trim() === "") {
-    userMessageReport("Erro: Ocorreu um erro interno. O problema já foi reportado ao desenvolvedor.");
-    ownerReport("Erro: A chave de API (GEMINI_APIKEY) não está configurada. Verifique o arquivo .env.");
-    logger.error("Erro: A chave de API (GEMINI_APIKEY) não está configurada. Verifique o arquivo .env.");
+    userMessageReport(options.apiKeyError);
+    ownerReport(options.apiKeyError);
+    logger.error(options.apiKeyErrorLog);
     return;
   }
 
@@ -79,26 +99,26 @@ const processGemini = async (text, logger, userMessageReport, ownerReport) => {
     });
 
     if (!model) {
-      userMessageReport("Erro: Falha ao carregar o modelo de IA. O desenvolvedor foi notificado.");
-      ownerReport("Erro: Falha ao carregar o modelo de IA. Verifique os logs para mais detalhes.");
-      logger.error("Falha ao carregar o modelo de IA.");
+      userMessageReport(options.modelLoadError);
+      ownerReport(options.modelLoadError);
+      logger.error(options.modelLoadErrorLog);
       return;
     }
 
     const result = await model.generateContent(text);
     if (!result || !result.response) {
-      userMessageReport("Erro: Falha ao processar a solicitação. O desenvolvedor foi notificado.");
-      ownerReport("Erro: Falha ao processar a solicitação. Verifique os logs para mais detalhes.");
-      logger.error("Falha ao processar a solicitação.");
+      userMessageReport(options.requestProcessingError);
+      ownerReport(options.requestProcessingError);
+      logger.error(options.requestProcessingErrorLog);
       return;
     }
 
     const response = result.response.text().replace(/([*#])\1+/g, "$1");
     userMessageReport(response);
   } catch (error) {
-    logger.error("Ocorreu um erro inesperado:", error);
-    userMessageReport(`Erro: Ocorreu um erro inesperado. O desenvolvedor foi notificado.`);
-    ownerReport(`Erro: Ocorreu um erro inesperado. Verifique os logs para mais detalhes. ${error.message}`);
+    logger.error(options.unexpectedErrorLog, error);
+    userMessageReport(options.unexpectedError);
+    ownerReport(`${options.unexpectedErrorLog} ${error.message}`);
   }
 };
 
