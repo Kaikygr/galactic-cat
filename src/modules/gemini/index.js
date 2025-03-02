@@ -94,7 +94,7 @@ const processGemini = async ( text, isOwner, from, logger, enviar ) => {
     enviar(response);
   } catch (error) {
     logger.error("Ocorreu um erro inesperado:", error);
-    enviar(`Ocorreu um erro inesperado: ${error.message}`);
+    enviar(`Ocorreu um erro inesperado.`);
   }
 };
 
