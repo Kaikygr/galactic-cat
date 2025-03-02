@@ -140,7 +140,7 @@ async function handleWhatsAppUpdate(upsert, client) {
     };
 
     // Sends a message to the current chat with quoting
-    const enviar = async texto => {
+    const userMessageReport = async texto => {
       await sendWithRetry(from, texto, { quoted: info, ephemeralExpiration: WA_DEFAULT_EPHEMERAL });
     };
 
@@ -176,7 +176,7 @@ async function handleWhatsAppUpdate(upsert, client) {
 
     switch (comando) {
       case "cat":
-        await processGemini(text, isOwner, from, logger, enviar);
+        await processGemini(text, isOwner, from, logger, userMessageReport, ownerReport);
         break;
 
       case "sticker":

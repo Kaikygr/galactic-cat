@@ -19,7 +19,7 @@ async function processSticker(client, info, sender, from, text, isMedia, isQuote
     let filtro = "fps=10,scale=512:512";
 
     // Função para envio de mensagens rápidas
-    const enviar = async msg => {
+    const userMessageReport = async msg => {
       await client.sendMessage(from, { text: msg }, { quoted: info });
     };
 
@@ -29,7 +29,7 @@ async function processSticker(client, info, sender, from, text, isMedia, isQuote
       // Obtém a duração do vídeo
       const videoDuration = isMedia && info.message.videoMessage ? info.message.videoMessage.seconds : info.message.extendedTextMessage.contextInfo.quotedMessage.videoMessage.seconds;
       if (videoDuration >= (isQuotedVideo ? 35 : 11)) {
-        return enviar("Vídeo muito longo para sticker animada.");
+        return userMessageReport("Vídeo muito longo para sticker animada.");
       }
       encmedia = isQuotedVideo ? info.message.extendedTextMessage.contextInfo.quotedMessage.videoMessage : info.message.videoMessage;
       mediaBuffer = await getFileBuffer(encmedia, "video");
@@ -40,7 +40,7 @@ async function processSticker(client, info, sender, from, text, isMedia, isQuote
       mediaBuffer = await getFileBuffer(encmedia, "image");
       mediaExtension = ".jpg";
     } else {
-      return enviar("Envie ou cite uma imagem ou vídeo para criar o sticker.");
+      return userMessageReport("Envie ou cite uma imagem ou vídeo para criar o sticker.");
     }
 
     // Altera o filtro para imagens, se necessário

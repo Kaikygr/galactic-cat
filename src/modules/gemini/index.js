@@ -44,21 +44,21 @@ const loadConfig = () => {
   }
 };
 
-const processGemini = async (text, isOwner, from, logger, enviar) => {
+const processGemini = async (text, isOwner, from, logger, userMessageReport) => {
   if (!text || typeof text !== "string" || text.trim().length < 1) {
-    enviar("Por favor, insira um texto válido para ser processado.");
+    userMessageReport("Por favor, insira um texto válido para ser processado.");
     return;
   }
 
   const config = loadConfig();
   if (config.status === "error") {
-    enviar("Erro ao carregar a configuração.");
+    userMessageReport("Erro ao carregar a configuração.");
     logger.info("Erro ao carregar a configuração:", config.message);
     return;
   }
 
   if (!process.env.GEMINI_APIKEY || process.env.GEMINI_APIKEY.trim() === "") {
-    enviar("Erro: A chave de API (GEMINI_APIKEY) não foi configurada. Verifique seu arquivo .env.");
+    userMessageReport("Erro: A chave de API (GEMINI_APIKEY) não foi configurada. Verifique seu arquivo .env.");
     return;
   }
 
@@ -74,20 +74,20 @@ const processGemini = async (text, isOwner, from, logger, enviar) => {
       systemInstruction: config.systemInstruction
     });
     if (!model) {
-      enviar("Erro: Não foi possível inicializar o modelo de IA. Verifique a configuração do modelo.");
+      userMessageReport("Erro: Não foi possível inicializar o modelo de IA. Verifique a configuração do modelo.");
       return;
     }
     const result = await model.generateContent(text);
     if (!result || !result.response) {
-      enviar("Erro: O modelo de IA retornou uma resposta vazia.");
+      userMessageReport("Erro: O modelo de IA retornou uma resposta vazia.");
       return;
     }
     const response = result.response.text().replace(/([*#])\1+/g, "$1");
     logger.info(result);
-    enviar(response);
+    userMessageReport(response);
   } catch (error) {
     logger.error("Ocorreu um erro inesperado:", error);
-    enviar(`Ocorreu um erro inesperado.`);
+    userMessageReport(`Ocorreu um erro inesperado.`);
   }
 };
 
