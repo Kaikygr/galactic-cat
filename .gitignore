@@ -1,8 +1,9 @@
 # Ignorar dependências do Node.js
 node_modules/
 .env
-src/modules/gemini/data/
+src/modules/gemini/data/config.json
 src/auth/temp
 /logs
 /src/temp
 package-lock.json
+error.log

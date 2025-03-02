@@ -7,6 +7,13 @@ const chalk = require("chalk");
 const os = require("os");
 const { useMultiFileAuthState } = require("@whiskeysockets/baileys");
 const fs = require("fs");
+const winston = require("winston");
+
+// Configuração básica do Winston
+const logger = winston.createLogger({
+  level: "info",
+  transports: [new winston.transports.Console()]
+});
 
 const pairingCode = process.argv.includes("--code");
 const RECONNECT_TIMEOUT = 5000;
@@ -17,11 +24,12 @@ const RECONNECT_MAX_DELAY = 60000;
 let reconnectAttempts = 0;
 let metricsIntervalId = null;
 
-const logMessage = (message, level = "INFO") => {
-  const date = new Date().toISOString();
-  const colors = { INFO: chalk.green, WARN: chalk.yellow, ERROR: chalk.red };
-  console.log(chalk.gray(`[${date}]`), colors[level] ? colors[level](message) : message);
-};
+// Remova ou comente a função antiga de log
+// function logMessage(message, level = "INFO") {
+//   const date = new Date().toISOString();
+//   const colors = { INFO: chalk.green, WARN: chalk.yellow, ERROR: chalk.red };
+//   console.log(chalk.gray(`[${date}]`), colors[level] ? colors[level](message) : message);
+// }
 
 const pad = s => (s < 10 ? "0" + s : s);
 
@@ -109,7 +117,7 @@ const handleConnectionUpdate = async (update, client) => {
   try {
     const { connection, lastDisconnect } = update;
     if (connection === "open") {
-      logMessage("✅ Conexão aberta com sucesso. Bot disponível.", "INFO");
+      logger.info("✅ Conexão aberta com sucesso. Bot disponível.");
       reconnectAttempts = 0;
       if (!metricsIntervalId) {
         metricsIntervalId = setInterval(reportMetrics, 60000);
@@ -118,7 +126,7 @@ const handleConnectionUpdate = async (update, client) => {
       await client.sendMessage(config.owner.number, {
         text: "Status: Conexão aberta."
       });
-      logMessage("Mensagem de status enviada para o proprietário.", "INFO");
+      logger.info("Mensagem de status enviada para o proprietário.");
     }
     if (connection === "close") {
       if (metricsIntervalId) {
@@ -136,7 +144,7 @@ const connectToWhatsApp = async () => {
   try {
     const connectionLogs = path.join(__dirname, "temp");
     const { state, saveCreds } = await useMultiFileAuthState(connectionLogs);
-    logMessage("Iniciando a conexão com o WhatsApp...", "INFO");
+    logger.info("Iniciando a conexão com o WhatsApp...");
 
     const client = makeWASocket({
       auth: state,
@@ -154,18 +162,22 @@ const connectToWhatsApp = async () => {
     registerAllEventHandlers(client, saveCreds);
 
     if (pairingCode && !client.authState.creds.registered) {
-      logMessage("Não registrado, iniciando emparelhamento via QR Code...", "WARN");
+      logger.warn("Não registrado, iniciando emparelhamento via QR Code...");
       try {
         await handlePairing(client);
-      } catch (error) {}
+      } catch (error) {
+        logger.error(`Erro no emparelhamento: ${error.message}`);
+      }
     }
   } catch (error) {
     scheduleReconnect();
+    logger.error(`Erro ao iniciar a conexão: ${error.message}`);
+    process.exit(1);
   }
 };
 
 connectToWhatsApp().catch(async error => {
   scheduleReconnect();
-  logMessage(`Erro ao iniciar a conexão: ${error.message}`, "ERROR");
+  logger.error(`Erro ao iniciar a conexão: ${error.message}`);
   process.exit(1);
 });

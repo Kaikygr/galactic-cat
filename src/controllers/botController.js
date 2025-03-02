@@ -2,17 +2,44 @@ require("dotenv").config();
 
 const fs = require("fs-extra");
 const path = require("path");
-const geminiAIModel = require(path.join(__dirname, "../modules/gemini/index"));
+const { processGemini } = require(path.join(__dirname, "../modules/gemini/gemini"));
 const { processSticker } = require(path.join(__dirname, "../modules/sticker/sticker"));
-
 const { getGroupAdmins, getFileBuffer } = require(path.join(__dirname, "../utils/functions"));
-
 const ConfigfilePath = path.join(__dirname, "../config/options.json");
 const config = require(ConfigfilePath);
+const messageController = require(path.join(__dirname, "./consoleMessage"));
 
-const fetch = require("node-fetch");
+const winston = require("winston");
+const logger = winston.createLogger({
+  level: "info",
+  transports: [
+    new winston.transports.Console({
+      format: winston.format.combine(winston.format.colorize(), winston.format.simple())
+    }),
+    new winston.transports.File({
+      filename: "./logs/error.log",
+      level: "error",
+      format: winston.format.combine(winston.format.timestamp(), winston.format.json())
+    })
+  ]
+});
 
-const messageController = require(path.join(__dirname, "./messageController"));
+const maxAttempts = 3;
+const delayMs = 1000;
+const sendTimeoutMs = 5000;
+const WA_DEFAULT_EPHEMERAL = 86400;
+
+async function retryOperation(operation, options = {}) {
+  const { retries = 3, delay = 1000, timeout = 5000 } = options;
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      return await Promise.race([operation(), new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), timeout))]);
+    } catch (error) {
+      if (attempt === retries) throw error;
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+}
 
 function parseMessageInfo(info) {
   const baileys = require("@whiskeysockets/baileys");
@@ -89,19 +116,40 @@ async function handleWhatsAppUpdate(upsert, client) {
 
     const isGroup = from.endsWith("@g.us");
     const sender = isGroup ? info.key.participant : info.key.remoteJid;
+    const isOwner = config.owner.number === sender;
     const { groupAdmins } = await getGroupContext(client, from, info);
 
     const text = args.join(" ");
     const sleep = async ms => new Promise(resolve => setTimeout(resolve, ms));
-    const BotNumber = client.user.id.split(":")[0] + "@s.whatsapp.net";
-    const context = {
-      isOwner: config.owner.number.includes(sender),
-      isGroupAdmins: groupAdmins ? groupAdmins.includes(sender) : false,
-      isBotGroupAdmins: groupAdmins ? groupAdmins.includes(BotNumber) : false
+
+    const sendWithRetry = async (target, text, options = {}) => {
+      if (typeof text !== "string") {
+        text = String(text);
+      }
+      text = text.trim();
+      if (!text) {
+        logger.warn("sendWithRetry: texto vazio após sanitização");
+        return;
+      }
+      try {
+        await retryOperation(() => client.sendMessage(target, { text }, options), { retries: maxAttempts, delay: delayMs, timeout: sendTimeoutMs });
+      } catch (error) {
+        logger.error(`Todas as tentativas de envio falharam para ${target}.`, error);
+      }
     };
 
-    const enviar = async texto => {
-      await client.sendMessage(from, { text: texto }, { quoted: info });
+    const userMessageReport = async texto => {
+      await sendWithRetry(from, texto, { quoted: info, ephemeralExpiration: WA_DEFAULT_EPHEMERAL });
+    };
+
+    const ownerReport = async message => {
+      const sanitizedMessage = String(message).trim();
+      if (!sanitizedMessage) {
+        logger.warn("ownerReport: Empty text after sanitization");
+        return;
+      }
+      const formattedMessage = JSON.stringify(sanitizedMessage, null, 2);
+      await sendWithRetry(config.owner.number, formattedMessage, { ephemeralExpiration: WA_DEFAULT_EPHEMERAL });
     };
 
     const quotedTypes = {
@@ -124,64 +172,15 @@ async function handleWhatsAppUpdate(upsert, client) {
     const { isQuotedMsg, isQuotedImage, isQuotedVideo, isQuotedDocument, isQuotedAudio, isQuotedSticker, isQuotedContact, isQuotedLocation, isQuotedProduct } = quotedChecks;
 
     switch (comando) {
+      case "cat":
+        await processGemini(text, logger, userMessageReport, ownerReport);
+        break;
 
       case "sticker":
       case "s": {
         await processSticker(client, info, sender, from, text, isMedia, isQuotedVideo, isQuotedImage, config, getFileBuffer);
         break;
       }
-      
-      case "cat":
-        if (!context.isOwner && info.key.remoteJid !== "120363047659668203@g.us") {
-          enviar("ops, você não tem permissão para usar este comando.");
-          break;
-        }
-        if (!text || typeof text !== "string" || text.trim().length < 1) {
-          enviar("ops você não enviou o texto para ser processado.");
-          break;
-        }
-        geminiAIModel(text)
-          .then(result => {
-            console.log(result, "info");
-            if (result.status === "success") {
-              enviar(result.response);
-            } else {
-              enviar(`❌ Error: ${result.message}`);
-            }
-          })
-          .catch(error => {
-            console.log("Unexpected error:", "error");
-            enviar("ops ocorreu um erro inesperado.");
-          });
-        break;
-
-      
-
-      case "exec": {
-        if (!context.isOwner) {
-          enviar("Este comando é restrito ao owner.");
-          break;
-        }
-        if (!args.length) {
-          enviar("Envie o código para executar.");
-          break;
-        }
-        const codeToExecute = args.join(" ");
-        try {
-          let result = await eval(`(async () => { ${codeToExecute} })()`);
-          if (typeof result !== "string") result = JSON.stringify(result, null, 2);
-          console.log(result);
-          enviar(`Operação executada com sucesso:\n${result}`);
-        } catch (error) {
-          enviar(`Erro na execução: ${error.message}`);
-        }
-        break;
-      }
-      case "teste":
-        {
-          await enviar("testando");
-        }
-        break;
     }
   }
 }
@@ -195,17 +194,17 @@ const watcher = fs.watch(file, eventType => {
   if (eventType === "change") {
     if (debounceTimeout) clearTimeout(debounceTimeout);
     debounceTimeout = setTimeout(() => {
-      console.info(`O arquivo "${file}" foi atualizado.`);
+      logger.info(`O arquivo "${file}" foi atualizado.`);
       try {
         delete require.cache[file];
         require(file);
       } catch (err) {
-        console.error(`Erro ao recarregar o arquivo ${file}:`, err);
+        logger.error(`Erro ao recarregar o arquivo ${file}:`, err);
       }
     }, 100);
   }
 });
 
 watcher.on("error", err => {
-  console.error(`Watcher error no arquivo ${file}:`, err);
+  logger.error(`Watcher error no arquivo ${file}:`, err);
 });

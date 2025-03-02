@@ -1,5 +1,11 @@
 {
-    "prefix": [".", "!", "#", "$"],
+    "prefix": [
+        ".",
+        "!",
+        "#",
+        "$",
+        "/"
+    ],
     "github": "https://github.com/Kaikygr/kaikygr",
     "owner": {
         "number": "559591264582@s.whatsapp.net",
@@ -13,7 +19,7 @@
     },
     "bot": {
         "name": "Galactic Cat Bot",
-        "version": "1.0.0",
+        "version": "1.1.0",
         "description": "Bot criado e mantido por Kaiky Gomes."
     }
 }
