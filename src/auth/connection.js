@@ -9,7 +9,6 @@ const { useMultiFileAuthState } = require("@whiskeysockets/baileys");
 const fs = require("fs");
 const winston = require("winston");
 
-// Configuração básica do Winston
 const logger = winston.createLogger({
   level: "info",
   transports: [new winston.transports.Console()]
@@ -23,13 +22,6 @@ const RECONNECT_INITIAL_DELAY = 2000;
 const RECONNECT_MAX_DELAY = 60000;
 let reconnectAttempts = 0;
 let metricsIntervalId = null;
-
-// Remova ou comente a função antiga de log
-// function logMessage(message, level = "INFO") {
-//   const date = new Date().toISOString();
-//   const colors = { INFO: chalk.green, WARN: chalk.yellow, ERROR: chalk.red };
-//   console.log(chalk.gray(`[${date}]`), colors[level] ? colors[level](message) : message);
-// }
 
 const pad = s => (s < 10 ? "0" + s : s);
 
