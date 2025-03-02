@@ -2,7 +2,7 @@ require("dotenv").config();
 
 const fs = require("fs-extra");
 const path = require("path");
-const { processGemini } = require(path.join(__dirname, "../modules/gemini/index"));
+const { processGemini } = require(path.join(__dirname, "../modules/gemini/gemini"));
 const { processSticker } = require(path.join(__dirname, "../modules/sticker/sticker"));
 const { getGroupAdmins, getFileBuffer } = require(path.join(__dirname, "../utils/functions"));
 const ConfigfilePath = path.join(__dirname, "../config/options.json");

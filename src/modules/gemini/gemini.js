@@ -55,6 +55,24 @@ const loadOptions = () => {
   }
 };
 
+/**
+ * Processes Gemini content by validating input, loading configurations, and generating a response using GoogleGenerativeAI.
+ *
+ * This async function validates the provided text input, loads the necessary options and configurations,
+ * and verifies that a valid Gemini API key is available in the environment variables. It then initializes
+ * a GoogleGenerativeAI model based on these configurations and generates content based on the input text.
+ * Throughout the process, it reports status and error messages to both the user and the owner, and logs
+ * relevant information.
+ *
+ * @async
+ * @param {string} text - The input text to be processed.
+ * @param {object} logger - An object for logging messages, with methods such as error and info.
+ * @param {function(string): void} userMessageReport - Callback function for reporting messages to the user.
+ * @param {function(string): void} ownerReport - Callback function for reporting messages to the owner or administrator.
+ * @returns {Promise<void>} A promise that resolves when processing is complete.
+ *
+ * @throws {Error} Will throw an unexpected error if the content generation process fails.
+ */
 const processGemini = async (text, logger, userMessageReport, ownerReport) => {
   const options = loadOptions();
 
