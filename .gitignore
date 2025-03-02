@@ -6,3 +6,4 @@ src/auth/temp
 /logs
 /src/temp
 package-lock.json
+error.log

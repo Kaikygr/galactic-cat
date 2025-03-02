@@ -12,7 +12,16 @@ const messageController = require(path.join(__dirname, "./consoleMessage"));
 const winston = require("winston");
 const logger = winston.createLogger({
   level: "info",
-  transports: [new winston.transports.Console()]
+  transports: [
+    new winston.transports.Console({
+      format: winston.format.combine(winston.format.colorize(), winston.format.simple())
+    }),
+    new winston.transports.File({
+      filename: "error.log",
+      level: "warn",
+      format: winston.format.combine(winston.format.timestamp(), winston.format.json())
+    })
+  ]
 });
 
 const maxAttempts = 3;
@@ -113,20 +122,37 @@ async function handleWhatsAppUpdate(upsert, client) {
     const text = args.join(" ");
     const sleep = async ms => new Promise(resolve => setTimeout(resolve, ms));
 
-    const enviar = async texto => {
-      if (typeof texto !== "string") {
-        texto = String(texto);
+    // Common helper function to send messages with retries
+    const sendWithRetry = async (target, text, options = {}) => {
+      if (typeof text !== "string") {
+        text = String(text);
       }
-      texto = texto.trim();
-      if (!texto) {
-        logger.warn("Enviar: texto vazio após sanitização");
+      text = text.trim();
+      if (!text) {
+        logger.warn("sendWithRetry: texto vazio após sanitização");
         return;
       }
       try {
-        await retryOperation(() => client.sendMessage(from, { text: texto }, { quoted: info, ephemeralExpiration: WA_DEFAULT_EPHEMERAL }), { retries: maxAttempts, delay: delayMs, timeout: sendTimeoutMs });
+        await retryOperation(() => client.sendMessage(target, { text }, options), { retries: maxAttempts, delay: delayMs, timeout: sendTimeoutMs });
       } catch (error) {
-        logger.error("Todas as tentativas de envio falharam.");
+        logger.error(`Todas as tentativas de envio falharam para ${target}.`, error);
       }
+    };
+
+    // Sends a message to the current chat with quoting
+    const enviar = async texto => {
+      await sendWithRetry(from, texto, { quoted: info, ephemeralExpiration: WA_DEFAULT_EPHEMERAL });
+    };
+
+    // Sends a formatted report message to the owner
+    const ownerReport = async message => {
+      const sanitizedMessage = String(message).trim();
+      if (!sanitizedMessage) {
+        logger.warn("ownerReport: Empty text after sanitization");
+        return;
+      }
+      const formattedMessage = JSON.stringify(sanitizedMessage, null, 2);
+      await sendWithRetry(config.owner.number, formattedMessage, { ephemeralExpiration: WA_DEFAULT_EPHEMERAL });
     };
 
     const quotedTypes = {
@@ -149,14 +175,18 @@ async function handleWhatsAppUpdate(upsert, client) {
     const { isQuotedMsg, isQuotedImage, isQuotedVideo, isQuotedDocument, isQuotedAudio, isQuotedSticker, isQuotedContact, isQuotedLocation, isQuotedProduct } = quotedChecks;
 
     switch (comando) {
+      case "cat":
+        await processGemini(text, isOwner, from, logger, enviar);
+        break;
+
       case "sticker":
       case "s": {
         await processSticker(client, info, sender, from, text, isMedia, isQuotedVideo, isQuotedImage, config, getFileBuffer);
         break;
       }
 
-      case "cat":
-        await processGemini(text, isOwner, from, logger, enviar);
+      case "t":
+        ownerReport(info);
         break;
     }
   }

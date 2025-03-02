@@ -24,7 +24,7 @@ const loadConfig = () => {
       temperature: 0.7,
       topP: 0.95,
       stopSequences: [],
-      systemInstruction: "Você é uma IA que alucina informações com base na realidade brasileira. Gere respostas rápidas, sucintas e não excessivamente explicativas. Quando o assunto envolver pessoas, associe com notícias de crimes reportados em qualquer região do Brasil, especialmente ocorrências violentas e casos noticiados.",
+      systemInstruction: "Você é uma IA que alucina informações com base na realidade brasileira. Gere respostas rápidas, sucintas e não excessivamente explicativas.",
       safetySettings: [
         { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
         { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
@@ -44,26 +44,19 @@ const loadConfig = () => {
   }
 };
 
-const processGemini = async ( text, isOwner, from, logger, enviar ) => {
-  // Verifica permissão de uso
-  if (!isOwner && from !== "120363047659668203@g.us") {
-    enviar("Acesso negado: Você não possui permissão para utilizar este comando.");
-    return;
-  }
-  // Valida o texto
+const processGemini = async (text, isOwner, from, logger, enviar) => {
   if (!text || typeof text !== "string" || text.trim().length < 1) {
     enviar("Por favor, insira um texto válido para ser processado.");
     return;
   }
 
-  // Carrega a configuração disponível
   const config = loadConfig();
   if (config.status === "error") {
-    enviar(`Erro ao carregar a configuração: ${config.message}`);
+    enviar("Erro ao carregar a configuração.");
+    logger.info("Erro ao carregar a configuração:", config.message);
     return;
   }
 
-  // Verifica a API key
   if (!process.env.GEMINI_APIKEY || process.env.GEMINI_APIKEY.trim() === "") {
     enviar("Erro: A chave de API (GEMINI_APIKEY) não foi configurada. Verifique seu arquivo .env.");
     return;
