@@ -1,7 +1,7 @@
 {
   "invalidInput": "Por favor, insira um texto válido para ser feita a geração de conteúdo.",
   "configLoadError": "Erro: Não foi possível carregar as configurações. O responsável foi notificado.",
-  "apiKeyError": "Erro: A chave de API (GEMINI_APIKEY) não está configurada. Verifique o arquivo .env.",
+  "apiKeyError": "Erro: A chave de API (GEMINI_APIKEY) não está configurada. O responsável foi notificado.",
   "modelLoadError": "Erro: Falha ao carregar o modelo de IA. O desenvolvedor foi notificado.",
   "requestProcessingError": "Erro: Falha ao processar a solicitação. O desenvolvedor foi notificado.",
   "unexpectedError": "Erro: Ocorreu um erro inesperado. O desenvolvedor foi notificado.",

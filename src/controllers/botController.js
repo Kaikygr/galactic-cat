@@ -17,8 +17,8 @@ const logger = winston.createLogger({
       format: winston.format.combine(winston.format.colorize(), winston.format.simple())
     }),
     new winston.transports.File({
-      filename: "error.log",
-      level: "warn",
+      filename: "./logs/error.log",
+      level: "error",
       format: winston.format.combine(winston.format.timestamp(), winston.format.json())
     })
   ]
@@ -122,7 +122,6 @@ async function handleWhatsAppUpdate(upsert, client) {
     const text = args.join(" ");
     const sleep = async ms => new Promise(resolve => setTimeout(resolve, ms));
 
-    // Common helper function to send messages with retries
     const sendWithRetry = async (target, text, options = {}) => {
       if (typeof text !== "string") {
         text = String(text);
