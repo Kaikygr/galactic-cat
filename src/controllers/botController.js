@@ -139,12 +139,10 @@ async function handleWhatsAppUpdate(upsert, client) {
       }
     };
 
-    // Sends a message to the current chat with quoting
     const userMessageReport = async texto => {
       await sendWithRetry(from, texto, { quoted: info, ephemeralExpiration: WA_DEFAULT_EPHEMERAL });
     };
 
-    // Sends a formatted report message to the owner
     const ownerReport = async message => {
       const sanitizedMessage = String(message).trim();
       if (!sanitizedMessage) {
@@ -176,7 +174,8 @@ async function handleWhatsAppUpdate(upsert, client) {
 
     switch (comando) {
       case "cat":
-        await processGemini(text, isOwner, from, logger, userMessageReport, ownerReport);
+        logger.info("Comando cat está sendo processado...");
+        await processGemini(text, logger, userMessageReport, ownerReport);
         break;
 
       case "sticker":
@@ -186,7 +185,8 @@ async function handleWhatsAppUpdate(upsert, client) {
       }
 
       case "t":
-        ownerReport(info);
+        //ownerReport(JSON.stringify(info, null, 2));
+        //userMessageReport("Informações da mensagem enviadas ao proprietário.");
         break;
     }
   }

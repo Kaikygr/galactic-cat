@@ -40,25 +40,29 @@ const loadConfig = () => {
     cachedConfig = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
     return cachedConfig;
   } catch (error) {
-    return { status: "error", message: "Failed to parse the configuration file. Please check its format." };
+    return { status: "error", message: "Falha ao analisar o arquivo de configuração. Verifique o formato do arquivo." };
   }
 };
 
-const processGemini = async (text, isOwner, from, logger, userMessageReport) => {
+const processGemini = async (text, logger, userMessageReport, ownerReport) => {
   if (!text || typeof text !== "string" || text.trim().length < 1) {
-    userMessageReport("Por favor, insira um texto válido para ser processado.");
+    logger.info("parseGemini: Texto de entrada inválido:", text);
+    userMessageReport("Por favor, insira um texto válido para ser feita a geração de conteúdo.");
     return;
   }
 
   const config = loadConfig();
   if (config.status === "error") {
-    userMessageReport("Erro ao carregar a configuração.");
-    logger.info("Erro ao carregar a configuração:", config.message);
+    userMessageReport("Erro: Não foi possível carregar as configurações. O responsável foi notificado.");
+    ownerReport(config.message);
+    logger.error("Erro ao carregar a configuração dos parâmetros da API.", config.message);
     return;
   }
 
   if (!process.env.GEMINI_APIKEY || process.env.GEMINI_APIKEY.trim() === "") {
-    userMessageReport("Erro: A chave de API (GEMINI_APIKEY) não foi configurada. Verifique seu arquivo .env.");
+    userMessageReport("Erro: Ocorreu um erro interno. O problema já foi reportado ao desenvolvedor.");
+    ownerReport("Erro: A chave de API (GEMINI_APIKEY) não está configurada. Verifique o arquivo .env.");
+    logger.error("Erro: A chave de API (GEMINI_APIKEY) não está configurada. Verifique o arquivo .env.");
     return;
   }
 
@@ -73,21 +77,28 @@ const processGemini = async (text, isOwner, from, logger, userMessageReport) => 
       stopSequences: config.stopSequences,
       systemInstruction: config.systemInstruction
     });
+
     if (!model) {
-      userMessageReport("Erro: Não foi possível inicializar o modelo de IA. Verifique a configuração do modelo.");
+      userMessageReport("Erro: Falha ao carregar o modelo de IA. O desenvolvedor foi notificado.");
+      ownerReport("Erro: Falha ao carregar o modelo de IA. Verifique os logs para mais detalhes.");
+      logger.error("Falha ao carregar o modelo de IA.");
       return;
     }
+
     const result = await model.generateContent(text);
     if (!result || !result.response) {
-      userMessageReport("Erro: O modelo de IA retornou uma resposta vazia.");
+      userMessageReport("Erro: Falha ao processar a solicitação. O desenvolvedor foi notificado.");
+      ownerReport("Erro: Falha ao processar a solicitação. Verifique os logs para mais detalhes.");
+      logger.error("Falha ao processar a solicitação.");
       return;
     }
+
     const response = result.response.text().replace(/([*#])\1+/g, "$1");
-    logger.info(result);
     userMessageReport(response);
   } catch (error) {
     logger.error("Ocorreu um erro inesperado:", error);
-    userMessageReport(`Ocorreu um erro inesperado.`);
+    userMessageReport(`Erro: Ocorreu um erro inesperado. O desenvolvedor foi notificado.`);
+    ownerReport(`Erro: Ocorreu um erro inesperado. Verifique os logs para mais detalhes. ${error.message}`);
   }
 };
 
