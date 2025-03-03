@@ -168,6 +168,8 @@ async function handleWhatsAppUpdate(upsert, client) {
         await processSticker(client, info, sender, from, text, isMedia, isQuotedVideo, isQuotedImage, config, getFileBuffer);
         break;
       }
+      
+     
     }
   }
 }

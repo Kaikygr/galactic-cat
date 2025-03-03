@@ -10,7 +10,7 @@
   "license": "MIT",
   "dependencies": {
     "@adiwajshing/keyed-db": "0.2.4",
-    "@distube/ytdl-core": "4.16.4",
+    "@distube/ytdl-core": "^4.16.4",
     "@google/generative-ai": "0.22.0",
     "@hapi/boom": "10.0.1",
     "@types/yt-search": "2.10.3",
