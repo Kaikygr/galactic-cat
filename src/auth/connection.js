@@ -4,15 +4,10 @@ const path = require("path");
 const NodeCache = require("node-cache");
 const os = require("os");
 const { useMultiFileAuthState } = require("@whiskeysockets/baileys");
-const winston = require("winston");
 
-const logger = winston.createLogger({
-  level: "info",
-  transports: [new winston.transports.Console()]
-});
+const logger = require("../utils/logger");
 
 const pairingCode = process.argv.includes("--code");
-const RECONNECT_TIMEOUT = 5000;
 const groupCache = new NodeCache({ stdTTL: 5 * 60, useClones: false });
 
 const RECONNECT_INITIAL_DELAY = 2000;
