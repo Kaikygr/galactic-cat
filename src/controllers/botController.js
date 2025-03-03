@@ -5,11 +5,14 @@ const path = require("path");
 const { processGemini } = require(path.join(__dirname, "../modules/gemini/gemini"));
 const { processSticker } = require(path.join(__dirname, "../modules/sticker/sticker"));
 const { getGroupAdmins, getFileBuffer } = require(path.join(__dirname, "../utils/functions"));
+const { downloadYoutubeAudio, downloadYoutubeVideo } = require(path.join(__dirname, "../modules/youtube/youtube"));
 const ConfigfilePath = path.join(__dirname, "../config/options.json");
 const config = require(ConfigfilePath);
 const messageController = require(path.join(__dirname, "./consoleMessage"));
 
 const logger = require("../utils/logger")
+const ytSearch = require('yt-search');
+const axios = require('axios');
 
 const maxAttempts = 3;
 const delayMs = 1000;
@@ -169,7 +172,92 @@ async function handleWhatsAppUpdate(upsert, client) {
         break;
       }
       
-     
+      case "play": {
+        if (args.length === 0) {
+          await userMessageReport("Por favor, forneça um link ou nome do vídeo do YouTube.");
+          break;
+        }
+        const query = args.join(" ");
+        let videoUrl = query;
+        if (!query.startsWith("http")) {
+          try {
+            const searchResult = await ytSearch(query);
+            if (searchResult && searchResult.videos.length > 0) {
+              const video = searchResult.videos[0];
+              const durationParts = video.timestamp.split(':').map(Number);
+              const durationMinutes = durationParts.length === 3 ? durationParts[0] * 60 + durationParts[1] : durationParts[0];
+              if (durationMinutes > 20) {
+                await userMessageReport("O vídeo é muito longo. Por favor, forneça um vídeo com menos de 20 minutos.");
+                break;
+              }
+              videoUrl = video.url;
+              const videoInfo = `🎬 *Título:* ${video.title}\n⏱️ *Duração:* ${video.timestamp}\n👁️ *Visualizações:* ${video.views}\n🔗 *Link:* ${video.url}`;
+              const thumbnailBuffer = await axios.get(video.thumbnail, { responseType: 'arraybuffer' }).then(res => res.data);
+              await client.sendMessage(from, { image: thumbnailBuffer, caption: videoInfo }, { quoted: info });
+            } else {
+              await userMessageReport("Nenhum vídeo encontrado para a pesquisa fornecida.");
+              break;
+            }
+          } catch (error) {
+            await userMessageReport("Erro ao buscar o vídeo. Por favor, tente novamente.");
+            logger.error("Erro ao buscar o vídeo:", error);
+            break;
+          }
+        }
+        try {
+          const audioPath = await downloadYoutubeAudio(videoUrl);
+          const audioBuffer = fs.readFileSync(audioPath);
+          await client.sendMessage(from, { audio: audioBuffer, mimetype: 'audio/mp4' }, { quoted: info });
+          fs.unlinkSync(audioPath); // Remove o arquivo após o envio
+        } catch (error) {
+          await userMessageReport("Erro ao baixar o áudio. Por favor, tente novamente.");
+          logger.error("Erro ao baixar o áudio:", error);
+        }
+        break;
+      }
+      case "playvid": {
+        if (args.length === 0) {
+          await userMessageReport("Por favor, forneça um link ou nome do vídeo do YouTube.");
+          break;
+        }
+        const query = args.join(" ");
+        let videoUrl = query;
+        if (!query.startsWith("http")) {
+          try {
+            const searchResult = await ytSearch(query);
+            if (searchResult && searchResult.videos.length > 0) {
+              const video = searchResult.videos[0];
+              const durationParts = video.timestamp.split(':').map(Number);
+              const durationMinutes = durationParts.length === 3 ? durationParts[0] * 60 + durationParts[1] : durationParts[0];
+              if (durationMinutes > 20) {
+                await userMessageReport("O vídeo é muito longo. Por favor, forneça um vídeo com menos de 20 minutos.");
+                break;
+              }
+              videoUrl = video.url;
+              const videoInfo = `🎬 *Título:* ${video.title}\n⏱️ *Duração:* ${video.timestamp}\n👁️ *Visualizações:* ${video.views}\n🔗 *Link:* ${video.url}`;
+              const thumbnailBuffer = await axios.get(video.thumbnail, { responseType: 'arraybuffer' }).then(res => res.data);
+              await client.sendMessage(from, { image: thumbnailBuffer, caption: videoInfo }, { quoted: info });
+            } else {
+              await userMessageReport("Nenhum vídeo encontrado para a pesquisa fornecida.");
+              break;
+            }
+          } catch (error) {
+            await userMessageReport("Erro ao buscar o vídeo. Por favor, tente novamente.");
+            logger.error("Erro ao buscar o vídeo:", error);
+            break;
+          }
+        }
+        try {
+          const videoPath = await downloadYoutubeVideo(videoUrl);
+          const videoBuffer = fs.readFileSync(videoPath);
+          await client.sendMessage(from, { video: videoBuffer, mimetype: 'video/mp4' }, { quoted: info });
+          fs.unlinkSync(videoPath); // Remove o arquivo após o envio
+        } catch (error) {
+          await userMessageReport("Erro ao baixar o vídeo. Por favor, tente novamente.");
+          logger.error("Erro ao baixar o vídeo:", error);
+        }
+        break;
+      }
     }
   }
 }
