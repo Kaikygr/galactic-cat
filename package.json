@@ -1,6 +1,6 @@
 {
   "name": "cat",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Base-Bot (Whatsapp)",
   "main": "src",
   "scripts": {
