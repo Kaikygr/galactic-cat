@@ -1,17 +1,34 @@
-// Importação dos módulos essenciais
+# Sticker Module
+
+Este módulo é responsável por processar imagens e vídeos enviados pelo usuário e convertê-los em stickers para o WhatsApp.
+
+## Arquivo: `sticker.js`
+
+### Importação dos módulos essenciais
+
+```javascript
 const fs = require("fs");
 const path = require("path");
 const util = require("util");
 const { exec } = require("child_process");
 const execProm = util.promisify(exec);
-
 const { getFileBuffer } = require("../../utils/functions");
+```
 
+### Configuração do diretório temporário
+
+```javascript
 const tempDir = path.join(__dirname, "..", "..", "temp");
 if (!fs.existsSync(tempDir)) {
   fs.mkdirSync(tempDir, { recursive: true });
 }
+```
 
+### Função principal: `processSticker`
+
+Esta função processa a mídia enviada pelo usuário e a converte em um sticker.
+
+```javascript
 async function processSticker(client, info, sender, from, text, isMedia, isQuotedVideo, isQuotedImage, config, getFileBuffer) {
   try {
     let filtro = "fps=10,scale=512:512";
@@ -77,3 +94,30 @@ async function processSticker(client, info, sender, from, text, isMedia, isQuote
 }
 
 module.exports = { processSticker };
+```
+
+### Explicação
+
+1. **Importação dos módulos essenciais**: Importa módulos necessários como `fs`, `path`, `util`, e `child_process`.
+2. **Configuração do diretório temporário**: Cria um diretório temporário para armazenar arquivos temporários.
+3. **Função `processSticker`**: 
+   - Verifica se a mídia enviada é um vídeo ou uma imagem.
+   - Extrai o buffer do arquivo de mídia.
+   - Converte a mídia em um sticker usando `ffmpeg`.
+   - Adiciona metadados ao sticker usando `webpmux`.
+   - Envia o sticker de volta ao usuário.
+   - Remove arquivos temporários.
+
+### Dependências
+
+- `ffmpeg`: Utilizado para converter vídeos e imagens em stickers.
+- `webpmux`: Utilizado para adicionar metadados aos stickers.
+
+### Como usar
+
+1. Certifique-se de ter `ffmpeg` e `webpmux` instalados no seu sistema.
+2. Importe e utilize a função `processSticker` no seu projeto.
+
+```javascript
+const { processSticker } = require("./src/modules/sticker/sticker");
+```

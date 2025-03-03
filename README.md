@@ -4,10 +4,7 @@
   <img src="https://static.tumblr.com/f76d0c37c94757b5b0c3cceb73a1664b/ftrdqzb/cZSorgwba/tumblr_static_tumblr_static_akjaybqi5ggg8o4sgwowggogc_640.gif" alt="Banner">
 </p>
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Node.js Version](https://img.shields.io/badge/Node.js-%3E=14-blue.svg)](https://nodejs.org/)
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
-[![Downloads](https://img.shields.io/badge/downloads-1K+-blue.svg)]()
+[![License#: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) ![GitHub commit activity](https://img.shields.io/github/commit-activity/y/kaikygr/galactic-cat) ![GitHub top language](https://img.shields.io/github/languages/top/kaikygr/galactic-cat) ![GitHub branch status](https://img.shields.io/github/checks-status/kaikygr/galactic-cat/main) ![GitHub repo size](https://img.shields.io/github/repo-size/kaikygr/galactic-cat) ![GitHub forks](https://img.shields.io/github/forks/kaikygr/galactic-cat) ![GitHub package.json version](https://img.shields.io/github/package-json/v/kaikygr/galactic-cat) ![GitHub Release](https://img.shields.io/github/v/release/kaikygr/galactic-cat)
 
 ## Visão Geral
 
@@ -40,11 +37,9 @@ _Galactic-Cat_ é um chatbot open-source desenvolvido em **Node.js** para integr
 - **@whiskeysockets/baileys:** API para integração com WhatsApp.
 - **SQLite:** Banco de dados leve para armazenamento de interações.
 - **FFmpeg & Webpmux:** Utilizados na conversão de mídia para stickers.
-- **Outros:** Módulos internos de utilitários e configuração (ex.: [`rateLimiter.js`](src/auth/rateLimiter.js)).
+- **Outros:** Módulos internos de utilitários e configuração.
 
 ## Estrutura do Projeto
-
-A estrutura principal do projeto está organizada da seguinte forma:
 
 - **Configuração e Documentação**
 
@@ -71,12 +66,6 @@ A estrutura principal do projeto está organizada da seguinte forma:
   - **utils/**
     - [functions.js](src/utils/functions.js) – Funções auxiliares (ex.: manipulação de arquivos, requisições HTTP).
 
-- **Outros Diretórios**
-
-  - **public/** – Arquivos públicos e exemplos (ex.: [example.txt](public/example.txt)).
-  - **logs/** – Logs de execução e conexão (_logs/connection.log_).
-  - **test/** – Arquivos de teste e exemplos.
-
 - **Arquivo Principal**
   - [start.js](start.js) – Ponto de entrada da aplicação, responsável por iniciar o bot.
 
@@ -99,8 +88,8 @@ Siga os passos abaixo para configurar e iniciar o bot:
 
 3. **Configuração do Ambiente:**
 
-   - Crie um arquivo .env configurando as variáveis necessárias para a autenticação e demais integrações.
-   - Ajuste os dados de autenticação em options.json e options.json conforme necessário.
+   - Crie um arquivo `.env` com as variáveis necessárias para a autenticação e demais integrações.
+   - Ajuste os dados de autenticação em [src/auth/data/options.json](src/auth/data/options.json) e os parâmetros do bot em [src/config/options.json](src/config/options.json).
 
 4. **Inicie o Bot:**
 
@@ -116,7 +105,6 @@ Contribuições para melhorias, correções e novas funcionalidades são bem-vin
 
 - Crie uma branch para sua feature ou correção.
 - Envie um _Pull Request_ com suas alterações.
-- Confira os testes existentes em [example.txt](public/example.txt) para entender como validar a funcionalidade.
 
 ## Licença
 
@@ -126,7 +114,3 @@ Este projeto é licenciado sob a MIT License.
 
 - **Kaikygr**  
   [GitHub: Kaikygr](https://github.com/Kaikygr)
-
-```
-
-```
