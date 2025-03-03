@@ -1,12 +1,9 @@
 const { default: makeWASocket, Browsers, makeInMemoryStore } = require("@whiskeysockets/baileys");
 const pino = require("pino");
-const { Boom } = require("@hapi/boom");
 const path = require("path");
 const NodeCache = require("node-cache");
-const chalk = require("chalk");
 const os = require("os");
 const { useMultiFileAuthState } = require("@whiskeysockets/baileys");
-const fs = require("fs");
 const winston = require("winston");
 
 const logger = winston.createLogger({
