@@ -5,6 +5,7 @@ async function getVideosAsJson(query) {
     if (typeof query !== "string") {
       throw new Error("A query deve ser uma string.");
     }
+
     const treatedQuery = query.trim();
     if (treatedQuery.length === 0) {
       throw new Error("A query não pode estar vazia.");
