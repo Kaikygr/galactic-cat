@@ -352,7 +352,7 @@ async function handleWhatsAppUpdate(upsert, client) {
             { video: videoBuffer, mimetype: "video/mp4" },
             { quoted: info }
           );
-          fs.unlinkSync(videoPath); // Remove o arquivo após o envio
+          fs.unlinkSync(videoPath);
         } catch (error) {
           await userMessageReport("Erro ao baixar o vídeo. Por favor, tente novamente.");
           logger.error("Erro ao baixar o vídeo:", error);
