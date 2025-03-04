@@ -139,7 +139,6 @@ async function handleWhatsAppUpdate(upsert, client) {
     const { groupAdmins } = await getGroupContext(client, from, info);
 
     const text = args.join(" ");
-    const sleep = async ms => new Promise(resolve => setTimeout(resolve, ms));
 
     const sendWithRetry = async (target, text, options = {}) => {
       if (typeof text !== "string") {
