@@ -20,7 +20,7 @@ const ytSearch = require("yt-search");
 const axios = require("axios");
 
 const maxAttempts = 3;
-const delayMs = 1000;
+const delayMs = 3000;
 const sendTimeoutMs = 5000;
 const WA_DEFAULT_EPHEMERAL = 86400;
 
