@@ -1,5 +1,7 @@
+/* eslint-disable no-sync */
 /* eslint-disable complexity */
 /* eslint-disable no-unused-vars */
+
 require("dotenv").config();
 
 const fs = require("fs-extra");
@@ -7,10 +9,7 @@ const path = require("path");
 const { processGemini } = require(path.join(__dirname, "../modules/gemini/gemini"));
 const { processSticker } = require(path.join(__dirname, "../modules/sticker/sticker"));
 const { getGroupAdmins, getFileBuffer } = require(path.join(__dirname, "../utils/functions"));
-const { downloadYoutubeAudio, downloadYoutubeVideo } = require(path.join(
-  __dirname,
-  "../modules/youtube/youtube"
-));
+const { downloadYoutubeAudio, downloadYoutubeVideo } = require(path.join(__dirname, "../modules/youtube/youtube"));
 const { getVideoInfo } = require(path.join(__dirname, "../modules/youtube/index"));
 
 const ConfigfilePath = path.join(__dirname, "../config/options.json");
@@ -30,10 +29,7 @@ async function retryOperation(operation, options = {}) {
   const { retries = 3, delay = 1000, timeout = 5000 } = options;
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      return await Promise.race([
-        operation(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), timeout)),
-      ]);
+      return await Promise.race([operation(), new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), timeout))]);
     } catch (error) {
       if (attempt === retries) throw error;
       await new Promise(resolve => setTimeout(resolve, delay));
@@ -48,26 +44,7 @@ function parseMessageInfo(info) {
   const type = baileys.getContentType(info.message);
   const isMedia = type === "imageMessage" || type === "videoMessage";
 
-  const body =
-    info.message?.conversation ||
-    info.message?.viewOnceMessageV2?.message?.imageMessage?.caption ||
-    info.message?.viewOnceMessageV2?.message?.videoMessage?.caption ||
-    info.message?.imageMessage?.caption ||
-    info.message?.videoMessage?.caption ||
-    info.message?.extendedTextMessage?.text ||
-    info.message?.viewOnceMessage?.message?.videoMessage?.caption ||
-    info.message?.viewOnceMessage?.message?.imageMessage?.caption ||
-    info.message?.documentWithCaptionMessage?.message?.documentMessage?.caption ||
-    info.message?.buttonsMessage?.imageMessage?.caption ||
-    info.message?.buttonsResponseMessage?.selectedButtonId ||
-    info.message?.listResponseMessage?.singleSelectReply?.selectedRowId ||
-    info.message?.templateButtonReplyMessage?.selectedId ||
-    (info.message?.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson
-      ? JSON.parse(info.message?.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson)
-          ?.id
-      : null) ||
-    info?.text ||
-    "";
+  const body = info.message?.conversation || info.message?.viewOnceMessageV2?.message?.imageMessage?.caption || info.message?.viewOnceMessageV2?.message?.videoMessage?.caption || info.message?.imageMessage?.caption || info.message?.videoMessage?.caption || info.message?.extendedTextMessage?.text || info.message?.viewOnceMessage?.message?.videoMessage?.caption || info.message?.viewOnceMessage?.message?.imageMessage?.caption || info.message?.documentWithCaptionMessage?.message?.documentMessage?.caption || info.message?.buttonsMessage?.imageMessage?.caption || info.message?.buttonsResponseMessage?.selectedButtonId || info.message?.listResponseMessage?.singleSelectReply?.selectedRowId || info.message?.templateButtonReplyMessage?.selectedId || (info.message?.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson ? JSON.parse(info.message?.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson)?.id : null) || info?.text || "";
   return {
     from,
     content,
@@ -80,9 +57,7 @@ function parseMessageInfo(info) {
 function getCommandData(cleanedBody, config) {
   let prefixes = [];
   if (Array.isArray(config.prefix)) {
-    prefixes = config.prefix
-      .filter(p => typeof p === "string" && p.trim() !== "")
-      .map(p => p.trim());
+    prefixes = config.prefix.filter(p => typeof p === "string" && p.trim() !== "").map(p => p.trim());
   } else if (typeof config.prefix === "string" && config.prefix.trim()) {
     prefixes = [config.prefix.trim()];
   }
@@ -195,17 +170,7 @@ async function handleWhatsAppUpdate(upsert, client) {
       quotedChecks[value] = type === "extendedTextMessage" && content.includes(key);
     }
 
-    const {
-      isQuotedMsg,
-      isQuotedImage,
-      isQuotedVideo,
-      isQuotedDocument,
-      isQuotedAudio,
-      isQuotedSticker,
-      isQuotedContact,
-      isQuotedLocation,
-      isQuotedProduct,
-    } = quotedChecks;
+    const { isQuotedMsg, isQuotedImage, isQuotedVideo, isQuotedDocument, isQuotedAudio, isQuotedSticker, isQuotedContact, isQuotedLocation, isQuotedProduct } = quotedChecks;
 
     switch (comando) {
       case "cat":
@@ -214,33 +179,13 @@ async function handleWhatsAppUpdate(upsert, client) {
 
       case "sticker":
       case "s": {
-        await processSticker(
-          client,
-          info,
-          sender,
-          from,
-          text,
-          isMedia,
-          isQuotedVideo,
-          isQuotedImage,
-          config,
-          getFileBuffer
-        );
+        await processSticker(client, info, sender, from, text, isMedia, isQuotedVideo, isQuotedImage, config, getFileBuffer);
         break;
       }
 
       case "ytbuscar":
         {
-          await getVideoInfo(
-            client,
-            info,
-            sender,
-            from,
-            text,
-            userMessageReport,
-            ownerReport,
-            logger
-          );
+          await getVideoInfo(client, info, sender, from, text, userMessageReport, ownerReport, logger);
         }
         break;
 
@@ -257,26 +202,15 @@ async function handleWhatsAppUpdate(upsert, client) {
             if (searchResult && searchResult.videos.length > 0) {
               const video = searchResult.videos[0];
               const durationParts = video.timestamp.split(":").map(Number);
-              const durationMinutes =
-                durationParts.length === 3
-                  ? durationParts[0] * 60 + durationParts[1]
-                  : durationParts[0];
+              const durationMinutes = durationParts.length === 3 ? durationParts[0] * 60 + durationParts[1] : durationParts[0];
               if (durationMinutes > 20) {
-                await userMessageReport(
-                  "O vídeo é muito longo. Por favor, forneça um vídeo com menos de 20 minutos."
-                );
+                await userMessageReport("O vídeo é muito longo. Por favor, forneça um vídeo com menos de 20 minutos.");
                 break;
               }
               videoUrl = video.url;
               const videoInfo = `🎬 *Título:* ${video.title}\n⏱️ *Duração:* ${video.timestamp}\n👁️ *Visualizações:* ${video.views}\n🔗 *Link:* ${video.url}`;
-              const thumbnailBuffer = await axios
-                .get(video.thumbnail, { responseType: "arraybuffer" })
-                .then(res => res.data);
-              await client.sendMessage(
-                from,
-                { image: thumbnailBuffer, caption: videoInfo },
-                { quoted: info }
-              );
+              const thumbnailBuffer = await axios.get(video.thumbnail, { responseType: "arraybuffer" }).then(res => res.data);
+              await client.sendMessage(from, { image: thumbnailBuffer, caption: videoInfo }, { quoted: info });
             } else {
               await userMessageReport("Nenhum vídeo encontrado para a pesquisa fornecida.");
               break;
@@ -290,12 +224,8 @@ async function handleWhatsAppUpdate(upsert, client) {
         try {
           const audioPath = await downloadYoutubeAudio(videoUrl);
           const audioBuffer = fs.readFileSync(audioPath);
-          await client.sendMessage(
-            from,
-            { audio: audioBuffer, mimetype: "audio/mp4" },
-            { quoted: info }
-          );
-          fs.unlinkSync(audioPath); // Remove o arquivo após o envio
+          await client.sendMessage(from, { audio: audioBuffer, mimetype: "audio/mp4" }, { quoted: info });
+          fs.unlinkSync(audioPath);
         } catch (error) {
           await userMessageReport("Erro ao baixar o áudio. Por favor, tente novamente.");
           logger.error("Erro ao baixar o áudio:", error);
@@ -315,26 +245,15 @@ async function handleWhatsAppUpdate(upsert, client) {
             if (searchResult && searchResult.videos.length > 0) {
               const video = searchResult.videos[0];
               const durationParts = video.timestamp.split(":").map(Number);
-              const durationMinutes =
-                durationParts.length === 3
-                  ? durationParts[0] * 60 + durationParts[1]
-                  : durationParts[0];
+              const durationMinutes = durationParts.length === 3 ? durationParts[0] * 60 + durationParts[1] : durationParts[0];
               if (durationMinutes > 20) {
-                await userMessageReport(
-                  "O vídeo é muito longo. Por favor, forneça um vídeo com menos de 20 minutos."
-                );
+                await userMessageReport("O vídeo é muito longo. Por favor, forneça um vídeo com menos de 20 minutos.");
                 break;
               }
               videoUrl = video.url;
               const videoInfo = `🎬 *Título:* ${video.title}\n⏱️ *Duração:* ${video.timestamp}\n👁️ *Visualizações:* ${video.views}\n🔗 *Link:* ${video.url}`;
-              const thumbnailBuffer = await axios
-                .get(video.thumbnail, { responseType: "arraybuffer" })
-                .then(res => res.data);
-              await client.sendMessage(
-                from,
-                { image: thumbnailBuffer, caption: videoInfo },
-                { quoted: info }
-              );
+              const thumbnailBuffer = await axios.get(video.thumbnail, { responseType: "arraybuffer" }).then(res => res.data);
+              await client.sendMessage(from, { image: thumbnailBuffer, caption: videoInfo }, { quoted: info });
             } else {
               await userMessageReport("Nenhum vídeo encontrado para a pesquisa fornecida.");
               break;
@@ -348,11 +267,7 @@ async function handleWhatsAppUpdate(upsert, client) {
         try {
           const videoPath = await downloadYoutubeVideo(videoUrl);
           const videoBuffer = fs.readFileSync(videoPath);
-          await client.sendMessage(
-            from,
-            { video: videoBuffer, mimetype: "video/mp4" },
-            { quoted: info }
-          );
+          await client.sendMessage(from, { video: videoBuffer, mimetype: "video/mp4" }, { quoted: info });
           fs.unlinkSync(videoPath);
         } catch (error) {
           await userMessageReport("Erro ao baixar o vídeo. Por favor, tente novamente.");
