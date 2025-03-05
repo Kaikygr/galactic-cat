@@ -4,7 +4,8 @@
   "description": "Um chatbot com uso de IA para WhatsApp",
   "main": "src",
   "scripts": {
-    "start": "node start.js"
+    "start": "node start.js",
+    "lint": "eslint ."
   },
   "author": "kaikygr",
   "license": "MIT",
