@@ -93,6 +93,7 @@ async function handleWhatsAppUpdate(upsert, client) {
     if (!info || !info.key || !info.message) continue;
 
     await client.readMessages([info.key]);
+    console.log(JSON.stringify(info, null, 2));
 
     if (upsert?.type === "append" || info.key.fromMe) continue;
 

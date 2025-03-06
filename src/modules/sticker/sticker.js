@@ -1,4 +1,7 @@
+/* eslint-disable no-sync */
+/* eslint-disable no-unused-vars */
 // Importação dos módulos essenciais
+
 const fs = require("fs");
 const path = require("path");
 const util = require("util");
@@ -23,7 +26,7 @@ async function processSticker(client, info, sender, from, text, isMedia, isQuote
     let encmedia, mediaBuffer, mediaExtension;
     if ((isMedia && info.message.videoMessage) || isQuotedVideo) {
       const videoDuration = isMedia && info.message.videoMessage ? info.message.videoMessage.seconds : info.message.extendedTextMessage.contextInfo.quotedMessage.videoMessage.seconds;
-      if (videoDuration >= (isQuotedVideo ? 35 : 11)) {
+      if (videoDuration >= (isQuotedVideo ? 35 : 10)) {
         return userMessageReport("Vídeo muito longo para sticker animada.");
       }
       encmedia = isQuotedVideo ? info.message.extendedTextMessage.contextInfo.quotedMessage.videoMessage : info.message.videoMessage;
@@ -41,15 +44,15 @@ async function processSticker(client, info, sender, from, text, isMedia, isQuote
       filtro = "scale=512:512";
     }
 
-    const mediaPath = path.join(tempDir, `temp_${Date.now()}${mediaExtension}`);
+    const mediaPath = path.join(tempDir, `temp_file_${Date.now()}${mediaExtension}`);
     fs.writeFileSync(mediaPath, mediaBuffer);
 
     const outputPath = path.join(tempDir, `sticker_${Date.now()}.webp`);
     await execProm(`ffmpeg -i "${mediaPath}" -vcodec libwebp -lossless 1 -loop 0 -preset default -an -vf "${filtro}" "${outputPath}"`);
 
     const json = {
-      "sticker-pack-name": `User: ${info.pushName || sender}`,
-      "sticker-pack-publisher": `Owner: ${config.owner.name}`
+      "sticker-pack-name": `👤 User: ${info.pushName || sender}`,
+      "sticker-pack-publisher": `👑 Owner: https://bit.ly/m/Kaally`,
     };
     const exifAttr = Buffer.from([0x49, 0x49, 0x2a, 0x00, 0x08, 0x00, 0x00, 0x00, 0x01, 0x00, 0x41, 0x57, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x16, 0x00, 0x00, 0x00]);
     const jsonBuff = Buffer.from(JSON.stringify(json), "utf-8");
