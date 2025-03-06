@@ -1,5 +1,6 @@
 /* eslint-disable prefer-const */
 /* eslint-disable no-unused-vars */
+
 const { default: makeWASocket, Browsers, makeInMemoryStore } = require("@whiskeysockets/baileys");
 const pino = require("pino");
 const path = require("path");
@@ -61,11 +62,14 @@ const registerAllEventHandlers = (client, saveCreds) => {
   client.ev.process(async events => {
     const eventHandlers = {
       "connection.update": async data => await handleConnectionUpdate(data, client),
+
       "creds.update": async data => {
         await saveCreds();
       },
+
       "messages.upsert": async data => {
         require(path.join(__dirname, "..", "controllers", "botController.js"))(data, client);
+        // console.log(JSON.stringify(data, null, 2).blue);
       },
     };
 
