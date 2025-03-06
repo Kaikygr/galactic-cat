@@ -1,13 +1,10 @@
+/* eslint-disable prefer-const */
+/* eslint-disable no-unused-vars */
 const { default: makeWASocket, Browsers, makeInMemoryStore } = require("@whiskeysockets/baileys");
 const pino = require("pino");
 const path = require("path");
 const NodeCache = require("node-cache");
-const os = require("os");
 const { useMultiFileAuthState } = require("@whiskeysockets/baileys");
-
-const logger = require("../utils/logger");
-
-const pairingCode = process.argv.includes("--code");
 const groupCache = new NodeCache({ stdTTL: 5 * 60, useClones: false });
 
 const RECONNECT_INITIAL_DELAY = 2000;
@@ -15,14 +12,7 @@ const RECONNECT_MAX_DELAY = 60000;
 let reconnectAttempts = 0;
 let metricsIntervalId = null;
 
-const pad = s => (s < 10 ? "0" + s : s);
-
-const formatUptime = seconds => {
-  const hrs = Math.floor(seconds / 3600);
-  const mins = Math.floor((seconds % 3600) / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${pad(hrs)}:${pad(mins)}:${pad(secs)}`;
-};
+let colors = require("colors");
 
 const patchInteractiveMessage = message => {
   return message?.interactiveMessage
@@ -31,11 +21,11 @@ const patchInteractiveMessage = message => {
           message: {
             messageContextInfo: {
               deviceListMetadataVersion: 2,
-              deviceListMetadata: {}
+              deviceListMetadata: {},
             },
-            ...message
-          }
-        }
+            ...message,
+          },
+        },
       }
     : message;
 };
@@ -46,23 +36,12 @@ const scheduleReconnect = () => {
   setTimeout(() => connectToWhatsApp(), delay);
 };
 
-const reportMetrics = () => {
-  const uptime = formatUptime(process.uptime());
-  const memUsage = process.memoryUsage();
-  const totalMem = (os.totalmem() / 1024 / 1024).toFixed(2);
-  const rss = (memUsage.rss / 1024 / 1024).toFixed(2);
-  const loadAvg = os
-    .loadavg()
-    .map(n => n.toFixed(2))
-    .join(", ");
-  const metricsMessage = `Métricas -> Uptime: ${uptime}, RSS: ${rss} MB, Total Mem: ${totalMem} MB, Load: ${loadAvg}`;
-};
-
 const registerAllEventHandlers = (client, saveCreds) => {
   const simpleEvents = {
     "chats.upsert": () => {},
-    "contacts.upsert": () => {}
+    "contacts.upsert": () => {},
   };
+
   Object.entries(simpleEvents).forEach(([event, handler]) => client.ev.on(event, handler));
 
   const groupEvents = {
@@ -70,11 +49,13 @@ const registerAllEventHandlers = (client, saveCreds) => {
       const metadata = await client.groupMetadata(event.id);
       groupCache.set(event.id, metadata);
     },
+
     "group-participants.update": async event => {
       const metadata = await client.groupMetadata(event.id);
       groupCache.set(event.id, metadata);
-    }
+    },
   };
+
   Object.entries(groupEvents).forEach(([event, handler]) => client.ev.on(event, handler));
 
   client.ev.process(async events => {
@@ -85,32 +66,33 @@ const registerAllEventHandlers = (client, saveCreds) => {
       },
       "messages.upsert": async data => {
         require(path.join(__dirname, "..", "controllers", "botController.js"))(data, client);
-      }
+      },
     };
+
     for (const [event, data] of Object.entries(events)) {
       try {
         if (eventHandlers[event]) {
           await eventHandlers[event](data);
         }
-      } catch (error) {}
+      } catch (error) {
+        console.log(`Erro ao processar o evento ${event}: ${error.message}`.green);
+      }
     }
   });
 };
 
 const handleConnectionUpdate = async (update, client) => {
   try {
-    const { connection, lastDisconnect } = update;
+    const { connection } = update;
     if (connection === "open") {
-      logger.info("✅ Conexão aberta com sucesso. Bot disponível.");
+      console.log("✅ Conexão aberta com sucesso. Bot disponível.".green);
       reconnectAttempts = 0;
-      if (!metricsIntervalId) {
-        metricsIntervalId = setInterval(reportMetrics, 60000);
-      }
+
       const config = require("../config/options.json");
       await client.sendMessage(config.owner.number, {
-        text: "Status: Conexão aberta."
+        text: "🟢 O bot foi iniciado com sucesso.",
       });
-      logger.info("Mensagem de status enviada para o proprietário.");
+      console.log("🛠️ Mensagem de status enviada para o proprietário.".green);
     }
     if (connection === "close") {
       if (metricsIntervalId) {
@@ -128,7 +110,7 @@ const connectToWhatsApp = async () => {
   try {
     const connectionLogs = path.join(__dirname, "temp");
     const { state, saveCreds } = await useMultiFileAuthState(connectionLogs);
-    logger.info("Iniciando a conexão com o WhatsApp...");
+    console.log("🌐 Iniciando a conexão com o WhatsApp...".green);
 
     const client = makeWASocket({
       auth: state,
@@ -138,30 +120,21 @@ const connectToWhatsApp = async () => {
       browser: Browsers.macOS("Desktop"),
       syncFullHistory: true,
       cachedGroupMetadata: async jid => groupCache.get(jid),
-      patchMessageBeforeSending: patchInteractiveMessage
+      patchMessageBeforeSending: patchInteractiveMessage,
     });
 
     const store = makeInMemoryStore({});
     store.bind(client.ev);
     registerAllEventHandlers(client, saveCreds);
-
-    if (pairingCode && !client.authState.creds.registered) {
-      logger.warn("Não registrado, iniciando emparelhamento via QR Code...");
-      try {
-        await handlePairing(client);
-      } catch (error) {
-        logger.error(`Erro no emparelhamento: ${error.message}`);
-      }
-    }
   } catch (error) {
     scheduleReconnect();
-    logger.error(`Erro ao iniciar a conexão: ${error.message}`);
-    process.exit(1);
+    console.log(`🔴 Erro ao iniciar a conexão: ${error.message}`.red);
+    throw new Error("Erro ao iniciar a conexão com o WhatsApp:", error);
   }
 };
 
 connectToWhatsApp().catch(async error => {
   scheduleReconnect();
-  logger.error(`Erro ao iniciar a conexão: ${error.message}`);
-  process.exit(1);
+  console.log(`🔴 Erro ao iniciar a conexão: ${error.message}`.red);
+  throw new Error("Error ao inciar a conexão com o WhatsApp:", error);
 });
