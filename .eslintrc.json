@@ -1,0 +1,26 @@
+{
+    "env": {
+        "commonjs": true,
+        "node": true,
+        "es2021": true
+    },
+    "extends": "eslint:recommended",
+    "parserOptions": {
+        "ecmaVersion": "latest"
+    },
+    "rules": {
+        // Adicione ou customize regras conforme necessário
+        "no-var": "error",
+        "prefer-const": "warn",
+        "no-unused-vars": [
+            "warn",
+            {
+                "argsIgnorePattern": "^_"
+            }
+        ],
+        "callback-return": "error",
+        "handle-callback-err": "error",
+        "no-sync": "warn",
+        "no-process-exit": "error"
+    }
+}

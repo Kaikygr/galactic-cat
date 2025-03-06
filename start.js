@@ -21,12 +21,16 @@ function logMessage(message) {
 }
 
 function isNetworkError(error) {
-  return error.code === 'ENETDOWN' || error.code === 'ENETUNREACH' || (error.message && error.message.toLowerCase().includes('network'));
+  return (
+    error.code === "ENETDOWN" ||
+    error.code === "ENETUNREACH" ||
+    (error.message && error.message.toLowerCase().includes("network"))
+  );
 }
 
 function waitForNetwork(callback) {
   function check() {
-    dns.resolve('www.google.com', function(err) {
+    dns.resolve("www.google.com", function (err) {
       if (err) {
         console.log("Rede indisponível. Aguardando rede...");
         setTimeout(check, 5000);
@@ -46,9 +50,9 @@ function startConnection() {
     logMessage(message);
     process.exit(1);
   }
-  
+
   attemptCount++;
-  
+
   const connectionPath = path.join(__dirname, "./src/auth/connection.js");
   const child = fork(connectionPath);
 
