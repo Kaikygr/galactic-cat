@@ -97,26 +97,11 @@ async function handleWhatsAppUpdate(upsert, client) {
     if (upsert?.type === "append" || info.key.fromMe) continue;
 
     const { from, content, type, isMedia, cleanedBody } = parseMessageInfo(info);
+
     if (!cleanedBody) {
       messageController.processMessage(info, client);
       continue;
     }
-
-    const cmdData = getCommandData(cleanedBody, config);
-    if (!cmdData) {
-      messageController.processMessage(info, client);
-      continue;
-    }
-    const { comando, args } = cmdData;
-    messageController.processMessage({ ...info, comando: true }, client);
-
-    const isGroup = from.endsWith("@g.us");
-    const sender = isGroup ? info.key.participant : info.key.remoteJid;
-    const isOwner = config.owner.number === sender;
-    const { groupAdmins } = await getGroupContext(client, from, info);
-
-    const text = args.join(" ");
-
     const sendWithRetry = async (target, text, options = {}) => {
       if (typeof text !== "string") {
         text = String(text);
@@ -136,7 +121,6 @@ async function handleWhatsAppUpdate(upsert, client) {
         logger.error(`Todas as tentativas de envio falharam para ${target}.`, error);
       }
     };
-
     const userMessageReport = async texto => {
       await sendWithRetry(from, texto, { quoted: info, ephemeralExpiration: WA_DEFAULT_EPHEMERAL });
     };
@@ -152,6 +136,25 @@ async function handleWhatsAppUpdate(upsert, client) {
         ephemeralExpiration: WA_DEFAULT_EPHEMERAL,
       });
     };
+
+    if (from === "120363047659668203@g.us" && Math.floor(Math.random() * 100) < 0.1) {
+      await processGemini(cleanedBody, logger, userMessageReport, ownerReport);
+    }
+
+    const cmdData = getCommandData(cleanedBody, config);
+    if (!cmdData) {
+      messageController.processMessage(info, client);
+      continue;
+    }
+    const { comando, args } = cmdData;
+    messageController.processMessage({ ...info, comando: true }, client);
+
+    const isGroup = from.endsWith("@g.us");
+    const sender = isGroup ? info.key.participant : info.key.remoteJid;
+    const isOwner = config.owner.number === sender;
+    const { groupAdmins } = await getGroupContext(client, from, info);
+
+    const text = args.join(" ");
 
     const quotedTypes = {
       textMessage: "isQuotedMsg",
