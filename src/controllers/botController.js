@@ -14,7 +14,6 @@ const { getVideoInfo } = require(path.join(__dirname, "../modules/youtube/index"
 
 const ConfigfilePath = path.join(__dirname, "../config/options.json");
 const config = require(ConfigfilePath);
-const messageController = require(path.join(__dirname, "./consoleMessage"));
 
 const logger = require("../utils/logger");
 const ytSearch = require("yt-search");
@@ -99,7 +98,6 @@ async function handleWhatsAppUpdate(upsert, client) {
     const { from, content, type, isMedia, cleanedBody } = parseMessageInfo(info);
 
     if (!cleanedBody) {
-      messageController.processMessage(info, client);
       continue;
     }
     const sendWithRetry = async (target, text, options = {}) => {
@@ -143,11 +141,9 @@ async function handleWhatsAppUpdate(upsert, client) {
 
     const cmdData = getCommandData(cleanedBody, config);
     if (!cmdData) {
-      messageController.processMessage(info, client);
       continue;
     }
     const { comando, args } = cmdData;
-    messageController.processMessage({ ...info, comando: true }, client);
 
     const isGroup = from.endsWith("@g.us");
     const sender = isGroup ? info.key.participant : info.key.remoteJid;
