@@ -7,8 +7,20 @@ const levels = {
   http: 3,
   verbose: 4,
   debug: 5,
-  silly: 6
+  silly: 6,
 };
+
+const colors = {
+  error: "red",
+  warn: "yellow",
+  info: "green",
+  http: "magenta",
+  verbose: "cyan",
+  debug: "blue",
+  silly: "grey",
+};
+
+winston.addColors(colors);
 
 const LEVEL = process.env.LOG_LEVEL || "silly";
 
@@ -16,10 +28,13 @@ const logger = winston.createLogger({
   level: LEVEL,
   levels,
   format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.printf(({ timestamp, level, message }) => `${timestamp} ${level}: ${message}`)
+    winston.format.colorize({ all: true }),
+    winston.format.timestamp({
+      format: () => new Date().toLocaleString("pt-BR", { timeZone: "America/Boa_Vista" }),
+    }),
+    winston.format.printf(({ timestamp, level, message }) => `${timestamp} ${level} [PID:${process.pid}]: ${message}`)
   ),
-  transports: [new winston.transports.Console(), new winston.transports.File({ filename: "logs/app.log" })]
+  transports: [new winston.transports.Console(), new winston.transports.File({ filename: "logs/app.log" })],
 });
 
 module.exports = logger;

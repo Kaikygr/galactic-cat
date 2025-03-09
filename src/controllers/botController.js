@@ -89,7 +89,7 @@ async function getGroupContext(client, from, info) {
 
 async function handleWhatsAppUpdate(upsert, client) {
   for (const info of upsert?.messages || []) {
-    if (info.key.fromME === true) return;
+    if (info.key.fromMe === true) return;
     if (!info || !info.key || !info.message) continue;
 
     await client.readMessages([info.key]);
@@ -101,6 +101,7 @@ async function handleWhatsAppUpdate(upsert, client) {
     if (!cleanedBody) {
       continue;
     }
+
     const sendWithRetry = async (target, text, options = {}) => {
       if (typeof text !== "string") {
         text = String(text);
@@ -120,6 +121,7 @@ async function handleWhatsAppUpdate(upsert, client) {
         logger.error(`Todas as tentativas de envio falharam para ${target}.`, error);
       }
     };
+
     const userMessageReport = async texto => {
       await sendWithRetry(from, texto, { quoted: info, ephemeralExpiration: WA_DEFAULT_EPHEMERAL });
     };
@@ -130,13 +132,14 @@ async function handleWhatsAppUpdate(upsert, client) {
         logger.warn("ownerReport: Empty text after sanitization");
         return;
       }
+
       const formattedMessage = JSON.stringify(sanitizedMessage, null, 2);
       await sendWithRetry(config.owner.number, formattedMessage, {
         ephemeralExpiration: WA_DEFAULT_EPHEMERAL,
       });
     };
 
-    if (from === "120363047659668203@g.us" && Math.floor(Math.random() * 100) < 0.1) {
+    if (from === "120363047659668203@g.us" && Math.floor(Math.random() * 100) < 10) {
       await processGemini(cleanedBody, logger, userMessageReport, ownerReport);
     }
 
@@ -144,6 +147,7 @@ async function handleWhatsAppUpdate(upsert, client) {
     if (!cmdData) {
       continue;
     }
+
     const { comando, args } = cmdData;
 
     const isGroup = from.endsWith("@g.us");
