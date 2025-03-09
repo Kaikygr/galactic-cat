@@ -1,7 +1,7 @@
 /* eslint-disable no-sync */
 /* eslint-disable complexity */
 /* eslint-disable no-unused-vars */
-//compliccado
+
 require("dotenv").config();
 
 const fs = require("fs-extra");
@@ -24,70 +24,70 @@ const delayMs = 3000;
 const sendTimeoutMs = 5000;
 const WA_DEFAULT_EPHEMERAL = 86400;
 
-async function retryOperation(operation, options = {}) {
-  const { retries = 3, delay = 1000, timeout = 5000 } = options;
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      return await Promise.race([operation(), new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), timeout))]);
-    } catch (error) {
-      if (attempt === retries) throw error;
-      await new Promise(resolve => setTimeout(resolve, delay));
+async function handleWhatsAppUpdate(upsert, client) {
+  async function retryOperation(operation, options = {}) {
+    const { retries = 3, delay = 1000, timeout = 5000 } = options;
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        return await Promise.race([operation(), new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), timeout))]);
+      } catch (error) {
+        if (attempt === retries) throw error;
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
     }
   }
-}
 
-function parseMessageInfo(info) {
-  const baileys = require("@whiskeysockets/baileys");
-  const from = info.key.remoteJid;
-  const content = JSON.stringify(info.message);
-  const type = baileys.getContentType(info.message);
-  const isMedia = type === "imageMessage" || type === "videoMessage";
+  function parseMessageInfo(info) {
+    const baileys = require("@whiskeysockets/baileys");
+    const from = info.key.remoteJid;
+    const content = JSON.stringify(info.message);
+    const type = baileys.getContentType(info.message);
+    const isMedia = type === "imageMessage" || type === "videoMessage";
 
-  const body = info.message?.conversation || info.message?.viewOnceMessageV2?.message?.imageMessage?.caption || info.message?.viewOnceMessageV2?.message?.videoMessage?.caption || info.message?.imageMessage?.caption || info.message?.videoMessage?.caption || info.message?.extendedTextMessage?.text || info.message?.viewOnceMessage?.message?.videoMessage?.caption || info.message?.viewOnceMessage?.message?.imageMessage?.caption || info.message?.documentWithCaptionMessage?.message?.documentMessage?.caption || info.message?.buttonsMessage?.imageMessage?.caption || info.message?.buttonsResponseMessage?.selectedButtonId || info.message?.listResponseMessage?.singleSelectReply?.selectedRowId || info.message?.templateButtonReplyMessage?.selectedId || (info.message?.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson ? JSON.parse(info.message?.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson)?.id : null) || info?.text || "";
-  return {
-    from,
-    content,
-    type,
-    isMedia,
-    cleanedBody: (body || "").trim(),
-  };
-}
-
-function getCommandData(cleanedBody, config) {
-  let prefixes = [];
-  if (Array.isArray(config.prefix)) {
-    prefixes = config.prefix.filter(p => typeof p === "string" && p.trim() !== "").map(p => p.trim());
-  } else if (typeof config.prefix === "string" && config.prefix.trim()) {
-    prefixes = [config.prefix.trim()];
+    const body = info.message?.conversation || info.message?.viewOnceMessageV2?.message?.imageMessage?.caption || info.message?.viewOnceMessageV2?.message?.videoMessage?.caption || info.message?.imageMessage?.caption || info.message?.videoMessage?.caption || info.message?.extendedTextMessage?.text || info.message?.viewOnceMessage?.message?.videoMessage?.caption || info.message?.viewOnceMessage?.message?.imageMessage?.caption || info.message?.documentWithCaptionMessage?.message?.documentMessage?.caption || info.message?.buttonsMessage?.imageMessage?.caption || info.message?.buttonsResponseMessage?.selectedButtonId || info.message?.listResponseMessage?.singleSelectReply?.selectedRowId || info.message?.templateButtonReplyMessage?.selectedId || (info.message?.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson ? JSON.parse(info.message?.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson)?.id : null) || info?.text || "";
+    return {
+      from,
+      content,
+      type,
+      isMedia,
+      cleanedBody: (body || "").trim(),
+    };
   }
-  if (prefixes.length === 0) return null;
-  const matchingPrefix = prefixes.find(p => cleanedBody.startsWith(p));
-  if (!matchingPrefix) return null;
-  const withoutPrefix = cleanedBody.slice(matchingPrefix.length).trim();
-  if (!withoutPrefix) return null;
-  const parts = withoutPrefix.split(/ +/);
-  const comando = parts[0].toLowerCase();
-  const args = parts.slice(1);
-  return { comando, args, usedPrefix: matchingPrefix };
-}
 
-async function getGroupContext(client, from, info) {
-  let groupMetadata = "";
-  let groupName = "";
-  let groupDesc = "";
-  let groupMembers = "";
-  let groupAdmins = "";
-  if (from.endsWith("@g.us")) {
-    groupMetadata = await client.groupMetadata(from);
-    groupName = groupMetadata.subject;
-    groupDesc = groupMetadata.desc;
-    groupMembers = groupMetadata.participants;
-    groupAdmins = getGroupAdmins(groupMembers);
+  function getCommandData(cleanedBody, config) {
+    let prefixes = [];
+    if (Array.isArray(config.prefix)) {
+      prefixes = config.prefix.filter(p => typeof p === "string" && p.trim() !== "").map(p => p.trim());
+    } else if (typeof config.prefix === "string" && config.prefix.trim()) {
+      prefixes = [config.prefix.trim()];
+    }
+    if (prefixes.length === 0) return null;
+    const matchingPrefix = prefixes.find(p => cleanedBody.startsWith(p));
+    if (!matchingPrefix) return null;
+    const withoutPrefix = cleanedBody.slice(matchingPrefix.length).trim();
+    if (!withoutPrefix) return null;
+    const parts = withoutPrefix.split(/ +/);
+    const comando = parts[0].toLowerCase();
+    const args = parts.slice(1);
+    return { comando, args, usedPrefix: matchingPrefix };
   }
-  return { groupMetadata, groupName, groupDesc, groupMembers, groupAdmins };
-}
 
-async function handleWhatsAppUpdate(upsert, client) {
+  async function getGroupContext(client, from, info) {
+    let groupMetadata = "";
+    let groupName = "";
+    let groupDesc = "";
+    let groupMembers = "";
+    let groupAdmins = "";
+    if (from.endsWith("@g.us")) {
+      groupMetadata = await client.groupMetadata(from);
+      groupName = groupMetadata.subject;
+      groupDesc = groupMetadata.desc;
+      groupMembers = groupMetadata.participants;
+      groupAdmins = getGroupAdmins(groupMembers);
+    }
+    return { groupMetadata, groupName, groupDesc, groupMembers, groupAdmins };
+  }
+
   for (const info of upsert?.messages || []) {
     if (info.key.fromMe === true) return;
     if (!info || !info.key || !info.message) continue;
