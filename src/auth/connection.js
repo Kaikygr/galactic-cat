@@ -84,7 +84,7 @@ const registerAllEventHandlers = (client, saveCreds) => {
     }
   });
 };
-
+//
 const handleConnectionUpdate = async (update, client) => {
   try {
     const { connection } = update;
