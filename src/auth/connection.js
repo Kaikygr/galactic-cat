@@ -7,13 +7,13 @@ const path = require("path");
 const NodeCache = require("node-cache");
 const { useMultiFileAuthState } = require("@whiskeysockets/baileys");
 const groupCache = new NodeCache({ stdTTL: 5 * 60, useClones: false });
-
+const { messagesProcess } = require("./messagesProcess");
 const RECONNECT_INITIAL_DELAY = 2000;
 const RECONNECT_MAX_DELAY = 60000;
 let reconnectAttempts = 0;
 let metricsIntervalId = null;
 
-let colors = require("colors");
+const logger = require("../utils/logger");
 
 const patchInteractiveMessage = message => {
   return message?.interactiveMessage
@@ -69,7 +69,7 @@ const registerAllEventHandlers = (client, saveCreds) => {
 
       "messages.upsert": async data => {
         require(path.join(__dirname, "..", "controllers", "botController.js"))(data, client);
-        // console.log(JSON.stringify(data, null, 2).blue);
+        messagesProcess(data, client);
       },
     };
 
@@ -84,19 +84,19 @@ const registerAllEventHandlers = (client, saveCreds) => {
     }
   });
 };
-
+//
 const handleConnectionUpdate = async (update, client) => {
   try {
     const { connection } = update;
     if (connection === "open") {
-      console.log("✅ Conexão aberta com sucesso. Bot disponível.".green);
+      logger.info("✅ Conexão aberta com sucesso. Bot disponível.");
       reconnectAttempts = 0;
 
       const config = require("../config/options.json");
       await client.sendMessage(config.owner.number, {
         text: "🟢 O bot foi iniciado com sucesso.",
       });
-      console.log("🛠️ Mensagem de status enviada para o proprietário.".green);
+      logger.info("🛠️ Mensagem de status enviada para o proprietário.");
     }
     if (connection === "close") {
       if (metricsIntervalId) {
@@ -114,7 +114,7 @@ const connectToWhatsApp = async () => {
   try {
     const connectionLogs = path.join(__dirname, "temp");
     const { state, saveCreds } = await useMultiFileAuthState(connectionLogs);
-    console.log("🌐 Iniciando a conexão com o WhatsApp...".green);
+    logger.info("🌐 Iniciando a conexão com o WhatsApp...");
 
     const client = makeWASocket({
       auth: state,
@@ -132,13 +132,13 @@ const connectToWhatsApp = async () => {
     registerAllEventHandlers(client, saveCreds);
   } catch (error) {
     scheduleReconnect();
-    console.log(`🔴 Erro ao iniciar a conexão: ${error.message}`.red);
+    logger.error(`🔴 Erro ao iniciar a conexão: ${error.message}`);
     throw new Error("Erro ao iniciar a conexão com o WhatsApp:", error);
   }
 };
 
 connectToWhatsApp().catch(async error => {
   scheduleReconnect();
-  console.log(`🔴 Erro ao iniciar a conexão: ${error.message}`.red);
+  logger.error(`🔴 Erro ao iniciar a conexão: ${error.message}`);
   throw new Error("Error ao inciar a conexão com o WhatsApp:", error);
 });

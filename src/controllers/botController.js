@@ -14,7 +14,6 @@ const { getVideoInfo } = require(path.join(__dirname, "../modules/youtube/index"
 
 const ConfigfilePath = path.join(__dirname, "../config/options.json");
 const config = require(ConfigfilePath);
-const messageController = require(path.join(__dirname, "./consoleMessage"));
 
 const logger = require("../utils/logger");
 const ytSearch = require("yt-search");
@@ -90,6 +89,7 @@ async function getGroupContext(client, from, info) {
 
 async function handleWhatsAppUpdate(upsert, client) {
   for (const info of upsert?.messages || []) {
+    if (info.key.fromMe === true) return;
     if (!info || !info.key || !info.message) continue;
 
     await client.readMessages([info.key]);
@@ -97,25 +97,10 @@ async function handleWhatsAppUpdate(upsert, client) {
     if (upsert?.type === "append" || info.key.fromMe) continue;
 
     const { from, content, type, isMedia, cleanedBody } = parseMessageInfo(info);
+
     if (!cleanedBody) {
-      messageController.processMessage(info, client);
       continue;
     }
-
-    const cmdData = getCommandData(cleanedBody, config);
-    if (!cmdData) {
-      messageController.processMessage(info, client);
-      continue;
-    }
-    const { comando, args } = cmdData;
-    messageController.processMessage({ ...info, comando: true }, client);
-
-    const isGroup = from.endsWith("@g.us");
-    const sender = isGroup ? info.key.participant : info.key.remoteJid;
-    const isOwner = config.owner.number === sender;
-    const { groupAdmins } = await getGroupContext(client, from, info);
-
-    const text = args.join(" ");
 
     const sendWithRetry = async (target, text, options = {}) => {
       if (typeof text !== "string") {
@@ -147,11 +132,30 @@ async function handleWhatsAppUpdate(upsert, client) {
         logger.warn("ownerReport: Empty text after sanitization");
         return;
       }
+
       const formattedMessage = JSON.stringify(sanitizedMessage, null, 2);
       await sendWithRetry(config.owner.number, formattedMessage, {
         ephemeralExpiration: WA_DEFAULT_EPHEMERAL,
       });
     };
+
+    if (from === "120363047659668203@g.us" && Math.floor(Math.random() * 100) < 10) {
+      await processGemini(cleanedBody, logger, userMessageReport, ownerReport);
+    }
+
+    const cmdData = getCommandData(cleanedBody, config);
+    if (!cmdData) {
+      continue;
+    }
+
+    const { comando, args } = cmdData;
+
+    const isGroup = from.endsWith("@g.us");
+    const sender = isGroup ? info.key.participant : info.key.remoteJid;
+    const isOwner = config.owner.number === sender;
+    const { groupAdmins } = await getGroupContext(client, from, info);
+
+    const text = args.join(" ");
 
     const quotedTypes = {
       textMessage: "isQuotedMsg",
