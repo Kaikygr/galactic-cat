@@ -1,3 +1,6 @@
+/* eslint-disable no-unused-vars */
+const colors = require("colors");
+
 async function userMessageProcess(data) {
   try {
     const [message] = data.messages;
@@ -7,18 +10,24 @@ async function userMessageProcess(data) {
     const messageSecretKey = messageContent.messageContextInfo?.messageSecret ?? null;
     const messageType = Object.keys(messageContent)[0];
 
-    console.log("\x1b[32mMensagem Processada:\x1b[0m");
-    console.log("\x1b[34mTipo:\x1b[0m", messageType);
-    console.log("\x1b[34mHorário da Mensagem:\x1b[0m", messageTime);
-    console.log("\x1b[34mNome do Usuário:\x1b[0m", userName);
-    console.log("\x1b[34mStatus:\x1b[0m", status);
-    console.log("\x1b[34mID Remoto:\x1b[0m", remoteJid);
-    console.log("\x1b[34mEnviado por Mim:\x1b[0m", fromMe);
-    console.log("\x1b[34mID da Mensagem:\x1b[0m", messageID);
-    console.log("\x1b[34mID do Usuário:\x1b[0m", userID);
-    console.log("\x1b[34mChave Secreta da Mensagem:\x1b[0m", messageSecretKey);
+    const logMessage = `
+${"==============".yellow}
+${"Mensagem Processada:".green}
+${"Tipo:".blue} ${messageType}
+${"Horário da Mensagem:".blue} ${messageTime}
+${"Nome do Usuário:".blue} ${userName}
+${"Status:".blue} ${status}
+${"ID Remoto:".blue} ${remoteJid}
+${"Enviado por Mim:".blue} ${fromMe}
+${"ID da Mensagem:".blue} ${messageID}
+${"ID do Usuário:".blue} ${userID}
+${"Chave Secreta da Mensagem:".blue} ${messageSecretKey}
+${"==============".yellow}
+`;
+
+    console.log(logMessage);
   } catch (error) {
-    console.error("\x1b[31mErro ao processar a mensagem:\x1b[0m", error);
+    console.error("Erro ao processar a mensagem:".red, error);
   }
 }
 
