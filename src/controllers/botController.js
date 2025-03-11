@@ -38,47 +38,6 @@ async function handleWhatsAppUpdate(upsert, client) {
     }
   }
 
-  async function parseMessageInfo(info) {
-    const baileys = require("@whiskeysockets/baileys");
-
-    const from = info.key.remoteJid;
-    if (from.endsWith("@g.us")) {
-      await getGroupContext(client, from, info);
-    }
-
-    const content = JSON.stringify(info.message);
-    const type = baileys.getContentType(info.message);
-    const isMedia = type === "imageMessage" || type === "videoMessage";
-
-    const body = info.message?.conversation || info.message?.viewOnceMessageV2?.message?.imageMessage?.caption || info.message?.viewOnceMessageV2?.message?.videoMessage?.caption || info.message?.imageMessage?.caption || info.message?.videoMessage?.caption || info.message?.extendedTextMessage?.text || info.message?.viewOnceMessage?.message?.videoMessage?.caption || info.message?.viewOnceMessage?.message?.imageMessage?.caption || info.message?.documentWithCaptionMessage?.message?.documentMessage?.caption || info.message?.buttonsMessage?.imageMessage?.caption || info.message?.buttonsResponseMessage?.selectedButtonId || info.message?.listResponseMessage?.singleSelectReply?.selectedRowId || info.message?.templateButtonReplyMessage?.selectedId || (info.message?.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson ? JSON.parse(info.message?.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson)?.id : null) || info?.text || "";
-
-    return {
-      from,
-      content,
-      type,
-      isMedia,
-      body,
-    };
-  }
-
-  function getCommandData(cleanedBody, config) {
-    let prefixes = [];
-    if (Array.isArray(config.prefix)) {
-      prefixes = config.prefix.filter(p => typeof p === "string" && p.trim() !== "").map(p => p.trim());
-    } else if (typeof config.prefix === "string" && config.prefix.trim()) {
-      prefixes = [config.prefix.trim()];
-    }
-    if (prefixes.length === 0) return null;
-    const matchingPrefix = prefixes.find(p => cleanedBody.startsWith(p));
-    if (!matchingPrefix) return null;
-    const withoutPrefix = cleanedBody.slice(matchingPrefix.length).trim();
-    if (!withoutPrefix) return null;
-    const parts = withoutPrefix.split(/ +/);
-    const comando = parts[0].toLowerCase();
-    const args = parts.slice(1);
-    return { comando, args, usedPrefix: matchingPrefix };
-  }
-
   for (const info of upsert?.messages || []) {
     if (info.key.fromMe === true) return;
     if (!info || !info.key || !info.message) continue;
@@ -87,21 +46,40 @@ async function handleWhatsAppUpdate(upsert, client) {
 
     if (upsert?.type === "append" || info.key.fromMe) continue;
 
-    const { from, content, type, isMedia, cleanedBody } = parseMessageInfo(info);
-
-    if (!cleanedBody) {
-      continue;
+    const baileys = require("@whiskeysockets/baileys");
+    const from = info.key.remoteJid;
+    if (from.endsWith("@g.us")) {
+      getGroupContext(client, from, info);
     }
+    const content = JSON.stringify(info.message);
+    const type = baileys.getContentType(info.message);
+    const isMedia = type === "imageMessage" || type === "videoMessage";
+    const body = info.message?.conversation || info.message?.viewOnceMessageV2?.message?.imageMessage?.caption || info.message?.viewOnceMessageV2?.message?.videoMessage?.caption || info.message?.imageMessage?.caption || info.message?.videoMessage?.caption || info.message?.extendedTextMessage?.text || info.message?.viewOnceMessage?.message?.videoMessage?.caption || info.message?.viewOnceMessage?.message?.imageMessage?.caption || info.message?.documentWithCaptionMessage?.message?.documentMessage?.caption || info.message?.buttonsMessage?.imageMessage?.caption || info.message?.buttonsResponseMessage?.selectedButtonId || info.message?.listResponseMessage?.singleSelectReply?.selectedRowId || info.message?.templateButtonReplyMessage?.selectedId || (info.message?.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson ? JSON.parse(info.message?.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson)?.id : null) || info?.text;
+
+    if (!body || !body.startsWith(config.prefix)) continue;
+    let withoutPrefix = body.slice(config.prefix.length).trim();
+    if (withoutPrefix.startsWith(".")) {
+      withoutPrefix = withoutPrefix.slice(1).trim();
+    }
+
+    if (!withoutPrefix) continue;
+    const parts = withoutPrefix.split(/ +/);
+    const comando = parts.shift().toLowerCase();
+
+    if (!comando) continue;
+    const args = parts;
 
     const sendWithRetry = async (target, text, options = {}) => {
       if (typeof text !== "string") {
         text = String(text);
       }
       text = text.trim();
+
       if (!text) {
         logger.warn("sendWithRetry: texto vazio após sanitização");
         return;
       }
+
       try {
         await retryOperation(() => client.sendMessage(target, { text }, options), {
           retries: maxAttempts,
@@ -131,20 +109,11 @@ async function handleWhatsAppUpdate(upsert, client) {
     };
 
     if (from === "120363047659668203@g.us" && Math.floor(Math.random() * 100) < 10) {
-      await processGemini(cleanedBody, logger, userMessageReport, ownerReport);
+      await processGemini(body, logger, userMessageReport, ownerReport);
     }
-
-    const cmdData = getCommandData(cleanedBody, config);
-    if (!cmdData) {
-      continue;
-    }
-
-    const { comando, args } = cmdData;
 
     const isGroup = from.endsWith("@g.us");
     const sender = isGroup ? info.key.participant : info.key.remoteJid;
-    const isOwner = config.owner.number === sender;
-    const { groupAdmins } = await getGroupContext(client, from, info);
 
     const text = args.join(" ");
 
@@ -169,6 +138,7 @@ async function handleWhatsAppUpdate(upsert, client) {
 
     switch (comando) {
       case "cat":
+        console.log("cat");
         await processGemini(text, logger, userMessageReport, ownerReport);
         break;
 
