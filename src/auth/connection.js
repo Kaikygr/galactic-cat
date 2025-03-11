@@ -53,7 +53,17 @@ const registerAllEventHandlers = (client, saveCreds) => {
 
     "group-participants.update": async event => {
       const metadata = await client.groupMetadata(event.id);
+      console.log("metadata", metadata);
       groupCache.set(event.id, metadata);
+      for (const participant of event.participants) {
+        if (event.action === "add") {
+          logger.info(`🟢 Participante adicionado: ${participant}`);
+          require("./groupUpdateParticipants.js").sendWelcomeMessage(client, event.id, participant, "add", metadata);
+        } else if (event.action === "remove") {
+          logger.info(`🔴 Participante removido: ${participant}`);
+          require("./groupUpdateParticipants.js").sendWelcomeMessage(client, event.id, participant, "remove", metadata);
+        }
+      }
     },
   };
 
@@ -84,7 +94,7 @@ const registerAllEventHandlers = (client, saveCreds) => {
     }
   });
 };
-//
+
 const handleConnectionUpdate = async (update, client) => {
   try {
     const { connection } = update;

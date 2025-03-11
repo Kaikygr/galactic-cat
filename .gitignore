@@ -7,3 +7,4 @@ src/auth/temp
 /src/temp
 package-lock.json
 error.log
+src/config/groupData.json

@@ -11,6 +11,7 @@ const { processSticker } = require(path.join(__dirname, "../modules/sticker/stic
 const { getGroupAdmins, getFileBuffer } = require(path.join(__dirname, "../utils/functions"));
 const { downloadYoutubeAudio, downloadYoutubeVideo } = require(path.join(__dirname, "../modules/youtube/youtube"));
 const { getVideoInfo } = require(path.join(__dirname, "../modules/youtube/index"));
+const { getGroupContext } = require("./groupContextController");
 
 const ConfigfilePath = path.join(__dirname, "../config/options.json");
 const config = require(ConfigfilePath);
@@ -37,20 +38,26 @@ async function handleWhatsAppUpdate(upsert, client) {
     }
   }
 
-  function parseMessageInfo(info) {
+  async function parseMessageInfo(info) {
     const baileys = require("@whiskeysockets/baileys");
+
     const from = info.key.remoteJid;
+    if (from.endsWith("@g.us")) {
+      await getGroupContext(client, from, info);
+    }
+
     const content = JSON.stringify(info.message);
     const type = baileys.getContentType(info.message);
     const isMedia = type === "imageMessage" || type === "videoMessage";
 
     const body = info.message?.conversation || info.message?.viewOnceMessageV2?.message?.imageMessage?.caption || info.message?.viewOnceMessageV2?.message?.videoMessage?.caption || info.message?.imageMessage?.caption || info.message?.videoMessage?.caption || info.message?.extendedTextMessage?.text || info.message?.viewOnceMessage?.message?.videoMessage?.caption || info.message?.viewOnceMessage?.message?.imageMessage?.caption || info.message?.documentWithCaptionMessage?.message?.documentMessage?.caption || info.message?.buttonsMessage?.imageMessage?.caption || info.message?.buttonsResponseMessage?.selectedButtonId || info.message?.listResponseMessage?.singleSelectReply?.selectedRowId || info.message?.templateButtonReplyMessage?.selectedId || (info.message?.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson ? JSON.parse(info.message?.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson)?.id : null) || info?.text || "";
+
     return {
       from,
       content,
       type,
       isMedia,
-      cleanedBody: (body || "").trim(),
+      body,
     };
   }
 
@@ -70,22 +77,6 @@ async function handleWhatsAppUpdate(upsert, client) {
     const comando = parts[0].toLowerCase();
     const args = parts.slice(1);
     return { comando, args, usedPrefix: matchingPrefix };
-  }
-
-  async function getGroupContext(client, from, info) {
-    let groupMetadata = "";
-    let groupName = "";
-    let groupDesc = "";
-    let groupMembers = "";
-    let groupAdmins = "";
-    if (from.endsWith("@g.us")) {
-      groupMetadata = await client.groupMetadata(from);
-      groupName = groupMetadata.subject;
-      groupDesc = groupMetadata.desc;
-      groupMembers = groupMetadata.participants;
-      groupAdmins = getGroupAdmins(groupMembers);
-    }
-    return { groupMetadata, groupName, groupDesc, groupMembers, groupAdmins };
   }
 
   for (const info of upsert?.messages || []) {
