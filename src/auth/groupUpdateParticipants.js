@@ -51,10 +51,16 @@ const addGroupIfNotExists = (groupData, groupId, groupName) => {
   }
 };
 
-// Extrai o nome do usuário a partir do identificador do participante
+// Função para extrair o nome do usuário a partir do identificador do participante
 const getUserName = async (client, participant) => {
   const id = participant.split("@")[0];
   return "@" + id;
+};
+
+// Função para extrair os nomes dos administradores do grupo
+const getGroupAdminsNames = async (client, adminList) => {
+  const adminNames = await Promise.all(adminList.map(admin => getUserName(client, admin)));
+  return adminNames.join(", ");
 };
 
 // Função principal para enviar mensagem de boas-vindas ou despedida
@@ -76,17 +82,32 @@ const sendWelcomeMessage = async (client, groupId, participant, action, metadata
     }
     const userName = await getUserName(client, participant);
     const isAddAction = action === "add";
+    const groupOwner = groupConfig.dono ? await getUserName(client, groupConfig.dono) : "";
+    const groupAdmins = Array.isArray(groupConfig.administradores) ? await getGroupAdminsNames(client, groupConfig.administradores) : "";
     // Define o tipo de mensagem e o texto conforme a ação (entrada ou saída)
     const messageType = isAddAction ? welcomeConfig.formatoEntrada : welcomeConfig.formatoSaida;
     let messageText = isAddAction ? welcomeConfig.mensagemEntrada : welcomeConfig.mensagemSaida;
-    messageText = messageText.replace("{usuario}", userName).replace("{grupo}", groupConfig.nome);
+    messageText = messageText
+      .replace("#usuario", userName)
+      .replace("#grupo", groupConfig.nome)
+      .replace("#id", participant)
+      .replace("#grupoName", groupConfig.nome)
+      .replace("#grupoDesc", groupConfig.descricao || "")
+      .replace("#grupoSize", groupConfig.tamanho)
+      .replace("#grupoDono", groupOwner)
+      .replace("#grupoAdmins", groupAdmins)
+      .replace("#time", new Date().toLocaleTimeString());
     const mediaUrl = isAddAction ? welcomeConfig.midiaEntrada : welcomeConfig.midiaSaida;
+
+    const mentions = [participant];
+    if (groupOwner) mentions.push(groupConfig.dono);
+    if (Array.isArray(groupConfig.administradores)) mentions.push(...groupConfig.administradores);
 
     if (messageType === "texto") {
       // Envia mensagem de texto simples com menção ao participante
       await client.sendMessage(groupId, {
         text: messageText,
-        mentions: [participant],
+        mentions,
       });
     } else if (messageType === "imagemTexto" || messageType === "videoTexto") {
       // Seleciona o tipo de mídia e baixa a mídia via axios
@@ -99,14 +120,14 @@ const sendWelcomeMessage = async (client, groupId, participant, action, metadata
             video: mediaBuffer,
             mimetype: "video/mp4",
             caption: messageText,
-            mentions: [participant],
+            mentions,
           });
         } else {
           // Envia mensagem com imagem e legenda
           await client.sendMessage(groupId, {
             image: mediaBuffer,
             caption: messageText,
-            mentions: [participant],
+            mentions,
           });
         }
       } else {
