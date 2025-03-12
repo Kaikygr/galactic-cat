@@ -14,7 +14,7 @@ const { getGroupAdmins, getFileBuffer } = require(path.join(__dirname, "../utils
 const { downloadYoutubeAudio, downloadYoutubeVideo } = require(path.join(__dirname, "../modules/youtube/youtube"));
 const { getVideoInfo } = require(path.join(__dirname, "../modules/youtube/index"));
 const { getGroupContext } = require("./groupContextController");
-const { editarBoasVindas, toggleBoasVindas, editarMensagemBoasVindas } = require(path.join(__dirname, "../modules/welcome/welcome"));
+const { groupInfo } = require(path.join(__dirname, "../modules/grupos/group"));
 
 const ConfigfilePath = path.join(__dirname, "../config/options.json");
 const config = require(ConfigfilePath);
@@ -141,7 +141,6 @@ async function handleWhatsAppUpdate(upsert, client) {
 
     switch (comando) {
       case "cat":
-        console.log("cat");
         await processGemini(text, logger, userMessageReport, ownerReport);
         break;
 
@@ -155,6 +154,13 @@ async function handleWhatsAppUpdate(upsert, client) {
         {
           await getVideoInfo(client, info, sender, from, text, userMessageReport, ownerReport, logger);
         }
+        break;
+
+      case "grupo":
+        {
+          groupInfo(client, info, sender, from, text, userMessageReport, ownerReport, logger);
+        }
+
         break;
 
       case "play": {
