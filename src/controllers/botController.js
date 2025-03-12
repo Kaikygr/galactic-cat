@@ -1,16 +1,10 @@
-/* eslint-disable no-undef */
-/* eslint-disable no-prototype-builtins */
-/* eslint-disable no-sync */
-/* eslint-disable complexity */
-/* eslint-disable no-unused-vars */
-
 require("dotenv").config();
 
 const fs = require("fs-extra");
 const path = require("path");
 const { processGemini } = require(path.join(__dirname, "../modules/gemini/gemini"));
 const { processSticker } = require(path.join(__dirname, "../modules/sticker/sticker"));
-const { getGroupAdmins, getFileBuffer } = require(path.join(__dirname, "../utils/functions"));
+const { getFileBuffer } = require(path.join(__dirname, "../utils/functions"));
 const { downloadYoutubeAudio, downloadYoutubeVideo } = require(path.join(__dirname, "../modules/youtube/youtube"));
 const { getVideoInfo } = require(path.join(__dirname, "../modules/youtube/index"));
 const { getGroupContext } = require("./groupContextController");
@@ -51,9 +45,11 @@ async function handleWhatsAppUpdate(upsert, client) {
 
     const baileys = require("@whiskeysockets/baileys");
     const from = info.key.remoteJid;
+
     if (from.endsWith("@g.us")) {
       getGroupContext(client, from, info);
     }
+
     const content = JSON.stringify(info.message);
     const type = baileys.getContentType(info.message);
     const isMedia = type === "imageMessage" || type === "videoMessage";
@@ -79,7 +75,7 @@ async function handleWhatsAppUpdate(upsert, client) {
       text = text.trim();
 
       if (!text) {
-        logger.warn("sendWithRetry: texto vazio após sanitização");
+        logger.warn("texto vazio após sanitização");
         return;
       }
 
@@ -101,7 +97,7 @@ async function handleWhatsAppUpdate(upsert, client) {
     const ownerReport = async message => {
       const sanitizedMessage = String(message).trim();
       if (!sanitizedMessage) {
-        logger.warn("ownerReport: Empty text after sanitization");
+        logger.warn("texto vazio após sanitização");
         return;
       }
 
@@ -117,7 +113,6 @@ async function handleWhatsAppUpdate(upsert, client) {
 
     const isGroup = from.endsWith("@g.us");
     const sender = isGroup ? info.key.participant : info.key.remoteJid;
-
     const text = args.join(" ");
 
     const quotedTypes = {
