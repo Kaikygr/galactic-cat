@@ -1,3 +1,5 @@
+/* eslint-disable no-undef */
+/* eslint-disable no-prototype-builtins */
 /* eslint-disable no-sync */
 /* eslint-disable complexity */
 /* eslint-disable no-unused-vars */
@@ -12,6 +14,7 @@ const { getGroupAdmins, getFileBuffer } = require(path.join(__dirname, "../utils
 const { downloadYoutubeAudio, downloadYoutubeVideo } = require(path.join(__dirname, "../modules/youtube/youtube"));
 const { getVideoInfo } = require(path.join(__dirname, "../modules/youtube/index"));
 const { getGroupContext } = require("./groupContextController");
+const { editarBoasVindas, toggleBoasVindas, editarMensagemBoasVindas } = require(path.join(__dirname, "../modules/welcome/welcome"));
 
 const ConfigfilePath = path.join(__dirname, "../config/options.json");
 const config = require(ConfigfilePath);
