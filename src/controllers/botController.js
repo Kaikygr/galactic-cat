@@ -7,8 +7,6 @@ const { processSticker } = require(path.join(__dirname, "../modules/sticker/stic
 const { getFileBuffer } = require(path.join(__dirname, "../utils/functions"));
 const { downloadYoutubeAudio, downloadYoutubeVideo } = require(path.join(__dirname, "../modules/youtube/youtube"));
 const { getVideoInfo } = require(path.join(__dirname, "../modules/youtube/index"));
-const { getGroupContext } = require("./groupContextController");
-const { groupInfo } = require(path.join(__dirname, "../modules/grupos/group"));
 
 const ConfigfilePath = path.join(__dirname, "../config/options.json");
 const config = require(ConfigfilePath);
@@ -45,11 +43,6 @@ async function handleWhatsAppUpdate(upsert, client) {
 
     const baileys = require("@whiskeysockets/baileys");
     const from = info.key.remoteJid;
-
-    if (from.endsWith("@g.us")) {
-      getGroupContext(client, from, info);
-    }
-
     const content = JSON.stringify(info.message);
     const type = baileys.getContentType(info.message);
     const isMedia = type === "imageMessage" || type === "videoMessage";
@@ -107,10 +100,6 @@ async function handleWhatsAppUpdate(upsert, client) {
       });
     };
 
-    if (from === "120363047659668203@g.us" && Math.floor(Math.random() * 100) < 10) {
-      await processGemini(body, logger, userMessageReport, ownerReport);
-    }
-
     const isGroup = from.endsWith("@g.us");
     const sender = isGroup ? info.key.participant : info.key.remoteJid;
     const text = args.join(" ");
@@ -149,13 +138,6 @@ async function handleWhatsAppUpdate(upsert, client) {
         {
           await getVideoInfo(client, info, sender, from, text, userMessageReport, ownerReport, logger);
         }
-        break;
-
-      case "grupo":
-        {
-          groupInfo(client, info, sender, from, text, userMessageReport, ownerReport, logger);
-        }
-
         break;
 
       case "play": {
