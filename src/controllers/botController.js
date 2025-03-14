@@ -1,5 +1,5 @@
 require("dotenv").config();
-
+//esta
 const fs = require("fs-extra");
 const path = require("path");
 const { processGemini } = require(path.join(__dirname, "../modules/gemini/gemini"));
