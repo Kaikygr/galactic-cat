@@ -1,8 +1,21 @@
+/*
+ * Arquivo responsável pelo gerenciamento geral do bot.
+ * Recebe e processa todos os dados de #auth/connection.js, incluindo as informações
+ * principais da sessão e dos usuários, além de outros eventos relevantes.
+ *
+ * Este arquivo deve utilizar módulos para o gerenciamento eficiente dos dados,
+ * garantindo uma estrutura organizada e de fácil manutenção.
+ */
+
 require("dotenv").config();
-//esta
+
 const fs = require("fs-extra");
 const path = require("path");
-const { processGemini } = require(path.join(__dirname, "../modules/gemini/gemini"));
+const axios = require("axios");
+
+// Importa os módulos de processamento de mensagens.
+const { generateAIContent } = require(path.join(__dirname, "../_modules/gemini/geminiModel"));
+
 const { processSticker } = require(path.join(__dirname, "../modules/sticker/sticker"));
 const { getFileBuffer } = require(path.join(__dirname, "../utils/functions"));
 const { downloadYoutubeAudio, downloadYoutubeVideo } = require(path.join(__dirname, "../modules/youtube/youtube"));
@@ -13,7 +26,6 @@ const config = require(ConfigfilePath);
 
 const logger = require("../utils/logger");
 const ytSearch = require("yt-search");
-const axios = require("axios");
 
 const maxAttempts = 3;
 const delayMs = 3000;
@@ -57,6 +69,7 @@ async function handleWhatsAppUpdate(upsert, client) {
     if (!withoutPrefix) continue;
     const parts = withoutPrefix.split(/ +/);
     const comando = parts.shift().toLowerCase();
+    logger.warn(comando, body);
 
     if (!comando) continue;
     const args = parts;
@@ -122,11 +135,18 @@ async function handleWhatsAppUpdate(upsert, client) {
     }
 
     const { isQuotedMsg, isQuotedImage, isQuotedVideo, isQuotedDocument, isQuotedAudio, isQuotedSticker, isQuotedContact, isQuotedLocation, isQuotedProduct } = quotedChecks;
-
     switch (comando) {
-      case "cat":
-        await processGemini(text, logger, userMessageReport, ownerReport);
+      case "cat": {
+        const prompt = args.join(" ");
+        try {
+          const response = await generateAIContent(sender, prompt);
+          await userMessageReport(response);
+        } catch (error) {
+          await userMessageReport("Erro ao gerar conteúdo com o modelo Gemini. Por favor, tente novamente.");
+          await ownerReport("Erro ao gerar conteúdo com o modelo Gemini:", error);
+        }
         break;
+      }
 
       case "sticker":
       case "s": {
@@ -239,7 +259,7 @@ const watcher = fs.watch(file, eventType => {
   if (eventType === "change") {
     if (debounceTimeout) clearTimeout(debounceTimeout);
     debounceTimeout = setTimeout(() => {
-      logger.info(`O arquivo "${file}" foi atualizado.`);
+      logger.warn(`O arquivo "${file}" foi atualizado.`);
       try {
         delete require.cache[file];
         require(file);
