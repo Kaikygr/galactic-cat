@@ -87,12 +87,9 @@ async function salvarGrupoJSON(groupId, novoGrupo) {
       grupos = JSON.parse(data);
     }
 
-    // Mantém as seções já existentes (se houver)
+    // Se os dados do grupo já existirem, compara e atualiza
     if (grupos[groupId]) {
-      novoGrupo.welcome = grupos[groupId].welcome || {};
-      novoGrupo.banned = grupos[groupId].banned || [];
-      novoGrupo.usersAdvetencias = grupos[groupId].usersAdvetencias || {};
-      novoGrupo.forbiddenWords = grupos[groupId].forbiddenWords || [];
+      novoGrupo = mergeDeep(grupos[groupId], novoGrupo);
     }
 
     // Atualiza ou adiciona o grupo
@@ -104,6 +101,18 @@ async function salvarGrupoJSON(groupId, novoGrupo) {
   } catch (error) {
     console.error("❌ Erro ao salvar JSON:", error);
   }
+}
+
+// Nova função auxiliar para mesclar objetos (merge deep)
+function mergeDeep(target, source) {
+  for (const key in source) {
+    if (source[key] && typeof source[key] === "object" && !Array.isArray(source[key])) {
+      target[key] = mergeDeep(target[key] || {}, source[key]);
+    } else {
+      target[key] = source[key];
+    }
+  }
+  return target;
 }
 
 exports.modules = { handleGroupData };
