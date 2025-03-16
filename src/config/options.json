@@ -15,7 +15,7 @@
     },
     "bot": {
         "name": "Galactic Cat Bot",
-        "version": "0.0.3",
+        "version": "0.0.7",
         "description": "Bot criado e mantido por Kaiky Gomes.",
         "author": "Kaiky Gomes",
         "repository": "https://github.com/Kaikygr/galactic-cat"
