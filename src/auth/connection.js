@@ -10,6 +10,7 @@ let reconnectAttempts = 0;
 let metricsIntervalId = null;
 
 const logger = require("../utils/logger");
+const participantsUpdate = require("./participantsUpdate");
 
 const patchInteractiveMessage = message => {
   return message?.interactiveMessage
@@ -48,8 +49,7 @@ const registerAllEventHandlers = (client, saveCreds) => {
     },
 
     "group-participants.update": async event => {
-      const metadata = await client.groupMetadata(event.id);
-      groupCache.set(event.id, metadata);
+      await participantsUpdate.handleParticipantsUpdate(event, client, groupCache);
     },
   };
 
@@ -74,7 +74,7 @@ const registerAllEventHandlers = (client, saveCreds) => {
           await eventHandlers[event](data);
         }
       } catch (error) {
-        console.log(`Erro ao processar o evento ${event}: ${error.message}`.green);
+        logger.error(`Erro ao processar o evento ${event}: ${error.message}`);
       }
     }
   });
