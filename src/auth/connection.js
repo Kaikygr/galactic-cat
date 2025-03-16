@@ -49,7 +49,6 @@ const registerAllEventHandlers = (client, saveCreds) => {
 
     "group-participants.update": async event => {
       const metadata = await client.groupMetadata(event.id);
-      console.log("metadata", metadata);
       groupCache.set(event.id, metadata);
     },
   };
