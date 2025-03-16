@@ -32,6 +32,8 @@ const delayMs = 3000;
 const sendTimeoutMs = 5000;
 const WA_DEFAULT_EPHEMERAL = 86400;
 
+const { preProcessMessage, processPrefix, getQuotedChecks } = require(path.join(__dirname, "./messageTypeController"));
+
 async function handleWhatsAppUpdate(upsert, client) {
   async function retryOperation(operation, options = {}) {
     const { retries = 3, delay = 1000, timeout = 5000 } = options;
@@ -48,31 +50,39 @@ async function handleWhatsAppUpdate(upsert, client) {
   for (const info of upsert?.messages || []) {
     if (info.key.fromMe === true) return;
     if (!info || !info.key || !info.message) continue;
-
+    if (upsert?.type === "append" || info.key.fromMe) continue;
     await client.readMessages([info.key]);
 
-    if (upsert?.type === "append" || info.key.fromMe) continue;
+    console.log(JSON.stringify(info, null, 2));
 
-    const baileys = require("@whiskeysockets/baileys");
     const from = info.key.remoteJid;
-    const content = JSON.stringify(info.message);
-    const type = baileys.getContentType(info.message);
-    const isMedia = type === "imageMessage" || type === "videoMessage";
-    const body = info.message?.conversation || info.message?.viewOnceMessageV2?.message?.imageMessage?.caption || info.message?.viewOnceMessageV2?.message?.videoMessage?.caption || info.message?.imageMessage?.caption || info.message?.videoMessage?.caption || info.message?.extendedTextMessage?.text || info.message?.viewOnceMessage?.message?.videoMessage?.caption || info.message?.viewOnceMessage?.message?.imageMessage?.caption || info.message?.documentWithCaptionMessage?.message?.documentMessage?.caption || info.message?.buttonsMessage?.imageMessage?.caption || info.message?.buttonsResponseMessage?.selectedButtonId || info.message?.listResponseMessage?.singleSelectReply?.selectedRowId || info.message?.templateButtonReplyMessage?.selectedId || (info.message?.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson ? JSON.parse(info.message?.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson)?.id : null) || info?.text;
+    const isGroup = from.endsWith("@g.us");
+    const sender = isGroup ? info.key.participant : info.key.remoteJid;
 
-    if (!body || !body.startsWith(config.prefix)) continue;
-    let withoutPrefix = body.slice(config.prefix.length).trim();
-    if (withoutPrefix.startsWith(".")) {
-      withoutPrefix = withoutPrefix.slice(1).trim();
+    const { type, body, isMedia } = preProcessMessage(info);
+    const prefixResult = processPrefix(body, config.prefix);
+    if (!prefixResult) {
+      console.warn("Prefixo inválido para a mensagem:", body);
+      continue;
     }
+    const { comando, args } = prefixResult;
+    const text = args.join(" ");
+    const content = JSON.stringify(info.message);
 
-    if (!withoutPrefix) continue;
-    const parts = withoutPrefix.split(/ +/);
-    const comando = parts.shift().toLowerCase();
-    logger.warn(comando, body);
+    const isOwner = sender === config.owner.number;
 
-    if (!comando) continue;
-    const args = parts;
+    const { isQuotedMsg, isQuotedImage, isQuotedVideo, isQuotedDocument, isQuotedAudio, isQuotedSticker, isQuotedContact, isQuotedLocation, isQuotedProduct } = getQuotedChecks(type, content);
+    function getGroupAdmins(participants) {
+      const admins = [];
+      for (const participant of participants) {
+        if (participant.admin === "admin" || participant.admin === "superadmin") {
+          admins.push(participant.id);
+        }
+      }
+      return admins;
+    }
+    const groupMeta = await client.groupMetadata(from);
+    const isGroupAdmin = isGroup ? getGroupAdmins(groupMeta.participants).includes(sender) : false;
 
     const sendWithRetry = async (target, text, options = {}) => {
       if (typeof text !== "string") {
@@ -113,29 +123,11 @@ async function handleWhatsAppUpdate(upsert, client) {
       });
     };
 
-    const isGroup = from.endsWith("@g.us");
-    const sender = isGroup ? info.key.participant : info.key.remoteJid;
-    const text = args.join(" ");
-
-    const quotedTypes = {
-      textMessage: "isQuotedMsg",
-      imageMessage: "isQuotedImage",
-      videoMessage: "isQuotedVideo",
-      documentMessage: "isQuotedDocument",
-      audioMessage: "isQuotedAudio",
-      stickerMessage: "isQuotedSticker",
-      contactMessage: "isQuotedContact",
-      locationMessage: "isQuotedLocation",
-      productMessage: "isQuotedProduct",
-    };
-
-    const quotedChecks = {};
-    for (const [key, value] of Object.entries(quotedTypes)) {
-      quotedChecks[value] = type === "extendedTextMessage" && content.includes(key);
-    }
-
-    const { isQuotedMsg, isQuotedImage, isQuotedVideo, isQuotedDocument, isQuotedAudio, isQuotedSticker, isQuotedContact, isQuotedLocation, isQuotedProduct } = quotedChecks;
     switch (comando) {
+      case "ping":
+        {
+        }
+        break;
       case "cat": {
         const prompt = args.join(" ");
         try {
