@@ -6,6 +6,14 @@
 
 [![License#: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) ![GitHub commit activity](https://img.shields.io/github/commit-activity/y/kaikygr/galactic-cat) ![GitHub top language](https://img.shields.io/github/languages/top/kaikygr/galactic-cat) ![GitHub branch status](https://img.shields.io/github/checks-status/kaikygr/galactic-cat/main) ![GitHub repo size](https://img.shields.io/github/repo-size/kaikygr/galactic-cat) ![GitHub forks](https://img.shields.io/github/forks/kaikygr/galactic-cat) ![GitHub package.json version](https://img.shields.io/github/package-json/v/kaikygr/galactic-cat) ![GitHub Release](https://img.shields.io/github/v/release/kaikygr/galactic-cat)
 
+## Atualizações Recentes
+
+- Melhoria na integração com a API do WhatsApp.
+- Otimização do processamento de mensagens e redução de latência.
+- Novas funcionalidades para geração de stickers com metadados aprimorados.
+- Integração mais robusta com modelos de Inteligência Artificial (Gemini AI).
+- Correções de bugs e melhorias gerais de performance.
+
 ## Visão Geral
 
 _Galactic-Cat_ é um chatbot open-source desenvolvido em **Node.js** para integrar com o **WhatsApp**. Ele utiliza a API [@whiskeysockets/baileys](https://www.npmjs.com/package/@whiskeysockets/baileys) para gerenciar conexões, envio e recebimento de mensagens, e inclui funcionalidades avançadas como:
@@ -39,36 +47,6 @@ _Galactic-Cat_ é um chatbot open-source desenvolvido em **Node.js** para integr
 - **FFmpeg & Webpmux:** Utilizados na conversão de mídia para stickers.
 - **Outros:** Módulos internos de utilitários e configuração.
 
-## Estrutura do Projeto
-
-- **Configuração e Documentação**
-
-  - [.env](.env) – Variáveis de ambiente seguras.
-  - [.gitignore](.gitignore) – Arquivos e pastas ignoradas pelo Git.
-  - [LICENSE](LICENSE) – Termos da licença MIT.
-  - [README.md](README.md) – Documentação deste projeto.
-
-- **Código-Fonte (`src/`)**
-
-  - **auth/**
-    - [connection.js](src/auth/connection.js) – Gerencia a conexão e reconexão com o WhatsApp.
-    - **data/** – Dados de configuração e autenticação (ex.: [options.json](src/auth/data/options.json)).
-    - **temp/** – Armazena arquivos temporários de autenticação.
-  - **config/**
-    - [options.json](src/config/options.json) – Parâmetros de configuração do bot.
-  - **controllers/**
-    - [botController.js](src/controllers/botController.js) – Processa comandos e gerencia respostas (inclusive com integração ao Gemini AI).
-    - [messageController.js](src/controllers/messageController.js) – Formata e exibe mensagens no console.
-  - **modules/**
-    - **gemini/** – Integração com modelo de IA para respostas inteligentes ([index.js](src/modules/gemini/index.js)).
-    - **sticker/** – Conversão de mídia em stickers e gerenciamento dos metadados EXIF ([sticker.js](src/modules/sticker/sticker.js)).
-  - **temp/** – Armazena arquivos temporários do processamento.
-  - **utils/**
-    - [functions.js](src/utils/functions.js) – Funções auxiliares (ex.: manipulação de arquivos, requisições HTTP).
-
-- **Arquivo Principal**
-  - [start.js](start.js) – Ponto de entrada da aplicação, responsável por iniciar o bot.
-
 ## Como Rodar o Projeto
 
 Siga os passos abaixo para configurar e iniciar o bot:
@@ -89,7 +67,7 @@ Siga os passos abaixo para configurar e iniciar o bot:
 3. **Configuração do Ambiente:**
 
    - Crie um arquivo `.env` com as variáveis necessárias para a autenticação e demais integrações.
-   - Ajuste os dados de autenticação em [src/auth/data/options.json](src/auth/data/options.json) e os parâmetros do bot em [src/config/options.json](src/config/options.json).
+   - e os parâmetros do bot em [src/config/options.json](src/config/options.json).
 
 4. **Inicie o Bot:**
 

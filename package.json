@@ -1,6 +1,6 @@
 {
   "name": "cat-galactic",
-  "version": "0.0.4",
+  "version": "0.0.7",
   "description": "Um chatbot com uso de IA para WhatsApp",
   "main": "src",
   "scripts": {
