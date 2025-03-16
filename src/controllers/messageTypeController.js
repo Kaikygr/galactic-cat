@@ -61,4 +61,17 @@ function getQuotedChecks(type, content) {
   };
 }
 
-module.exports = { preProcessMessage, processPrefix, getQuotedChecks };
+function getExpiration(info) {
+  const messageTypes = ["conversation", "viewOnceMessageV2", "imageMessage", "videoMessage", "extendedTextMessage", "viewOnceMessage", "documentWithCaptionMessage", "buttonsMessage", "buttonsResponseMessage", "listResponseMessage", "templateButtonReplyMessage", "interactiveResponseMessage"];
+
+  for (const type of messageTypes) {
+    const message = info.message?.[type]?.message || info.message?.[type];
+    if (message?.contextInfo?.expiration) {
+      return message.contextInfo.expiration;
+    }
+  }
+
+  return null;
+}
+
+module.exports = { preProcessMessage, processPrefix, getQuotedChecks, getExpiration };

@@ -1,11 +1,8 @@
 # Ignorar dependências do Node.js
 node_modules/
 .env
-src/modules/gemini/data/config.json
 src/auth/temp
 /logs
 /src/temp
 package-lock.json
-error.log
-src/config/groupData.json
-src/_modules/gemini/chatHistory.json
+src/modules/gemini/chatHistory.json

@@ -7,7 +7,6 @@ const path = require("path");
 const NodeCache = require("node-cache");
 const { useMultiFileAuthState } = require("@whiskeysockets/baileys");
 const groupCache = new NodeCache({ stdTTL: 5 * 60, useClones: false });
-const { userMessageProcess } = require("./messagesProcess");
 const RECONNECT_INITIAL_DELAY = 2000;
 const RECONNECT_MAX_DELAY = 60000;
 let reconnectAttempts = 0;
@@ -70,7 +69,6 @@ const registerAllEventHandlers = (client, saveCreds) => {
 
       "messages.upsert": async data => {
         require(path.join(__dirname, "..", "controllers", "botController.js"))(data, client);
-        userMessageProcess(data, client);
       },
     };
 
