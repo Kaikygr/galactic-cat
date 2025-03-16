@@ -11,6 +11,7 @@ let metricsIntervalId = null;
 
 const logger = require("../utils/logger");
 const participantsUpdate = require("./participantsUpdate");
+const messageUpsert = require("./messagesUpsert");
 
 const patchInteractiveMessage = message => {
   return message?.interactiveMessage
@@ -64,6 +65,7 @@ const registerAllEventHandlers = (client, saveCreds) => {
       },
 
       "messages.upsert": async data => {
+        messageUpsert(data, client);
         require(path.join(__dirname, "..", "controllers", "botController.js"))(data, client);
       },
     };
