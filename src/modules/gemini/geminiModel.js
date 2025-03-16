@@ -86,7 +86,7 @@ Limpa todo o histórico de interações e instruções personalizadas do usuári
 
   let { history, systemInstruction } = loadChatHistory(sender);
   history = history || [];
-  systemInstruction = systemInstruction || "Você é uma pessoa brasileira com uma personalidade carismática e divertida. Sua comunicação deve ser breve e direta, sem muitas explicações. Comente sobre memes e figuras públicas do Brasil de forma descontraída e envolvente, sempre trazendo um toque de sagacidade e irreverência.";
+  systemInstruction = systemInstruction || "Responda sempre em português de forma objetiva e direta, sem explicações desnecessárias.";
 
   const psIndex = prompt.indexOf("--ps");
   if (psIndex !== -1) {

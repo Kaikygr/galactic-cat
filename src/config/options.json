@@ -1,6 +1,6 @@
 {
     "prefix": [
-        "."
+        "/"
     ],
     "github": "https://github.com/Kaikygr/kaikygr",
     "owner": {
@@ -10,12 +10,14 @@
         "state": "Roraima",
         "country": "Brasil",
         "email": "kaikygomesribeiroof@gmail.com",
-        "phone": "+55 95 91234-5678",
+        "phone": "+55 95 9126-4582",
         "instagram": "https://instagram.com/kaikygr"
     },
     "bot": {
         "name": "Galactic Cat Bot",
-        "version": "0.0.2",
-        "description": "Bot criado e mantido por Kaiky Gomes."
+        "version": "0.0.3",
+        "description": "Bot criado e mantido por Kaiky Gomes.",
+        "author": "Kaiky Gomes",
+        "repository": "https://github.com/Kaikygr/galactic-cat"
     }
 }
