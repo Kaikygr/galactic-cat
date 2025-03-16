@@ -70,7 +70,7 @@ async function handleGroupData(from, client) {
 
     await salvarGrupoJSON(groupData.id, detailedInfo);
   } catch (error) {
-    console.error(`❌ Erro ao processar o grupo ${from}:`, error);
+    logger.error(`❌ Erro ao processar o grupo ${from}:`, error);
   }
 }
 
@@ -97,15 +97,20 @@ async function salvarGrupoJSON(groupId, novoGrupo) {
 
     // Salva o JSON atualizado
     fs.writeFileSync(filePath, JSON.stringify(grupos, null, 2), "utf-8");
-    console.log(`✅ Dados do grupo ${novoGrupo.subject} salvos com sucesso!`);
+    logger.info(`✅ Dados do grupo ${novoGrupo.subject} salvos com sucesso!`);
   } catch (error) {
-    console.error("❌ Erro ao salvar JSON:", error);
+    logger.error("❌ Erro ao salvar JSON:", error);
   }
 }
 
-// Nova função auxiliar para mesclar objetos (merge deep)
+// Atualizada a função mergeDeep para substituir 'participants' e remover usuários ausentes na nova lista
 function mergeDeep(target, source) {
   for (const key in source) {
+    if (key === "participants") {
+      // Substitui completamente o objeto participants com a nova lista
+      target[key] = source[key];
+      continue;
+    }
     if (source[key] && typeof source[key] === "object" && !Array.isArray(source[key])) {
       target[key] = mergeDeep(target[key] || {}, source[key]);
     } else {
