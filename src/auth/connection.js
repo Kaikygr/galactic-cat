@@ -1,6 +1,3 @@
-/* eslint-disable prefer-const */
-/* eslint-disable no-unused-vars */
-
 const { default: makeWASocket, Browsers, makeInMemoryStore } = require("@whiskeysockets/baileys");
 const pino = require("pino");
 const path = require("path");
