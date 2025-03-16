@@ -1,8 +1,10 @@
-const { from } = require("multistream");
 const logger = require("../utils/logger");
-const baileys = require("@whiskeysockets/baileys");
 const fs = require("fs");
 const path = require("path");
+
+const GROUP_DATA_FILE = path.join(__dirname, "../database/grupos/groupData.json");
+let grupoDataCache = {};
+let writeTimeout = null;
 
 module.exports = async (data, client) => {
   logger.info("Data e cliente foram recebidos com sucesso");
@@ -14,7 +16,6 @@ module.exports = async (data, client) => {
 
 async function handleGroupData(from, client) {
   if (!from.endsWith("@g.us")) return;
-  // Alterado: novo diretório para armazenar o JSON
   const filePath = path.join(__dirname, "../database/grupos/groupData.json");
 
   const dirPath = path.dirname(filePath);
@@ -32,15 +33,14 @@ async function handleGroupData(from, client) {
     const adminList = groupData.participants.filter(p => p.admin === "admin" || p.admin === "superadmin").map(p => p.id);
     const membersComum = groupData.participants.filter(p => !p.admin).map(p => p.id);
 
-    // Formatar participantes com as novas informações
     const participants = {};
     groupData.participants.forEach(p => {
       participants[p.id] = {
         admin: !!p.admin,
-        messages: 0, // Inicializando o contador de mensagens
-        commands: 0, // Inicializando o contador de comandos
-        xp: 0, // Inicializando o XP
-        level: 1, // Inicializando o nível
+        messages: 0,
+        commands: 0,
+        xp: 0,
+        level: 1,
       };
     });
 
@@ -74,40 +74,41 @@ async function handleGroupData(from, client) {
   }
 }
 
+function scheduleCacheFlush() {
+  if (writeTimeout) clearTimeout(writeTimeout);
+  writeTimeout = setTimeout(() => {
+    const dirPath = path.dirname(GROUP_DATA_FILE);
+    if (!fs.existsSync(dirPath)) {
+      fs.mkdirSync(dirPath, { recursive: true });
+    }
+    fs.writeFileSync(GROUP_DATA_FILE, JSON.stringify(grupoDataCache, null, 2), "utf-8");
+    logger.info("📀 Cache atualizado em groupData.json com sucesso!");
+    writeTimeout = null;
+  }, 500); // tempo de atraso para evitar escritas seguidas
+}
+
 async function salvarGrupoJSON(groupId, novoGrupo) {
   try {
-    let grupos = {};
-
-    // Alterado: assegurar que o caminho do arquivo utilize a nova configuração de diretório
-    const filePath = path.join(__dirname, "../database/grupos/groupData.json");
-
-    // Se o arquivo existir, ler os dados atuais
-    if (fs.existsSync(filePath)) {
-      const data = fs.readFileSync(filePath, "utf-8");
-      grupos = JSON.parse(data);
+    if (Object.keys(grupoDataCache).length === 0 && fs.existsSync(GROUP_DATA_FILE)) {
+      const data = fs.readFileSync(GROUP_DATA_FILE, "utf-8");
+      grupoDataCache = JSON.parse(data);
     }
 
-    // Se os dados do grupo já existirem, compara e atualiza
-    if (grupos[groupId]) {
-      novoGrupo = mergeDeep(grupos[groupId], novoGrupo);
+    if (grupoDataCache[groupId]) {
+      novoGrupo = mergeDeep(grupoDataCache[groupId], novoGrupo);
     }
 
-    // Atualiza ou adiciona o grupo
-    grupos[groupId] = novoGrupo;
-
-    // Salva o JSON atualizado
-    fs.writeFileSync(filePath, JSON.stringify(grupos, null, 2), "utf-8");
-    logger.info(`✅ Dados do grupo ${novoGrupo.subject} salvos com sucesso!`);
+    grupoDataCache[groupId] = novoGrupo;
+    scheduleCacheFlush();
+    logger.info(`✅ Dados do grupo ${novoGrupo.subject} enfileirados para atualização no cache!`);
   } catch (error) {
     logger.error("❌ Erro ao salvar JSON:", error);
   }
 }
 
-// Atualizada a função mergeDeep para substituir 'participants' e remover usuários ausentes na nova lista
 function mergeDeep(target, source) {
   for (const key in source) {
     if (key === "participants") {
-      // Substitui completamente o objeto participants com a nova lista
       target[key] = source[key];
       continue;
     }
