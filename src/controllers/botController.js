@@ -14,7 +14,7 @@ const path = require("path");
 const axios = require("axios");
 
 // Importa os módulos de processamento de mensagens.
-const { generateAIContent } = require(path.join(__dirname, "../_modules/gemini/geminiModel"));
+const { generateAIContent } = require(path.join(__dirname, "../modules/gemini/geminiModel"));
 
 const { processSticker } = require(path.join(__dirname, "../modules/sticker/sticker"));
 const { getFileBuffer } = require(path.join(__dirname, "../utils/functions"));
@@ -82,6 +82,7 @@ async function handleWhatsAppUpdate(upsert, client) {
       return admins;
     }
     const groupMeta = await client.groupMetadata(from);
+    const groupFormattedData = JSON.stringify(groupMeta, null, 2);
     const isGroupAdmin = isGroup ? getGroupAdmins(groupMeta.participants).includes(sender) : false;
 
     const sendWithRetry = async (target, text, options = {}) => {
@@ -126,6 +127,7 @@ async function handleWhatsAppUpdate(upsert, client) {
     switch (comando) {
       case "ping":
         {
+          await userMessageReport(groupMeta.id);
         }
         break;
       case "cat": {
