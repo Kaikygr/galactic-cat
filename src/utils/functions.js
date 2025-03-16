@@ -12,10 +12,10 @@ const getBuffer = async (url, opcoes) => {
       headers: {
         "user-agent": "Mozilla/5.0 (Windows NT 6.3; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.128 Safari/537.36",
         DNT: 1,
-        "Upgrade-Insecure-Request": 1
+        "Upgrade-Insecure-Request": 1,
       },
       ...opcoes,
-      responseType: "arraybuffer"
+      responseType: "arraybuffer",
     });
     return post.data;
   } catch (e) {
@@ -44,15 +44,6 @@ const fetchJson = (url, options) =>
       });
   });
 
-function getGroupAdmins(participants) {
-  admins = [];
-  for (let i of participants) {
-    if (i.admin == "admin") admins.push(i.id);
-    if (i.admin == "superadmin") admins.push(i.id);
-  }
-  return admins;
-}
-
 const getFormattedTime = () => {
   const now = new Date();
   const hours = String(now.getHours()).padStart(2, "0");
@@ -65,6 +56,5 @@ module.exports = {
   getBuffer,
   getFileBuffer,
   fetchJson,
-  getGroupAdmins,
-  getFormattedTime
+  getFormattedTime,
 };

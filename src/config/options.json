@@ -1,10 +1,6 @@
 {
     "prefix": [
-        ".",
-        "!",
-        "#",
-        "$",
-        "/"
+        "."
     ],
     "github": "https://github.com/Kaikygr/kaikygr",
     "owner": {

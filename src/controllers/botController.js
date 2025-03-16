@@ -1,14 +1,23 @@
-/* eslint-disable no-sync */
-/* eslint-disable complexity */
-/* eslint-disable no-unused-vars */
+/*
+ * Arquivo responsável pelo gerenciamento geral do bot.
+ * Recebe e processa todos os dados de #auth/connection.js, incluindo as informações
+ * principais da sessão e dos usuários, além de outros eventos relevantes.
+ *
+ * Este arquivo deve utilizar módulos para o gerenciamento eficiente dos dados,
+ * garantindo uma estrutura organizada e de fácil manutenção.
+ */
 
 require("dotenv").config();
 
 const fs = require("fs-extra");
 const path = require("path");
-const { processGemini } = require(path.join(__dirname, "../modules/gemini/gemini"));
+const axios = require("axios");
+
+// Importa os módulos de processamento de mensagens.
+const { generateAIContent } = require(path.join(__dirname, "../_modules/gemini/geminiModel"));
+
 const { processSticker } = require(path.join(__dirname, "../modules/sticker/sticker"));
-const { getGroupAdmins, getFileBuffer } = require(path.join(__dirname, "../utils/functions"));
+const { getFileBuffer } = require(path.join(__dirname, "../utils/functions"));
 const { downloadYoutubeAudio, downloadYoutubeVideo } = require(path.join(__dirname, "../modules/youtube/youtube"));
 const { getVideoInfo } = require(path.join(__dirname, "../modules/youtube/index"));
 
@@ -17,100 +26,75 @@ const config = require(ConfigfilePath);
 
 const logger = require("../utils/logger");
 const ytSearch = require("yt-search");
-const axios = require("axios");
 
 const maxAttempts = 3;
 const delayMs = 3000;
 const sendTimeoutMs = 5000;
 const WA_DEFAULT_EPHEMERAL = 86400;
 
-async function retryOperation(operation, options = {}) {
-  const { retries = 3, delay = 1000, timeout = 5000 } = options;
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      return await Promise.race([operation(), new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), timeout))]);
-    } catch (error) {
-      if (attempt === retries) throw error;
-      await new Promise(resolve => setTimeout(resolve, delay));
-    }
-  }
-}
-
-function parseMessageInfo(info) {
-  const baileys = require("@whiskeysockets/baileys");
-  const from = info.key.remoteJid;
-  const content = JSON.stringify(info.message);
-  const type = baileys.getContentType(info.message);
-  const isMedia = type === "imageMessage" || type === "videoMessage";
-
-  const body = info.message?.conversation || info.message?.viewOnceMessageV2?.message?.imageMessage?.caption || info.message?.viewOnceMessageV2?.message?.videoMessage?.caption || info.message?.imageMessage?.caption || info.message?.videoMessage?.caption || info.message?.extendedTextMessage?.text || info.message?.viewOnceMessage?.message?.videoMessage?.caption || info.message?.viewOnceMessage?.message?.imageMessage?.caption || info.message?.documentWithCaptionMessage?.message?.documentMessage?.caption || info.message?.buttonsMessage?.imageMessage?.caption || info.message?.buttonsResponseMessage?.selectedButtonId || info.message?.listResponseMessage?.singleSelectReply?.selectedRowId || info.message?.templateButtonReplyMessage?.selectedId || (info.message?.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson ? JSON.parse(info.message?.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson)?.id : null) || info?.text || "";
-  return {
-    from,
-    content,
-    type,
-    isMedia,
-    cleanedBody: (body || "").trim(),
-  };
-}
-
-function getCommandData(cleanedBody, config) {
-  let prefixes = [];
-  if (Array.isArray(config.prefix)) {
-    prefixes = config.prefix.filter(p => typeof p === "string" && p.trim() !== "").map(p => p.trim());
-  } else if (typeof config.prefix === "string" && config.prefix.trim()) {
-    prefixes = [config.prefix.trim()];
-  }
-  if (prefixes.length === 0) return null;
-  const matchingPrefix = prefixes.find(p => cleanedBody.startsWith(p));
-  if (!matchingPrefix) return null;
-  const withoutPrefix = cleanedBody.slice(matchingPrefix.length).trim();
-  if (!withoutPrefix) return null;
-  const parts = withoutPrefix.split(/ +/);
-  const comando = parts[0].toLowerCase();
-  const args = parts.slice(1);
-  return { comando, args, usedPrefix: matchingPrefix };
-}
-
-async function getGroupContext(client, from, info) {
-  let groupMetadata = "";
-  let groupName = "";
-  let groupDesc = "";
-  let groupMembers = "";
-  let groupAdmins = "";
-  if (from.endsWith("@g.us")) {
-    groupMetadata = await client.groupMetadata(from);
-    groupName = groupMetadata.subject;
-    groupDesc = groupMetadata.desc;
-    groupMembers = groupMetadata.participants;
-    groupAdmins = getGroupAdmins(groupMembers);
-  }
-  return { groupMetadata, groupName, groupDesc, groupMembers, groupAdmins };
-}
+const { preProcessMessage, processPrefix, getQuotedChecks } = require(path.join(__dirname, "./messageTypeController"));
 
 async function handleWhatsAppUpdate(upsert, client) {
+  async function retryOperation(operation, options = {}) {
+    const { retries = 3, delay = 1000, timeout = 5000 } = options;
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        return await Promise.race([operation(), new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), timeout))]);
+      } catch (error) {
+        if (attempt === retries) throw error;
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+
   for (const info of upsert?.messages || []) {
     if (info.key.fromMe === true) return;
     if (!info || !info.key || !info.message) continue;
-
+    if (upsert?.type === "append" || info.key.fromMe) continue;
     await client.readMessages([info.key]);
 
-    if (upsert?.type === "append" || info.key.fromMe) continue;
+    console.log(JSON.stringify(info, null, 2));
 
-    const { from, content, type, isMedia, cleanedBody } = parseMessageInfo(info);
+    const from = info.key.remoteJid;
+    const isGroup = from.endsWith("@g.us");
+    const sender = isGroup ? info.key.participant : info.key.remoteJid;
 
-    if (!cleanedBody) {
+    const { type, body, isMedia } = preProcessMessage(info);
+    const prefixResult = processPrefix(body, config.prefix);
+    if (!prefixResult) {
+      console.warn("Prefixo inválido para a mensagem:", body);
       continue;
     }
+    const { comando, args } = prefixResult;
+    const text = args.join(" ");
+    const content = JSON.stringify(info.message);
+
+    const isOwner = sender === config.owner.number;
+
+    const { isQuotedMsg, isQuotedImage, isQuotedVideo, isQuotedDocument, isQuotedAudio, isQuotedSticker, isQuotedContact, isQuotedLocation, isQuotedProduct } = getQuotedChecks(type, content);
+    function getGroupAdmins(participants) {
+      const admins = [];
+      for (const participant of participants) {
+        if (participant.admin === "admin" || participant.admin === "superadmin") {
+          admins.push(participant.id);
+        }
+      }
+      return admins;
+    }
+    const groupMeta = await client.groupMetadata(from);
+    const isGroupAdmin = isGroup ? getGroupAdmins(groupMeta.participants).includes(sender) : false;
 
     const sendWithRetry = async (target, text, options = {}) => {
       if (typeof text !== "string") {
         text = String(text);
       }
       text = text.trim();
+
       if (!text) {
-        logger.warn("sendWithRetry: texto vazio após sanitização");
+        logger.warn("texto vazio após sanitização");
         return;
       }
+
       try {
         await retryOperation(() => client.sendMessage(target, { text }, options), {
           retries: maxAttempts,
@@ -129,7 +113,7 @@ async function handleWhatsAppUpdate(upsert, client) {
     const ownerReport = async message => {
       const sanitizedMessage = String(message).trim();
       if (!sanitizedMessage) {
-        logger.warn("ownerReport: Empty text after sanitization");
+        logger.warn("texto vazio após sanitização");
         return;
       }
 
@@ -139,47 +123,22 @@ async function handleWhatsAppUpdate(upsert, client) {
       });
     };
 
-    if (from === "120363047659668203@g.us" && Math.floor(Math.random() * 100) < 10) {
-      await processGemini(cleanedBody, logger, userMessageReport, ownerReport);
-    }
-
-    const cmdData = getCommandData(cleanedBody, config);
-    if (!cmdData) {
-      continue;
-    }
-
-    const { comando, args } = cmdData;
-
-    const isGroup = from.endsWith("@g.us");
-    const sender = isGroup ? info.key.participant : info.key.remoteJid;
-    const isOwner = config.owner.number === sender;
-    const { groupAdmins } = await getGroupContext(client, from, info);
-
-    const text = args.join(" ");
-
-    const quotedTypes = {
-      textMessage: "isQuotedMsg",
-      imageMessage: "isQuotedImage",
-      videoMessage: "isQuotedVideo",
-      documentMessage: "isQuotedDocument",
-      audioMessage: "isQuotedAudio",
-      stickerMessage: "isQuotedSticker",
-      contactMessage: "isQuotedContact",
-      locationMessage: "isQuotedLocation",
-      productMessage: "isQuotedProduct",
-    };
-
-    const quotedChecks = {};
-    for (const [key, value] of Object.entries(quotedTypes)) {
-      quotedChecks[value] = type === "extendedTextMessage" && content.includes(key);
-    }
-
-    const { isQuotedMsg, isQuotedImage, isQuotedVideo, isQuotedDocument, isQuotedAudio, isQuotedSticker, isQuotedContact, isQuotedLocation, isQuotedProduct } = quotedChecks;
-
     switch (comando) {
-      case "cat":
-        await processGemini(text, logger, userMessageReport, ownerReport);
+      case "ping":
+        {
+        }
         break;
+      case "cat": {
+        const prompt = args.join(" ");
+        try {
+          const response = await generateAIContent(sender, prompt);
+          await userMessageReport(response);
+        } catch (error) {
+          await userMessageReport("Erro ao gerar conteúdo com o modelo Gemini. Por favor, tente novamente.");
+          await ownerReport("Erro ao gerar conteúdo com o modelo Gemini:", error);
+        }
+        break;
+      }
 
       case "sticker":
       case "s": {
@@ -292,7 +251,7 @@ const watcher = fs.watch(file, eventType => {
   if (eventType === "change") {
     if (debounceTimeout) clearTimeout(debounceTimeout);
     debounceTimeout = setTimeout(() => {
-      logger.info(`O arquivo "${file}" foi atualizado.`);
+      logger.warn(`O arquivo "${file}" foi atualizado.`);
       try {
         delete require.cache[file];
         require(file);
