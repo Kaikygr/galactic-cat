@@ -14,24 +14,35 @@ async function handleParticipantsUpdate(event, client) {
     const data = fs.readFileSync(groupDataPath, "utf8");
     groupData = JSON.parse(data);
   } catch (error) {
-    logger.error(`Failed to read groupData file: ${error.message}`);
+    logger.error(`Falha ao ler o arquivo groupData: ${error.message}`);
     return;
   }
 
   const group = groupData[id];
 
   if (!group) {
-    logger.warn(`Group ${id} not found in groupData`);
+    logger.warn(`Grupo ${id} não encontrado no groupData`);
     return;
   }
 
   const welcomeConfig = group.welcome;
+  const groupName = group.subject;
+  const groupSize = group.size;
+  const groupCreationDate = new Date(group.creation * 1000).toLocaleDateString("pt-BR");
+  const groupDescription = group.desc || "Sem descrição";
+  const adminCount = group.adminList.length;
 
   if (action === "add") {
     for (const participant of participants) {
-      logger.info(`Participant ${participant} added by ${author} to group ${id}`);
+      logger.info(`Participante ${participant} adicionado ${author} ao groupo: ${id}`);
       if (welcomeConfig.status === "on") {
-        let welcomeMessage = welcomeConfig.mensagemEntrada.replace("@#user", `@${participant.split("@")[0]}`);
+        let welcomeMessage = welcomeConfig.mensagemEntrada
+          .replace("#user", `@${participant.split("@")[0]}`)
+          .replace("#group", groupName)
+          .replace("#size", groupSize)
+          .replace("#created", groupCreationDate)
+          .replace("#desc", groupDescription)
+          .replace("#admins", adminCount);
         try {
           if (welcomeConfig.mediaEntrada.ativo) {
             const mediaBuffer = await getMediaBuffer(welcomeConfig.mediaEntrada.url);
@@ -50,15 +61,21 @@ async function handleParticipantsUpdate(event, client) {
             await client.sendMessage(event.id, { text: welcomeMessage, mentions: [participant] });
           }
         } catch (error) {
-          logger.error(`Failed to send welcome message to ${participant}: ${error.message}`);
+          logger.error(`Falha ao enviar mensagem de boas-vindas para: ${participant}: ${error.message}`);
         }
       }
     }
   } else if (action === "remove") {
     for (const participant of participants) {
-      logger.info(`Participant ${participant} removed by ${author} from group ${id}`);
+      logger.info(`Participante ${participant} removido ${author} do grupo: ${id}`);
       if (welcomeConfig.status === "on") {
-        const goodbyeMessage = welcomeConfig.mensagemSaida.replace("@#user", `@${participant.split("@")[0]}`);
+        const goodbyeMessage = welcomeConfig.mensagemSaida
+          .replace("#user", `@${participant.split("@")[0]}`)
+          .replace("#group", groupName)
+          .replace("#size", groupSize)
+          .replace("#created", groupCreationDate)
+          .replace("#desc", groupDescription)
+          .replace("#admins", adminCount);
         try {
           if (welcomeConfig.mediaSaida.ativo) {
             const mediaBuffer = await getMediaBuffer(welcomeConfig.mediaSaida.url);
@@ -77,12 +94,12 @@ async function handleParticipantsUpdate(event, client) {
             await client.sendMessage(event.id, { text: goodbyeMessage, mentions: [participant] });
           }
         } catch (error) {
-          logger.error(`Failed to send goodbye message to ${participant}: ${error.message}`);
+          logger.error(`Falha ao enviar mensagem de despedida para: ${participant}: ${error.message}`);
         }
       }
     }
   } else {
-    logger.warn(`Unknown action: ${action}`);
+    logger.warn(`Ação desconhecida: ${action}`);
   }
 }
 

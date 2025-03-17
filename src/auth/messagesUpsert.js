@@ -121,7 +121,6 @@ function validateGroupData(data) {
   if (!data.subject || typeof data.subject !== "string") return false;
   if (!data.participants || typeof data.participants !== "object") return false;
 
-  // Verificação opcional para campos extras
   if (data.welcome !== undefined && typeof data.welcome !== "object") return false;
   if (data.banned !== undefined && !Array.isArray(data.banned)) return false;
   if (data.usersAdvetencias !== undefined && typeof data.usersAdvetencias !== "object") return false;
