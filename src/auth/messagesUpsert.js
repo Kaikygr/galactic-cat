@@ -3,8 +3,6 @@ const fs = require("fs");
 const path = require("path");
 
 const GROUP_DATA_FILE = path.join(__dirname, "../database/grupos/groupData.json");
-let grupoDataCache = {};
-let writeTimeout = null;
 
 module.exports = async (data, client) => {
   logger.info("Data e cliente foram recebidos com sucesso");
@@ -62,7 +60,21 @@ async function handleGroupData(from, client) {
       ephemeralDuration: groupData.ephemeralDuration,
       adminList,
       membersComum,
-      welcome: {},
+      welcome: {
+        status: "off",
+        mensagemEntrada: "Olá @#user, seja bem-vindo! 😊",
+        mensagemSaida: "Até logo, @#user! 👋",
+        mediaEntrada: {
+          ativo: false,
+          tipo: "imagem",
+          url: "",
+        },
+        mediaSaida: {
+          ativo: false,
+          tipo: "imagem",
+          url: "",
+        },
+      },
       banned: [],
       usersAdvetencias: {},
       forbiddenWords: [],
@@ -74,36 +86,48 @@ async function handleGroupData(from, client) {
   }
 }
 
-function scheduleCacheFlush() {
-  if (writeTimeout) clearTimeout(writeTimeout);
-  writeTimeout = setTimeout(() => {
-    const dirPath = path.dirname(GROUP_DATA_FILE);
-    if (!fs.existsSync(dirPath)) {
-      fs.mkdirSync(dirPath, { recursive: true });
-    }
-    fs.writeFileSync(GROUP_DATA_FILE, JSON.stringify(grupoDataCache, null, 2), "utf-8");
-    logger.info("📀 Cache atualizado em groupData.json com sucesso!");
-    writeTimeout = null;
-  }, 500); // tempo de atraso para evitar escritas seguidas
-}
-
 async function salvarGrupoJSON(groupId, novoGrupo) {
   try {
-    if (Object.keys(grupoDataCache).length === 0 && fs.existsSync(GROUP_DATA_FILE)) {
+    if (!validateGroupData(novoGrupo)) {
+      logger.warn(`⚠️ Dados inválidos para o grupo ${groupId}. Operação abortada.`);
+      return;
+    }
+
+    let currentData = {};
+    if (fs.existsSync(GROUP_DATA_FILE)) {
       const data = fs.readFileSync(GROUP_DATA_FILE, "utf-8");
-      grupoDataCache = JSON.parse(data);
+      currentData = JSON.parse(data);
     }
 
-    if (grupoDataCache[groupId]) {
-      novoGrupo = mergeDeep(grupoDataCache[groupId], novoGrupo);
+    if (currentData[groupId]) {
+      const cached = currentData[groupId];
+      novoGrupo = mergeDeep(cached, novoGrupo);
+      novoGrupo.welcome = cached.welcome;
+      novoGrupo.banned = cached.banned;
+      novoGrupo.usersAdvetencias = cached.usersAdvetencias;
+      novoGrupo.forbiddenWords = cached.forbiddenWords;
     }
 
-    grupoDataCache[groupId] = novoGrupo;
-    scheduleCacheFlush();
-    logger.info(`✅ Dados do grupo ${novoGrupo.subject} enfileirados para atualização no cache!`);
+    currentData[groupId] = novoGrupo;
+    fs.writeFileSync(GROUP_DATA_FILE, JSON.stringify(currentData, null, 2), "utf-8");
+    logger.info(`✅ Dados do grupo ${novoGrupo.subject} escritos no arquivo groupData.json!`);
   } catch (error) {
     logger.error("❌ Erro ao salvar JSON:", error);
   }
+}
+
+function validateGroupData(data) {
+  if (!data || typeof data !== "object") return false;
+  if (!data.subject || typeof data.subject !== "string") return false;
+  if (!data.participants || typeof data.participants !== "object") return false;
+
+  // Verificação opcional para campos extras
+  if (data.welcome !== undefined && typeof data.welcome !== "object") return false;
+  if (data.banned !== undefined && !Array.isArray(data.banned)) return false;
+  if (data.usersAdvetencias !== undefined && typeof data.usersAdvetencias !== "object") return false;
+  if (data.forbiddenWords !== undefined && !Array.isArray(data.forbiddenWords)) return false;
+
+  return true;
 }
 
 function mergeDeep(target, source) {
@@ -111,6 +135,14 @@ function mergeDeep(target, source) {
     if (key === "participants") {
       target[key] = source[key];
       continue;
+    }
+    if (["welcome", "usersAdvetencias", "banned", "forbiddenWords"].includes(key)) {
+      if (target[key] !== undefined) {
+        continue;
+      } else {
+        target[key] = source[key];
+        continue;
+      }
     }
     if (source[key] && typeof source[key] === "object" && !Array.isArray(source[key])) {
       target[key] = mergeDeep(target[key] || {}, source[key]);
