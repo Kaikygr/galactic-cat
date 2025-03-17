@@ -52,9 +52,20 @@ const getFormattedTime = () => {
   return `${hours}:${minutes}:${seconds}`;
 };
 
+const getMediaBuffer = async url => {
+  try {
+    const response = await axios.get(url, { responseType: "arraybuffer" });
+    return Buffer.from(response.data, "binary");
+  } catch (error) {
+    console.error(`Failed to fetch media from URL: ${error.message}`);
+    throw error;
+  }
+};
+
 module.exports = {
   getBuffer,
   getFileBuffer,
   fetchJson,
   getFormattedTime,
+  getMediaBuffer,
 };
