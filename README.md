@@ -38,13 +38,18 @@ Siga os passos abaixo para configurar e iniciar o bot:
 3. **Configuração do Ambiente:**
 
    - Crie um arquivo `.env` com as variáveis necessárias para a autenticação e demais integrações.
-   - e os parâmetros do bot em [src/config/options.json](src/config/options.json).
+   - Configure os parâmetros do bot em [src/config/options.json](src/config/options.json).
 
-4. **Inicie o Bot:**
+4. **Inicie o Bot com PM2:**
 
-   ```bash
-   npm start
-   ```
+   - Para iniciar em produção, execute:
+     ```bash
+     npm start
+     ```
+   - Para verificar os logs:
+     ```bash
+     npm run logs
+     ```
 
    O bot irá iniciar o processo de conexão (gerenciado por connection.js) e exibirá um QR Code no terminal para emparelhamento caso ainda não esteja registrado.
 
