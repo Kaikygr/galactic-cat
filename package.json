@@ -5,6 +5,7 @@
   "main": "src",
   "scripts": {
     "start": "npx pm2 start cosmic.config.js",
+    "startDev": "node ./src/auth/connection.js",
     "restart": "npx pm2 restart cosmic.config.js",
     "stop": "npx pm2 stop cosmic.config.js",
     "delete": "npx pm2 delete cosmic.config.js",

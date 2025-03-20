@@ -1,3 +1,22 @@
+/*
+* Este arquivo é responsável por iniciar a conexão com o WhatsApp.
+* Ele é executado automaticamente quando o bot é iniciado.
+*/
+
+/**
+ * @module auth/connection
+ * @description
+ * Este módulo configura a conexão do socket do WhatsApp utilizando a biblioteca Baileys.
+ *
+ * Ele importa os seguintes elementos do pacote "@whiskeysockets/baileys":
+ * - makeWASocket (exportação padrão): Função para inicializar uma nova conexão de socket do WhatsApp.
+ * - Browsers: Enumeração dos tipos de navegadores suportados que podem ser usados para simular um ambiente de cliente.
+ * - makeInMemoryStore: Função para criar um armazenamento em memória para gerenciar o estado da sessão ou conexão.
+ *
+ * @requires @whiskeysockets/baileys
+ */
+
+
 const { default: makeWASocket, Browsers, makeInMemoryStore } = require("@whiskeysockets/baileys");
 const pino = require("pino");
 const path = require("path");
