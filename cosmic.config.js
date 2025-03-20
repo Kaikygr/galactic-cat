@@ -1,13 +1,13 @@
 module.exports = {
   apps: [
     {
-      name: "cosmic-cat",
+      // Configuração de produção
+      name: "cosmic-cat-production",
       script: "./src/auth/connection.js",
       exec_mode: "fork",
       instances: 1,
-      watch: true,
-      ignore_watch: ["node_modules", "./src/auth/temp", "./src/auth/logs", "./src/temp"],
+      watch: false, // produção não reinicia automaticamente
       max_memory_restart: "1000M",
-    },
+    }
   ],
 };
