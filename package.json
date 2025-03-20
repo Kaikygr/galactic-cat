@@ -4,8 +4,11 @@
   "description": "Um chatbot com uso de IA para WhatsApp",
   "main": "src",
   "scripts": {
-    "start": "node start.js",
-    "lint": "eslint ."
+    "start": "pm2 start cosmic.config.js",
+    "restart": "pm2 restart cosmic.config.js",
+    "stop": "pm2 stop cosmic.config.js",
+    "delete": "pm2 delete cosmic.config.js",
+    "logs": "pm2 monit"
   },
   "author": "kaikygr",
   "license": "MIT",
@@ -54,6 +57,7 @@
     "parse-ms": "4.0.0",
     "performance-now": "2.1.0",
     "pino": "9.6.0",
+    "pm2": "^6.0.5",
     "qrcode-terminal": "0.12.0",
     "qs": "6.14.0",
     "queue": "7.0.0",

@@ -64,7 +64,7 @@ async function handleWhatsAppUpdate(upsert, client) {
     const expirationMessage = getExpiration(info) === null ? null : getExpiration(info);
 
     const { type, body, isMedia } = preProcessMessage(info);
-    const prefixResult = processPrefix(body, config.prefix);
+    const prefixResult = processPrefix(body, process.env.GLOBAL_PREFIX);
     if (!prefixResult) continue;
 
     const { comando, args } = prefixResult;
