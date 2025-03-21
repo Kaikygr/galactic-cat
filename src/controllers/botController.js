@@ -50,7 +50,7 @@ async function handleWhatsAppUpdate(upsert, client) {
   for (const info of upsert?.messages || []) {
     if (!info || !info.key || !info.message) continue;
     if (info.key.fromMe) continue; // Ignorar mensagens enviadas pelo próprio bot
-
+console.log(JSON.stringify(info, null, 2));
     try {
       await client.readMessages([info.key]);
       logger.info(`Mensagem marcada como lida: ${info.key.participant || info.key.remoteJid}`);
