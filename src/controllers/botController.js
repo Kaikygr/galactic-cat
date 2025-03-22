@@ -29,6 +29,7 @@ const WA_DEFAULT_EPHEMERAL = 86400;
 const { preProcessMessage, processPrefix, getQuotedChecks, getExpiration } = require(path.join(__dirname, "./messageTypeController"));
 
 async function handleWhatsAppUpdate(upsert, client) {
+  
   async function retryOperation(operation, options = {}) {
     const { retries = 3, delay = 1000, timeout = 5000 } = options;
     for (let attempt = 1; attempt <= retries; attempt++) {
@@ -43,8 +44,8 @@ async function handleWhatsAppUpdate(upsert, client) {
 
   for (const info of upsert?.messages || []) {
     if (!info || !info.key || !info.message) continue;
-    if (info.key.fromMe) continue; // Ignorar mensagens enviadas pelo próprio bot
-console.log(JSON.stringify(info, null, 2));
+    if (info.key.fromMe) continue;
+
     try {
       await client.readMessages([info.key]);
       logger.info(`Mensagem marcada como lida: ${info.key.participant || info.key.remoteJid}`);
@@ -68,6 +69,7 @@ console.log(JSON.stringify(info, null, 2));
     const isOwner = sender === config.owner.number;
 
     const { isQuotedMsg, isQuotedImage, isQuotedVideo, isQuotedDocument, isQuotedAudio, isQuotedSticker, isQuotedContact, isQuotedLocation, isQuotedProduct } = getQuotedChecks(type, content);
+   
     function getGroupAdmins(participants) {
       const admins = [];
       for (const participant of participants) {
@@ -81,45 +83,7 @@ console.log(JSON.stringify(info, null, 2));
     const groupFormattedData = groupMeta ? JSON.stringify(groupMeta, null, 2) : null;
     const isGroupAdmin = isGroup ? getGroupAdmins(groupMeta.participants).includes(sender) : false;
 
-    const sendWithRetry = async (target, text, options = {}) => {
-      if (typeof text !== "string") {
-        text = String(text);
-      }
-      text = text.trim();
-
-      if (!text) {
-        logger.warn("texto vazio após sanitização");
-        return;
-      }
-
-      try {
-        await retryOperation(() => client.sendMessage(target, { text }, options), {
-          retries: maxAttempts,
-          delay: delayMs,
-          timeout: sendTimeoutMs,
-        });
-      } catch (error) {
-        logger.error(`Todas as tentativas de envio falharam para ${target}.`, error);
-      }
-    };
-
-    const userMessageReport = async texto => {
-      await sendWithRetry(from, texto, { quoted: info, ephemeralExpiration: WA_DEFAULT_EPHEMERAL });
-    };
-
-    const ownerReport = async message => {
-      const sanitizedMessage = String(message).trim();
-      if (!sanitizedMessage) {
-        logger.warn("texto vazio após sanitização");
-        return;
-      }
-
-      const formattedMessage = JSON.stringify(sanitizedMessage, null, 2);
-      await sendWithRetry(config.owner.number, formattedMessage, {
-        ephemeralExpiration: WA_DEFAULT_EPHEMERAL,
-      });
-    };
-
+    
     switch (comando) {
       case "cat":
       case "gemini":
