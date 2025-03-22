@@ -1,9 +1,7 @@
 const { Client } = require('pg');
 require('dotenv').config();
 
-// Função para processar e salvar dados
 async function processMessage(data) {
-    // Utiliza data.messages[0] para todas as referências
     const message = data.messages[0];
 
     const client = new Client({
@@ -15,10 +13,8 @@ async function processMessage(data) {
     });
 
     try {
-        // Conectar ao banco de dados
         await client.connect();
 
-        // Verificar se a tabela geral já existe antes de tentar criá-la
         const tableExistsQuery = `
             SELECT EXISTS (
                 SELECT FROM information_schema.tables 
@@ -29,7 +25,6 @@ async function processMessage(data) {
         const tableExistsResult = await client.query(tableExistsQuery);
 
         if (!tableExistsResult.rows[0].exists) {
-            // Criar a tabela geral se não existir
             const createTableQuery = `
                 CREATE TABLE geral (
                     participant_id TEXT PRIMARY KEY,
@@ -42,7 +37,6 @@ async function processMessage(data) {
             await client.query(createTableQuery);
         }
 
-        // Verificar se a tabela logs já existe antes de tentar criá-la
         const logsTableExistsQuery = `
             SELECT EXISTS (
                 SELECT FROM information_schema.tables 
@@ -53,7 +47,6 @@ async function processMessage(data) {
         const logsTableExistsResult = await client.query(logsTableExistsQuery);
 
         if (!logsTableExistsResult.rows[0].exists) {
-            // Criar a tabela logs se não existir
             const createLogsTableQuery = `
                 CREATE TABLE logs (
                     message_id TEXT PRIMARY KEY,
@@ -63,38 +56,24 @@ async function processMessage(data) {
             await client.query(createLogsTableQuery);
         }
 
-        // Verifica se a chave participant está presente e válida, senão usa remoteJid
         const participant =
             message.key.participant ||
             (message.key.remoteJid && !message.key.remoteJid.endsWith('g.us') ? message.key.remoteJid : null);
 
-        // Se nenhum valor válido for encontrado, lança erro
         if (!participant) {
             throw new Error('Não foi possível encontrar o participant ou remoteJid válido');
         }
 
-        // Extraindo os dados necessários a partir de message
         const name = message.pushName;
         const messageId = message.key.id;
 
-        // Converte o timestamp para um número válido
         const rawTimestamp = message.messageTimestamp;
         const timestamp = typeof rawTimestamp === 'object' && 'low' in rawTimestamp
-            ? rawTimestamp.low // Use a propriedade 'low' como timestamp
+            ? rawTimestamp.low
             : rawTimestamp;
 
-        const fullJson = JSON.stringify(message); // O JSON completo
+        const fullJson = JSON.stringify(message); 
 
-        // Caso o participante seja de grupo, trata a lógica
-        if (message.key.remoteJid.endsWith('.g.us')) {
-            console.log(`Grupo: ${message.key.remoteJid} - Participante: ${participant}`);
-        } else {
-            console.log(`Chat privado: ${participant}`);
-        }
-
-        console.log(`Mensagem de ${name}`);
-
-        // Inserir ou atualizar os dados na tabela geral
         const upsertQuery = `
             INSERT INTO geral (participant_id, name, message_id, timestamp, count)
             VALUES ($1, $2, $3, $4, 1)
@@ -108,7 +87,6 @@ async function processMessage(data) {
         const upsertValues = [participant, name, messageId, timestamp];
         await client.query(upsertQuery, upsertValues);
 
-        // Inserir os dados na tabela logs
         const insertLogsQuery = `
             INSERT INTO logs (message_id, full_json)
             VALUES ($1, $2)
@@ -123,7 +101,6 @@ async function processMessage(data) {
         console.error('Erro ao processar ou salvar no banco:', error.message);
         throw error;
     } finally {
-        // Fechar a conexão com o banco de dados
         await client.end();
     }
 }
