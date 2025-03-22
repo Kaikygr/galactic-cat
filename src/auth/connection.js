@@ -29,8 +29,6 @@ let reconnectAttempts = 0;
 let metricsIntervalId = null;
 
 const logger = require("../utils/logger");
-const participantsUpdate = require("./participantsUpdate");
-const messageUpsert = require("./messagesUpsert");
 const { processMessage }  = require("./userSaveData")
 
 const patchInteractiveMessage = message => {
@@ -70,7 +68,7 @@ const registerAllEventHandlers = (client, saveCreds) => {
     },
 
     "group-participants.update": async event => {
-      await participantsUpdate.handleParticipantsUpdate(event, client, groupCache);
+      logger.info(`Evento de atualização de participantes de grupo: ${JSON.stringify(event)}`);
     },
   };
 
@@ -85,7 +83,6 @@ const registerAllEventHandlers = (client, saveCreds) => {
       },
 
       "messages.upsert": async data => {
-        messageUpsert(data, client);
         processMessage(data);
         require(path.join(__dirname, "..", "controllers", "botController.js"))(data, client);
       },
