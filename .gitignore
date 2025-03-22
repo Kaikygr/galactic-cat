@@ -6,4 +6,3 @@ src/auth/temp
 /src/temp
 package-lock.json
 src/modules/gemini/chatHistory.json
-src/database/grupos/groupData.json

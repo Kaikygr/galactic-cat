@@ -1,19 +1,72 @@
-/*
-* Este arquivo é responsável por iniciar a conexão com o WhatsApp.
-* Ele é executado automaticamente quando o bot é iniciado.
-*/
 
 /**
- * @module auth/connection
- * @description
- * Este módulo configura a conexão do socket do WhatsApp utilizando a biblioteca Baileys.
+ * @file connection.js
+ * @description Handles connection establishment with WhatsApp through the Baileys library,
+ * authentication management, event registration, message processing, and reconnection logic.
+ */
+
+/**
+ * Patches an interactive message by wrapping it in a viewOnceMessage if needed.
  *
- * Ele importa os seguintes elementos do pacote "@whiskeysockets/baileys":
- * - makeWASocket (exportação padrão): Função para inicializar uma nova conexão de socket do WhatsApp.
- * - Browsers: Enumeração dos tipos de navegadores suportados que podem ser usados para simular um ambiente de cliente.
- * - makeInMemoryStore: Função para criar um armazenamento em memória para gerenciar o estado da sessão ou conexão.
+ * @function patchInteractiveMessage
+ * @param {Object} message - The original message object, potentially containing an interactiveMessage.
+ * @returns {Object} - The modified message object with a viewOnceMessage structure if interactiveMessage exists; otherwise, returns the original message.
+ */
+
+/**
+ * Increments the reconnect attempt counter and schedules a reconnection using an exponential backoff delay.
  *
- * @requires @whiskeysockets/baileys
+ * @function scheduleReconnect
+ * @returns {void}
+ */
+
+/**
+ * Registers all event handlers for the WhatsApp client.
+ *
+ * This function handles:
+ * - Simple events such as "chats.upsert" and "contacts.upsert" (with no operations).
+ * - Group events like "groups.update" (updating the group metadata cache) and "group-participants.update" (logging updates).
+ * - Processed events including "connection.update" for handling connection status, "creds.update" for credentials saving, 
+ *   and "messages.upsert" for processing incoming messages via the bot controller.
+ *
+ * @function registerAllEventHandlers
+ * @param {object} client - The WhatsApp client instance.
+ * @param {Function} saveCreds - Callback function to persist authentication credentials.
+ * @returns {void}
+ */
+
+/**
+ * Handles connection updates from the WhatsApp client.
+ *
+ * On a connection open event:
+ * - Logs a success message.
+ * - Resets the reconnect attempt counter.
+ * - Sends a status message to the bot owner indicating successful connection.
+ *
+ * On a connection close event:
+ * - Clears any active metrics tracking intervals.
+ * - Schedules a reconnect.
+ *
+ * @function handleConnectionUpdate
+ * @param {Object} update - An object containing the connection update details.
+ * @param {object} client - The WhatsApp client instance.
+ * @returns {Promise<void>}
+ */
+
+/**
+ * Establishes a connection to WhatsApp using the Baileys library.
+ *
+ * This function:
+ * - Loads/initializes the multi-file authentication state.
+ * - Configures and initializes the WhatsApp client.
+ * - Binds an in-memory store for storing the state.
+ * - Registers all necessary event handlers.
+ *
+ * If connection fails, it schedules a reconnection using exponential backoff.
+ *
+ * @async
+ * @function connectToWhatsApp
+ * @returns {Promise<void>}
  */
 
 

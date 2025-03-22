@@ -14,7 +14,7 @@ _Galactic-Cat_ é um chatbot open-source desenvolvido em **Node.js** para integr
 
 - **Node.js:** Plataforma para execução do JavaScript.
 - **@whiskeysockets/baileys:** API para integração com WhatsApp.
-- **SQLite:** Banco de dados leve para armazenamento de interações.
+- **PostgreSQL:** Banco de dados relacional para armazenamento de interações.
 - **FFmpeg & Webpmux:** Utilizados na conversão de mídia para stickers.
 - **Outros:** Módulos internos de utilitários e configuração.
 
@@ -37,7 +37,25 @@ Siga os passos abaixo para configurar e iniciar o bot:
 
 3. **Configuração do Ambiente:**
 
-   - Crie um arquivo `.env` com as variáveis necessárias para a autenticação e demais integrações.
+   - Crie um arquivo `.env` com as seguintes variáveis:
+
+     ```bash
+     GEMINI_APIKEY=1234567890abcdef
+     ZERO_APIKEY=abcdef1234567890
+     GLOBAL_PREFIX=/
+     DB_HOST=localhost
+     DB_PORT=5432
+     DB_NAME=galacticcat
+     DB_USER=usuario_example
+     DB_PASSWORD=senha123
+     ```
+
+   Para obter a chave da API Gemini, acesse o [Google Developers](https://developers.google.com/).
+
+   Para configurar o banco de dados PostgreSQL, consulte a [documentação oficial do PostgreSQL](https://www.postgresql.org/docs/) com instruções para sistemas Windows e Linux.
+
+   Nota: Certifique-se de instalar o FFmpeg e o Webpmux em seu sistema. No Linux, utilize o gerenciador de pacotes correspondente; no Windows, consulte as instruções disponíveis nos sites oficiais.
+
    - Configure os parâmetros do bot em [src/config/options.json](src/config/options.json).
 
 4. **Inicie o Bot com PM2:**

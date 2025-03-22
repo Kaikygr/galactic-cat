@@ -1,12 +1,22 @@
-/*
- * Arquivo responsável pelo gerenciamento geral do bot.
- * Recebe e processa todos os dados de #auth/connection.js, incluindo as informações
- * principais da sessão e dos usuários, além de outros eventos relevantes.
- *
- * Este arquivo deve utilizar módulos para o gerenciamento eficiente dos dados,
- * garantindo uma estrutura organizada e de fácil manutenção.
- */
 
+/**
+ * Handles incoming WhatsApp update messages.
+ *
+ * This function iterates over each message provided in the update object and processes them based on several factors:
+ * - Marks messages as read using the provided client.
+ * - Preprocesses the message content and extracts command prefixes.
+ * - Determines whether the message is part of a group chat and, if so, retrieves relevant group metadata and admin checks.
+ * - Routes commands such as "cat"/"gemini" for AI content generation and "sticker"/"s" for sticker processing.
+ * - Utilizes a retry mechanism for asynchronous operations with configurable retries, delay, and timeout.
+ *
+ * @async
+ * @param {Object} upsert - The update object containing message data.
+ * @param {Array<Object>} upsert.messages - An array of message objects received from the WhatsApp update.
+ * @param {Object} client - The WhatsApp client instance used to interact with messages (e.g., reading, sending, and fetching group metadata).
+ * @returns {Promise<void>} A Promise that resolves when all messages have been processed.
+ *
+ * @throws {Error} Throws an error if processing (e.g., sending messages or generating AI content) fails after the retry attempts.
+ */
 require("dotenv").config();
 
 const path = require("path");

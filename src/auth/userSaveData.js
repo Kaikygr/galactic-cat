@@ -1,3 +1,33 @@
+
+
+/**
+ * Processes incoming messaging data and persists or updates participant and log information in the PostgreSQL database.
+ *
+ * This asynchronous function performs the following steps:
+ * 1. Establishes a connection to the PostgreSQL database using environment variables.
+ * 2. Checks if the "geral" table exists; if not, creates it with columns for participant_id, name, message_id, timestamp, and count.
+ * 3. Checks if the "logs" table exists; if not, creates it to store the full JSON of the message.
+ * 4. Extracts the participant identifier from the message using either the "participant" field or the "remoteJid" (if valid).
+ * 5. Retrieves the sender's name, message ID, and timestamp (processing the timestamp if it's an object).
+ * 6. Inserts a new record into the "geral" table or updates an existing record using an upsert operation (incrementing the message count on conflict).
+ * 7. Inserts the full JSON of the message into the "logs" table, doing nothing on conflict (i.e., if the message already exists).
+ * 8. Closes the database connection in the finally block.
+ *
+ * @param {Object} data - The incoming data containing messages.
+ * @param {Array<Object>} data.messages - An array of message objects.
+ * @param {Object} data.messages[].key - The key object that contains identifier properties for the message.
+ * @param {string} [data.messages[].key.participant] - Optional participant identifier.
+ * @param {string} [data.messages[].key.remoteJid] - Remote JID, used when the participant identifier is not directly available.
+ * @param {string} data.messages[].pushName - The name of the sender.
+ * @param {number|Object} data.messages[].messageTimestamp - The timestamp of the message, which can be a number or an object with a 'low' property.
+ * @param {string} data.messages[].key.id - The unique identifier for the message.
+ *
+ * @returns {Promise<void>} A promise that resolves when the data processing and database operations complete.
+ *
+ * @throws {Error} Throws an error if database connection or query execution fails.
+ */
+
+
 const { Client } = require('pg');
 require('dotenv').config();
 
