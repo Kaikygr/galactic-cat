@@ -5,7 +5,6 @@ require('dotenv').config();
 async function processMessage(data) {
     // Utiliza data.messages[0] para todas as referências
     const message = data.messages[0];
-    console.log(message);
 
     const client = new Client({
         host: process.env.DB_HOST,

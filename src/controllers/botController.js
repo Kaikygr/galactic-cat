@@ -10,26 +10,17 @@
 require("dotenv").config();
 
 const path = require("path");
+const ConfigfilePath = path.join(__dirname, "../config/options.json");
+const config = require(ConfigfilePath);
+const logger = require("../utils/logger");
 
-// Importa os módulos de processamento de mensagens.
 const { generateAIContent } = require(path.join(__dirname, "../modules/gemini/geminiModel"));
 const { processSticker } = require(path.join(__dirname, "../modules/sticker/sticker"));
 const { getFileBuffer } = require(path.join(__dirname, "../utils/functions"));
-
-const ConfigfilePath = path.join(__dirname, "../config/options.json");
-const config = require(ConfigfilePath);
-
-const logger = require("../utils/logger");
-
-const maxAttempts = 3;
-const delayMs = 3000;
-const sendTimeoutMs = 5000;
-const WA_DEFAULT_EPHEMERAL = 86400;
-
 const { preProcessMessage, processPrefix, getQuotedChecks, getExpiration } = require(path.join(__dirname, "./messageTypeController"));
 
 async function handleWhatsAppUpdate(upsert, client) {
-  
+
   async function retryOperation(operation, options = {}) {
     const { retries = 3, delay = 1000, timeout = 5000 } = options;
     for (let attempt = 1; attempt <= retries; attempt++) {
