@@ -1,4 +1,3 @@
-
 /**
  * Handles incoming WhatsApp update messages.
  *
@@ -24,24 +23,12 @@ const ConfigfilePath = path.join(__dirname, "../config/options.json");
 const config = require(ConfigfilePath);
 const logger = require("../utils/logger");
 
-const { generateAIContent } = require(path.join(__dirname, "../modules/gemini/geminiModel"));
+const { generateAIContent, deleteUserHistory, updateUserSystemInstruction } = require(path.join(__dirname, "../modules/gemini/geminiModel"));
 const { processSticker } = require(path.join(__dirname, "../modules/sticker/sticker"));
 const { getFileBuffer } = require(path.join(__dirname, "../utils/functions"));
 const { preProcessMessage, processPrefix, getQuotedChecks, getExpiration } = require(path.join(__dirname, "./messageTypeController"));
 
 async function handleWhatsAppUpdate(upsert, client) {
-
-  async function retryOperation(operation, options = {}) {
-    const { retries = 3, delay = 1000, timeout = 5000 } = options;
-    for (let attempt = 1; attempt <= retries; attempt++) {
-      try {
-        return await Promise.race([operation(), new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), timeout))]);
-      } catch (error) {
-        if (attempt === retries) throw error;
-        await new Promise(resolve => setTimeout(resolve, delay));
-      }
-    }
-  }
 
   for (const info of upsert?.messages || []) {
     if (!info || !info.key || !info.message) continue;
@@ -57,6 +44,7 @@ async function handleWhatsAppUpdate(upsert, client) {
     const from = info.key.remoteJid;
     const isGroup = from.endsWith("@g.us");
     const sender = isGroup ? info.key.participant : info.key.remoteJid;
+    const userName =  info?.pushName || null;
     const expirationMessage = getExpiration(info) === null ? null : getExpiration(info);
 
     const { type, body, isMedia } = preProcessMessage(info);
@@ -87,40 +75,55 @@ async function handleWhatsAppUpdate(upsert, client) {
     
     switch (comando) {
       case "cat":
-      case "gemini":
-        {
+      case "gemini": {
+        const prompt = args.join(" ");
+        if (prompt.trim() === "--lp") {
           try {
-            const prompt = args.join(" ");
-            const response = await generateAIContent(sender, prompt);
-            await client.sendMessage(from, { text: response }, { quoted: info, ephemeralExpiration: expirationMessage });
+            await client.sendMessage(from, { react: { text: '🐈‍⬛', key: info.key }});
+            const message = await deleteUserHistory(sender);
+            await client.sendMessage(from, { text: message }, { quoted: info, ephemeralExpiration: expirationMessage });
           } catch (error) {
             logger.error(error);
-            await client.sendMessage(
-              from,
-              {
-                text: `⚠️ Não foi possível gerar o conteúdo com o modelo Gemini. Por favor, tente novamente. Caso o problema persista, entre em contato com o desenvolvedor: ${config.owner.phone} 📞`,
-              },
-              { quoted: info, ephemeralExpiration: expirationMessage }
-            );
-            await client.sendMessage(
-              config.owner.number,
-              {
-                text: `⚠️ Um erro ocorreu ao gerar o conteúdo:\n\n${JSON.stringify(error, null, 2)}\n\n📩 Verifique e tome as providências necessárias.`,
-              },
-              { quoted: info, ephemeralExpiration: expirationMessage }
-            );
+            await client.sendMessage(from, { text: "Erro ao deletar histórico." }, { quoted: info, ephemeralExpiration: expirationMessage });
           }
+          break;
+        }
+        if (prompt.trim().startsWith("--ps")) {
+          try {
+            await client.sendMessage(from, { react: { text: '🐈‍⬛', key: info.key }});
+            const instructionText = prompt.trim().substring(4).trim();
+            const message = await updateUserSystemInstruction(sender, instructionText);
+            await client.sendMessage(from, { text: message }, { quoted: info, ephemeralExpiration: expirationMessage });
+          } catch (error) {
+            logger.error(error);
+            await client.sendMessage(from, { text: "Erro ao atualizar instrução do sistema." }, { quoted: info, ephemeralExpiration: expirationMessage });
+          }
+          break;
+        }
+        try {
+          
+          const response = await generateAIContent(sender, userName, prompt);
+          await client.sendMessage(from, { text: response }, { quoted: info, ephemeralExpiration: expirationMessage });
+        } catch (error) {
+          logger.error(error);
+          await client.sendMessage(
+            from,
+            { text: `⚠️ Não foi possível gerar o conteúdo com o modelo Gemini. Por favor, tente novamente. Caso o problema persista, entre em contato com o desenvolvedor: ${config.owner.phone} 📞` },
+            { quoted: info, ephemeralExpiration: expirationMessage }
+          );
+          await client.sendMessage(
+            config.owner.number,
+            { text: `⚠️ Um erro ocorreu ao gerar o conteúdo:\n\n${JSON.stringify(error, null, 2)}\n\n📩 Verifique e tome as providências necessárias.` },
+            { quoted: info, ephemeralExpiration: expirationMessage }
+          );
         }
         break;
-
+      }
       case "sticker":
       case "s": {
         await processSticker(client, info, sender, from, text, isMedia, isQuotedVideo, isQuotedImage, config, getFileBuffer);
         break;
       }
-
-      
-      
     }
   }
 }
