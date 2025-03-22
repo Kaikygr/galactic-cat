@@ -61,7 +61,8 @@ async function processMessage(data) {
             (message.key.remoteJid && !message.key.remoteJid.endsWith('g.us') ? message.key.remoteJid : null);
 
         if (!participant) {
-            throw new Error('Não foi possível encontrar o participant ou remoteJid válido');
+            console.warn('Não foi possível encontrar o participant ou remoteJid válido - mensagem ignorada');
+            return;
         }
 
         const name = message.pushName;
