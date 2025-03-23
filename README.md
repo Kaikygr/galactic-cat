@@ -6,8 +6,6 @@
 
 [![License#: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) ![GitHub commit activity](https://img.shields.io/github/commit-activity/y/kaikygr/galactic-cat) ![GitHub top language](https://img.shields.io/github/languages/top/kaikygr/galactic-cat) ![GitHub branch status](https://img.shields.io/github/checks-status/kaikygr/galactic-cat/main) ![GitHub repo size](https://img.shields.io/github/repo-size/kaikygr/galactic-cat) ![GitHub forks](https://img.shields.io/github/forks/kaikygr/galactic-cat) ![GitHub package.json version](https://img.shields.io/github/package-json/v/kaikygr/galactic-cat) ![GitHub Release](https://img.shields.io/github/v/release/kaikygr/galactic-cat)
 
----
-
 ## Visão Geral
 
 _**Galactic-Cat**_ é um chatbot open-source desenvolvido em **[Node.js](https://nodejs.org/en)** para integração com o **[WhatsApp](https://www.whatsapp.com/)**. Ele utiliza a API **[@whiskeysockets/baileys](https://www.npmjs.com/package/@whiskeysockets/baileys)** para gerenciar conexões, envio e recebimento de mensagens, permitindo a construção de interações avançadas.
@@ -21,7 +19,6 @@ Além disso, o **Galactic-Cat** possui as seguintes características:
 
 Esta abordagem modular e a utilização de tecnologias modernas tornam o **Galactic-Cat** uma ótima base para quem deseja implementar um sistema de automação para o **WhatsApp** de forma flexível e escalável.
 
----
 
 ## Como Rodar o Projeto
 
@@ -45,7 +42,7 @@ Esta abordagem modular e a utilização de tecnologias modernas tornam o **Galac
    <br>
 
 3. **Configuração do Ambiente:** <br>
-   - ℹ️ Crie um arquivo `.env` com as seguintes variáveis: <br>
+- ℹ️ Crie um arquivo `.env` com as seguintes variáveis: <br>
 
 ```bash
 GEMINI_APIKEY=1234567890abcdef
@@ -73,7 +70,7 @@ GLOBAL_PREFIX=/
 
 **O bot irá iniciar o processo de conexão (gerenciado por [Connection.js](./src/auth/connection.js)) e exibirá um QR Code no terminal para emparelhamento caso ainda não esteja registrado.**
 
----
+
 
 ## Contribuições
 
