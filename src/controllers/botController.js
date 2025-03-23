@@ -1,21 +1,3 @@
-/**
- * Handles incoming WhatsApp update messages.
- *
- * This function iterates over each message provided in the update object and processes them based on several factors:
- * - Marks messages as read using the provided client.
- * - Preprocesses the message content and extracts command prefixes.
- * - Determines whether the message is part of a group chat and, if so, retrieves relevant group metadata and admin checks.
- * - Routes commands such as "cat"/"gemini" for AI content generation and "sticker"/"s" for sticker processing.
- * - Utilizes a retry mechanism for asynchronous operations with configurable retries, delay, and timeout.
- *
- * @async
- * @param {Object} upsert - The update object containing message data.
- * @param {Array<Object>} upsert.messages - An array of message objects received from the WhatsApp update.
- * @param {Object} client - The WhatsApp client instance used to interact with messages (e.g., reading, sending, and fetching group metadata).
- * @returns {Promise<void>} A Promise that resolves when all messages have been processed.
- *
- * @throws {Error} Throws an error if processing (e.g., sending messages or generating AI content) fails after the retry attempts.
- */
 require("dotenv").config();
 
 const path = require("path");
@@ -23,7 +5,7 @@ const ConfigfilePath = path.join(__dirname, "../config/options.json");
 const config = require(ConfigfilePath);
 const logger = require("../utils/logger");
 
-const { generateAIContent, deleteUserHistory, updateUserSystemInstruction } = require(path.join(__dirname, "../modules/gemini/geminiModel"));
+const { generateAIContent} = require("../modules/geminiModule/gemini");
 const { processSticker } = require(path.join(__dirname, "../modules/sticker/sticker"));
 const { getFileBuffer } = require(path.join(__dirname, "../utils/functions"));
 const { preProcessMessage, processPrefix, getQuotedChecks, getExpiration } = require(path.join(__dirname, "./messageTypeController"));
@@ -75,55 +57,17 @@ async function handleWhatsAppUpdate(upsert, client) {
     
     switch (comando) {
       case "cat":
-      case "gemini": {
-        const prompt = args.join(" ");
-        if (prompt.trim() === "--lp") {
-          try {
-            await client.sendMessage(from, { react: { text: '🐈‍⬛', key: info.key }});
-            const message = await deleteUserHistory(sender);
-            await client.sendMessage(from, { text: message }, { quoted: info, ephemeralExpiration: expirationMessage });
-          } catch (error) {
-            logger.error(error);
-            await client.sendMessage(from, { text: "Erro ao deletar histórico." }, { quoted: info, ephemeralExpiration: expirationMessage });
-          }
-          break;
-        }
-        if (prompt.trim().startsWith("--ps")) {
-          try {
-            await client.sendMessage(from, { react: { text: '🐈‍⬛', key: info.key }});
-            const instructionText = prompt.trim().substring(4).trim();
-            const message = await updateUserSystemInstruction(sender, instructionText);
-            await client.sendMessage(from, { text: message }, { quoted: info, ephemeralExpiration: expirationMessage });
-          } catch (error) {
-            logger.error(error);
-            await client.sendMessage(from, { text: "Erro ao atualizar instrução do sistema." }, { quoted: info, ephemeralExpiration: expirationMessage });
-          }
-          break;
-        }
-        try {
-          
-          const response = await generateAIContent(sender, userName, prompt);
-          await client.sendMessage(from, { text: response }, { quoted: info, ephemeralExpiration: expirationMessage });
-        } catch (error) {
-          logger.error(error);
-          await client.sendMessage(
-            from,
-            { text: `⚠️ Não foi possível gerar o conteúdo com o modelo Gemini. Por favor, tente novamente. Caso o problema persista, entre em contato com o desenvolvedor: ${config.owner.phone} 📞` },
-            { quoted: info, ephemeralExpiration: expirationMessage }
-          );
-          await client.sendMessage(
-            config.owner.number,
-            { text: `⚠️ Um erro ocorreu ao gerar o conteúdo:\n\n${JSON.stringify(error, null, 2)}\n\n📩 Verifique e tome as providências necessárias.` },
-            { quoted: info, ephemeralExpiration: expirationMessage }
-          );
-        }
+      case "gemini":
+      case "teste": {
+        await generateAIContent(client, from, info, expirationMessage, sender, userName, text);
         break;
       }
+        
       case "sticker":
       case "s": {
         await processSticker(client, info, sender, from, text, isMedia, isQuotedVideo, isQuotedImage, config, getFileBuffer);
         break;
-      }
+      } 
     }
   }
 }
