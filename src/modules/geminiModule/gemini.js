@@ -29,7 +29,7 @@ async function generateAIContent(client, from, info, expirationMessage, sender, 
 
         if (text.trim() === "" || text.trim() === "--hp") {
            await client.sendMessage(from, { react: { text: '⚠️', key: info.key } });
-        await client.sendMessage(from, { text: `*⚠️ Como usar o comando corretamente:*\n\n_Para interagir com a IA, você precisa fornecer um texto após o comando._\n\n_*Exemplo:*_\n✅ \`.cat bom dia\`\n\n_Isso iniciará ou continuará uma conversa com a IA, que mantém um histórico de até *72 horas* para lembrar o contexto._\n\n🔹 Personalização:\n\`--ps [instrução]\` → Define um comportamento específico para a IA.\n\n_*Exemplo:*_\n✅ \`--ps Responda como um pirata.\`\n\n\`--lp\` → Apaga todo o histórico da conversa.\n\n🔹 Análises e Relatórios:\n\`--me\` → Apresenta análises individualizadas do usuário que está interagindo, como perfil de uso (número de interações, dia e horário preferidos), padrões de comunicação, tempo médio de resposta, sessões e outros dados extraídos do histórico do usuário.\n\n\`--all\` → Gera um relatório global agregando dados de todos os usuários, fornecendo métricas como o total de interações, usuários ativos, distribuição de mensagens por tipo, padrões de atividade (dias e horas de pico) e outros insights sobre a base completa de históricos.\n\nSe precisar de ajuda, acione o owner! 🚀`}, { quoted: info, ephemeralExpiration: expirationMessage });
+        await client.sendMessage(from, { text: `*⚠️ Como usar o comando corretamente:*\n\n_Para interagir com a IA, você precisa fornecer um texto após o comando._\n\n_*Exemplo:*_\n✅ \`.cat bom dia\`\n\n_Isso iniciará ou continuará uma conversa com a IA, que mantém um histórico de até *72 horas* para lembrar o contexto._\n\n🔹 Personalização:\n\`.cat --ps [instrução]\` → Define um comportamento específico para a IA.\n\n_*Exemplo:*_\n✅ \`.cat --ps Responda como um pirata.\`\n\n\`.cat --lp\` → Apaga todo o histórico da conversa.\n\n🔹 Análises e Relatórios:\n\`.cat --me\` → Apresenta análises individualizadas do usuário que está interagindo, como perfil de uso (número de interações, dia e horário preferidos), padrões de comunicação, tempo médio de resposta, sessões e outros dados extraídos do histórico do usuário.\n\n\`.cat --all\` → Gera um relatório global agregando dados de todos os usuários, fornecendo métricas como o total de interações, usuários ativos, distribuição de mensagens por tipo, padrões de atividade (dias e horas de pico) e outros insights sobre a base completa de históricos.\n\nSe precisar de ajuda, acione o owner! 🚀`}, { quoted: info, ephemeralExpiration: expirationMessage });
  return;
         }
     } catch (err) {
@@ -44,7 +44,6 @@ async function generateAIContent(client, from, info, expirationMessage, sender, 
             let history = userData.history;
             const totalMessages = history.length;
 
-            // 1. Perfil de Uso
             const userNameDisplay = userName || "Desconhecido";
             const frequency = totalMessages;
             let dayCount = {};
@@ -59,19 +58,16 @@ async function generateAIContent(client, from, info, expirationMessage, sender, 
             const favoriteDay = Object.entries(dayCount).sort((a, b) => b[1] - a[1])[0] || ["Nenhum", 0];
             const favoriteHour = Object.entries(hourCount).sort((a, b) => b[1] - a[1])[0] || ["Nenhum", 0];
 
-            // 2. Padrões de Comunicação
             let userMessages = history.filter(msg => msg.role === "user");
             let totalLength = userMessages.reduce((acc, msg) => {
                 let len = msg.parts.reduce((sum, part) => sum + part.text.length, 0);
                 return acc + len;
             }, 0);
             let avgLength = userMessages.length > 0 ? (totalLength / userMessages.length).toFixed(2) : "0";
-            // Conte mensagens possivelmente aleatórias (ex.: com menos de 3 palavras)
             let randomMessagesCount = userMessages.filter(msg => {
                 let textContent = msg.parts.map(p => p.text).join(" ").trim();
                 return textContent.split(/\s+/).length < 3;
             }).length;
-            // Quantidade máxima de mensagens consecutivas do usuário antes de uma resposta do bot
             let maxConsecutive = 0, currentConsecutive = 0;
             history.forEach(msg => {
                 if (msg.role === "user") {
@@ -83,11 +79,10 @@ async function generateAIContent(client, from, info, expirationMessage, sender, 
             });
             if (currentConsecutive > maxConsecutive) { maxConsecutive = currentConsecutive; }
 
-            // 3. Retenção e Lealdade
             const sortedHistory = [...history].sort((a, b) => a.timestamp - b.timestamp);
             const firstInteraction = sortedHistory[0] ? new Date(sortedHistory[0].timestamp).toLocaleString("pt-BR") : "N/A";
             const lastInteraction = sortedHistory[sortedHistory.length - 1] ? new Date(sortedHistory[sortedHistory.length - 1].timestamp).toLocaleString("pt-BR") : "N/A";
-            // Definir sessões: considere um intervalo de 1 hora entre interações para iniciar uma nova sessão
+
             let sessions = 0;
             let sessionStart = null;
             sortedHistory.forEach(msg => {
@@ -101,14 +96,12 @@ async function generateAIContent(client, from, info, expirationMessage, sender, 
                     }
                 }
             });
-            // Tendência de engajamento: compare interações do usuário na primeira e na segunda metade
+
             const midIndex = Math.floor(sortedHistory.length / 2);
             const firstHalfCount = sortedHistory.slice(0, midIndex).filter(msg => msg.role === "user").length;
             const secondHalfCount = sortedHistory.slice(midIndex).filter(msg => msg.role === "user").length;
             const engagementTrend = secondHalfCount > firstHalfCount ? "Mais engajado recentemente" : (secondHalfCount < firstHalfCount ? "Menos engajado recentemente" : "Sem variação");
 
-            // 4. Novos Métricos
-            // Tempo médio de resposta do bot
             let responseTimes = [];
             for (let i = 0; i < history.length - 1; i++) {
                 if (history[i].role === "user" && history[i + 1].role === "model") {
@@ -117,7 +110,6 @@ async function generateAIContent(client, from, info, expirationMessage, sender, 
             }
             const avgResponseTime = responseTimes.length > 0 ? (responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length / 1000).toFixed(2) + " seg" : "N/A";
 
-            // Detecção de mensagens repetidas
             let repeatedMessages = 0;
             for (let i = 1; i < history.length; i++) {
                 if (history[i].role === "user" && history[i - 1].role === "user" &&
@@ -126,7 +118,6 @@ async function generateAIContent(client, from, info, expirationMessage, sender, 
                 }
             }
 
-            // Detecção de emojis nas mensagens do usuário
             let emojiRegex = /[\u{1F600}-\u{1F64F}]/gu;
             let totalEmojis = 0;
             userMessages.forEach(msg => {
@@ -134,16 +125,14 @@ async function generateAIContent(client, from, info, expirationMessage, sender, 
                 totalEmojis += count;
             });
 
-            // Período de Inatividade: gap médio entre mensagens do usuário
             let userTimestamps = userMessages.map(msg => msg.timestamp).sort((a, b) => a - b);
             let gaps = [];
             for (let i = 1; i < userTimestamps.length; i++) {
                 gaps.push(userTimestamps[i] - userTimestamps[i - 1]);
             }
-            // Convertendo de milissegundos para horas
+
             const avgInactivity = gaps.length > 0 ? (gaps.reduce((a, b) => a + b, 0) / gaps.length / 3600000).toFixed(2) + " horas" : "N/A";
 
-            // Crescimento de Interações: comparação entre o primeiro e o último dia
             let interactionsByDay = {};
             userMessages.forEach(msg => {
                 const day = new Date(msg.timestamp).toLocaleDateString("pt-BR");
@@ -157,10 +146,8 @@ async function generateAIContent(client, from, info, expirationMessage, sender, 
                 growth = firstDayCount > 0 ? (((lastDayCount - firstDayCount) / firstDayCount) * 100).toFixed(2) + "%" : "N/A";
             }
 
-            // Usuário Ativo vs. Inativo
             const userStatus = frequency >= 10 ? "Ativo" : "Inativo";
 
-            // Mensagens Curtas vs. Longas: com base na contagem de palavras
             let shortCount = 0, longCount = 0;
             userMessages.forEach(msg => {
                 const wordCount = msg.parts.map(p => p.text).join(" ").trim().split(/\s+/).length;
@@ -169,30 +156,35 @@ async function generateAIContent(client, from, info, expirationMessage, sender, 
             });
 
            const analyticsMsg =
-                `📊 *Analytics do Usuário:*\n\n` +
-                `*1. Perfil de Uso:* \n` +
-                `- Nome: ${userNameDisplay}\n` +
-                `- Total de interações: ${frequency}\n` +
-                `- Dia preferido: ${favoriteDay[0]} 📅 (${favoriteDay[1]} msgs)\n` +
-                `- Horário preferido: ${favoriteHour[0]}h (${favoriteHour[1]} msgs)\n\n` +
-                `*2. Padrões de Comunicação:*\n` +
-                `- Comprimento médio das mensagens: ${avgLength} caracteres\n` +
-                `- Mensagens curtas/aleatórias: ${randomMessagesCount}\n` +
-                `- Máximo de mensagens consecutivas: ${maxConsecutive}\n\n` +
-                `*3. Retenção e Lealdade:*\n` +
-                `- Primeira interação: ${firstInteraction}\n` +
-                `- Última interação: ${lastInteraction} \n` +
-                `- Sessões detectadas: ${sessions}\n` +
-                `- Tendência de engajamento: ${engagementTrend}\n\n` +
-                `*4. Novos Métricos:* \n` +
-                `- Tempo médio de resposta do bot: ${avgResponseTime}\n` +
-                `- Repetição de mensagens consecutivas: ${repeatedMessages}\n` +
-                `- Total de emojis detectados: ${totalEmojis}\n` +
-                `- Período médio de inatividade: ${avgInactivity}\n` +
-                `- Crescimento de interações (primeiro vs último dia): ${growth}\n` +
-                `- Status do usuário: ${userStatus}\n` +
-                `- Mensagens curtas: ${shortCount} vs. Mensagens longas: ${longCount}\n\n` +
-                `- Instrução do sistema: ${userData.systemInstruction}`;
+    `📊 *Analytics do Usuário:*\n\n` +
+    
+    `🔹 *1. Perfil de Uso:* \n` +
+    `   - 👤 Nome: *${userNameDisplay}*\n` +
+    `   - 🔄 Total de interações: *${frequency}*\n` +
+    `   - 📅 Dia preferido: *${favoriteDay[0]}* (${favoriteDay[1]} msgs)\n` +
+    `   - ⏰ Horário preferido: *${favoriteHour[0]}h* (${favoriteHour[1]} msgs)\n\n` +
+
+    `💬 *2. Padrões de Comunicação:*\n` +
+    `   - ✏️ Comprimento médio das mensagens: *${avgLength}* caracteres\n` +
+    `   - 🔀 Mensagens curtas/aleatórias: *${randomMessagesCount}*\n` +
+    `   - 🔥 Máximo de mensagens consecutivas: *${maxConsecutive}*\n\n` +
+
+    `🔗 *3. Retenção e Lealdade:*\n` +
+    `   - 🕰️ Primeira interação: *${firstInteraction}*\n` +
+    `   - 🔚 Última interação: *${lastInteraction}*\n` +
+    `   - 📌 Sessões detectadas: *${sessions}*\n` +
+    `   - 📊 Tendência de engajamento: *${engagementTrend}*\n\n` +
+
+    `📈 *4. Novas Métricas:* \n` +
+    `   - ⚡ Tempo médio de resposta do bot: *${avgResponseTime}*\n` +
+    `   - 🔁 Repetição de mensagens consecutivas: *${repeatedMessages}*\n` +
+    `   - 😊 Total de emojis detectados: *${totalEmojis}*\n` +
+    `   - ⏳ Período médio de inatividade: *${avgInactivity}*\n` +
+    `   - 📊 Crescimento de interações (1º vs. último dia): *${growth}*\n` +
+    `   - 🏷️ Status do usuário: *${userStatus}*\n` +
+    `   - 📏 Mensagens curtas: *${shortCount}*  vs.  📝 Mensagens longas: *${longCount}*\n\n` +
+    
+    `🛠️ *Instrução do sistema:* _${userData.systemInstruction}_`;  
 
 
             await client.sendMessage(from, { react: { text: '📊', key: info.key } });
@@ -287,7 +279,6 @@ async function generateAIContent(client, from, info, expirationMessage, sender, 
             if (fs.existsSync(historyFilePath)) {
                 data = JSON.parse(fs.readFileSync(historyFilePath, "utf8"));
             }
-            // Variáveis agregadas
             let totalInteractions = 0;
             let totalUsers = 0;
             let activeUsers7 = 0;
@@ -306,11 +297,8 @@ async function generateAIContent(client, from, info, expirationMessage, sender, 
             let sessionLengths = [];
             let inactivityGaps = [];
             let userAvgReturnIntervals = [];
-            // Distribuição de tamanho de mensagens
             let shortMsg = 0, mediumMsg = 0, longMsg = 0;
-            // Contagem para respostas rápidas (<2 seg)
             let quickResponses = 0;
-            // Contador para novos vs. experientes (novo: <=3 interações)
             let newUsers = 0, experiencedUsers = 0;
             
             for (const sender in data) {
@@ -337,7 +325,6 @@ async function generateAIContent(client, from, info, expirationMessage, sender, 
                     if (words.length < 3) {
                         randomGlobal++;
                     }
-                    // Distribuição de tamanho de mensagens
                     const wordCount = words.length;
                     if (wordCount < 5) {
                         shortMsg++;
@@ -354,7 +341,6 @@ async function generateAIContent(client, from, info, expirationMessage, sender, 
                         inactivityGaps.push(msg.timestamp - sortedHistory[i-1].timestamp);
                     }
                 }
-                // Sessões (intervalo de 1 hora)
                 let userSessions = 0;
                 let sessionStart = null;
                 let userReturnIntervals = [];
@@ -411,42 +397,52 @@ async function generateAIContent(client, from, info, expirationMessage, sender, 
             const topDay = Object.entries(dayCountGlobal).sort((a,b)=>b[1]-a[1])[0] || ["N/A", 0];
             const topHour = Object.entries(hourCountGlobal).sort((a,b)=>b[1]-a[1])[0] || ["N/A", 0];
             
-            let analyticsAll =
-`📊 *Analytics Global:*
+          let analyticsAll =
+    `📊 *Analytics Global:*\n\n` +
 
-1. Análise de Engajamento Global:
-- Total de Interações: ${totalInteractions} mensagens
-- Usuários Ativos (últimos 7 dias): ${activeUsers7}
-- Retenção de Usuários (mais de 1 interação): ${retentionRate}
-- Padrão de Atividade: Dia mais ativo: ${topDay[0]} (${topDay[1]} msgs), Hora mais ativa: ${topHour[0]}h (${topHour[1]} msgs)
+    `🔹 *1. Análise de Engajamento Global:*\n` +
+    `   - 🔄 Total de Interações: *${totalInteractions}* mensagens\n` +
+    `   - 👥 Usuários Ativos (últimos 7 dias): *${activeUsers7}*\n` +
+    `   - 🔁 Retenção de Usuários (mais de 1 interação): *${retentionRate}*\n` +
+    `   - 📊 Padrão de Atividade: \n` +
+    `     - 📅 Dia mais ativo: *${topDay[0]}* (${topDay[1]} msgs)\n` +
+    `     - ⏰ Hora mais ativa: *${topHour[0]}h* (${topHour[1]} msgs)\n\n` +
 
-2. Distribuição de Mensagens por Tipo:
-- Distribuição de Tamanho: Curtas: ${shortMsg}, Médias: ${mediumMsg}, Longas: ${longMsg}
-- Mensagens Aleatórias: ${randomGlobal}
-- Uso de Emojis: ${totalEmojisGlobal} (Top 3: ${topEmojis})
+    `💬 *2. Distribuição de Mensagens por Tipo:*\n` +
+    `   - 📏 Distribuição de Tamanho:\n` +
+    `     - ✂️ Curtas: *${shortMsg}*\n` +
+    `     - 📄 Médias: *${mediumMsg}*\n` +
+    `     - 📝 Longas: *${longMsg}*\n` +
+    `   - 🔀 Mensagens Aleatórias: *${randomGlobal}*\n` +
+    `   - 😊 Uso de Emojis: *${totalEmojisGlobal}* (Top 3: *${topEmojis}*)\n\n` +
 
-3. Análise de Sessões e Tempo de Uso:
-- Sessões por Usuário (média): ${avgSessionsPerUser}
-- Tempo Médio de Sessão por Usuário: ${avgSessionLength}
-- Tempo de Inatividade Global: ${avgInactivityGlobal}
-- Tempo Médio Entre Interações: ${avgReturnTime}
+    `⏳ *3. Análise de Sessões e Tempo de Uso:*\n` +
+    `   - 📌 Sessões por Usuário (média): *${avgSessionsPerUser}*\n` +
+    `   - ⏰ Tempo Médio de Sessão: *${avgSessionLength}*\n` +
+    `   - 🚫 Tempo de Inatividade Global: *${avgInactivityGlobal}*\n` +
+    `   - 🔄 Tempo Médio Entre Interações: *${avgReturnTime}*\n\n` +
 
-4. Análise de Retenção e Engajamento:
-- Interações Médias por Usuário: ${avgInteractionsPerUser}
-- Taxa de Respostas Rápidas (<2 seg): ${quickResponseRate}
-- Usuários Novos vs. Experientes: Novos: ${newUsers}, Experientes: ${experiencedUsers}
-- Usuários Ativos vs. Inativos (em 30 dias): Ativos: ${activeUsers30}, Inativos: ${totalUsers - activeUsers30}
+    `📈 *4. Análise de Retenção e Engajamento:*\n` +
+    `   - 🔢 Interações Médias por Usuário: *${avgInteractionsPerUser}*\n` +
+    `   - ⚡ Taxa de Respostas Rápidas (<2 seg): *${quickResponseRate}*\n` +
+    `   - 🆕 Usuários Novos vs. Experientes:\n` +
+    `     - ✨ Novos: *${newUsers}*\n` +
+    `     - 👴 Experientes: *${experiencedUsers}*\n` +
+    `   - 📅 Usuários Ativos vs. Inativos (30 dias):\n` +
+    `     - ✅ Ativos: *${activeUsers30}*\n` +
+    `     - ❌ Inativos: *${totalUsers - activeUsers30}*\n\n` +
 
-5. Distribuição de Interações:
-- Interações por Hora/Dia da Semana: Verifique os picos em ${topHour[0]}h e ${topDay[0]}
-- Distribuição de Interações por Mês: (Não implementado)
+    `📊 *5. Distribuição de Interações:*\n` +
+    `   - ⏰ Interações por Hora/Dia da Semana:\n` +
+    `     - 🔥 Picos em: *${topHour[0]}h* e *${topDay[0]}*\n` +
+    `   - 📆 Distribuição de Interações por Mês: *(Não implementado)*\n\n` +
 
-6. Crescimento de Usuários Ativos:
-- (Métrica não implementada)
+    `🚀 *6. Crescimento de Usuários Ativos:*\n` +
+    `   - 📊 *(Métrica não implementada)*\n\n` +
 
-7. Feedback e Qualidade de Resposta:
-- Tempo Médio de Resposta: ${avgResponseTimeGlobal}
-`;
+    `📝 *7. Feedback e Qualidade de Resposta:*\n` +
+    `   - ⏱️ Tempo Médio de Resposta: *${avgResponseTimeGlobal}*\n`;
+
             await client.sendMessage(from, { react: { text: '📊', key: info.key } });
             await client.sendMessage(from, { text: analyticsAll }, { quoted: info, ephemeralExpiration: expirationMessage });
             return;
