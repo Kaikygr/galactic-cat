@@ -1,7 +1,3 @@
-/* eslint-disable no-sync */
-/* eslint-disable no-unused-vars */
-// Importação dos módulos essenciais
-
 const fs = require("fs");
 const path = require("path");
 const util = require("util");
