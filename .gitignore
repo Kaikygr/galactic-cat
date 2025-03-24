@@ -7,3 +7,4 @@ src/auth/temp
 package-lock.json
 src/modules/gemini/chatHistory.json
 src/modules/geminiModule/data/chatHistory.json
+src/modules/stickerModule/stickerPrefs.json
