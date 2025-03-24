@@ -14,11 +14,13 @@ if (!fs.existsSync(tempDir)) {
 }
 
 async function processSticker(client, info, expirationMessage, sender, from, text, isMedia, isQuotedVideo, isQuotedImage) {
+  console.log(JSON.stringify(info, null, 2));
   try {
     logger.info("[ Processando sticker ] para o: " + sender);
     let filtro = "fps=10,scale=512:512";
-
+    let processWithFfmpeg = true;
     let encmedia, mediaBuffer, mediaExtension;
+
     if ((isMedia && info.message.videoMessage) || isQuotedVideo) {
       const videoDuration = isMedia && info.message.videoMessage ? info.message.videoMessage.seconds : info.message.extendedTextMessage.contextInfo.quotedMessage.videoMessage.seconds;
       if (videoDuration >= (isQuotedVideo ? 35 : 10)) {
@@ -29,7 +31,13 @@ async function processSticker(client, info, expirationMessage, sender, from, tex
       encmedia = isQuotedVideo ? info.message.extendedTextMessage.contextInfo.quotedMessage.videoMessage : info.message.videoMessage;
       mediaBuffer = await getFileBuffer(encmedia, "video");
       mediaExtension = ".mp4";
-    } else if ((isMedia && !info.message.videoMessage) || isQuotedImage) {
+    } else if ((isMedia && info.message.stickerMessage) || (info.message.extendedTextMessage && info.message.extendedTextMessage.contextInfo && info.message.extendedTextMessage.contextInfo.quotedMessage && info.message.extendedTextMessage.contextInfo.quotedMessage.stickerMessage)) {
+      // Para sticker, aceita tanto mensagem direta quanto sticker citado
+      encmedia = info.message.extendedTextMessage && info.message.extendedTextMessage.contextInfo && info.message.extendedTextMessage.contextInfo.quotedMessage && info.message.extendedTextMessage.contextInfo.quotedMessage.stickerMessage ? info.message.extendedTextMessage.contextInfo.quotedMessage.stickerMessage : info.message.stickerMessage;
+      mediaBuffer = await getFileBuffer(encmedia, "sticker");
+      mediaExtension = ".webp";
+      processWithFfmpeg = false;
+    } else if ((isMedia && info.message.imageMessage) || isQuotedImage) {
       encmedia = isQuotedImage ? info.message.extendedTextMessage.contextInfo.quotedMessage.imageMessage : info.message.imageMessage;
       mediaBuffer = await getFileBuffer(encmedia, "image");
       mediaExtension = ".jpg";
@@ -69,8 +77,12 @@ async function processSticker(client, info, expirationMessage, sender, from, tex
     const mediaPath = path.join(tempDir, `temp_file_${Date.now()}${mediaExtension}`);
     fs.writeFileSync(mediaPath, mediaBuffer);
 
-    const outputPath = path.join(tempDir, `sticker_${Date.now()}.webp`);
-    await execProm(`ffmpeg -i "${mediaPath}" -vcodec libwebp -lossless 1 -loop 0 -preset default -an -vf "${filtro}" "${outputPath}"`);
+    let outputPath = path.join(tempDir, `sticker_${Date.now()}.webp`);
+    if (processWithFfmpeg) {
+      await execProm(`ffmpeg -i "${mediaPath}" -vcodec libwebp -lossless 1 -loop 0 -preset default -an -vf "${filtro}" "${outputPath}"`);
+    } else {
+      fs.copyFileSync(mediaPath, outputPath);
+    }
 
     const formattedSender = sender.replace(/@s\.whatsapp\.net$/, "");
     const prefsPath = path.join(__dirname, "stickerPrefs.json");
