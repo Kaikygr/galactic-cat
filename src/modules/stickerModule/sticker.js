@@ -94,10 +94,10 @@ async function processSticker(client, info, expirationMessage, sender, from, tex
     if (text && text.trim()) {
       if (text.includes("|")) {
         const parts = text.split("|").map(p => p.trim());
-        const newName = parts[0] !== "" ? parts[0] : null;
-        const newPublisher = parts[1] !== "" ? parts[1] : null;
-        stickerPackName = newName !== null ? newName : defaultComputedName;
-        stickerPackPublisher = newPublisher !== null ? newPublisher : defaultComputedPublisher;
+        const newName = parts[0] !== "" ? parts[0] : storedName;
+        const newPublisher = parts[1] !== "" ? parts[1] : storedPublisher;
+        stickerPackName = newName;
+        stickerPackPublisher = newPublisher;
         stickerPrefs[key] = { stickerPackName: newName, stickerPackPublisher: newPublisher };
         fs.writeFileSync(prefsPath, JSON.stringify(stickerPrefs, null, 2));
       } else {
