@@ -67,6 +67,7 @@ async function handleWhatsAppUpdate(upsert, client) {
         break;
       }
       case "teste": {
+        logger.error("Teste de erro");
         break;
       }
     }
