@@ -8,68 +8,69 @@
 
 ## Visão Geral
 
-_Galactic-Cat_ é um chatbot open-source desenvolvido em **Node.js** para integrar com o **WhatsApp**. Ele utiliza a API [@whiskeysockets/baileys](https://www.npmjs.com/package/@whiskeysockets/baileys) para gerenciar conexões, envio e recebimento de mensagens, e inclui funcionalidades avançadas.
+_**Galactic-Cat**_ é um chatbot open-source desenvolvido em **[Node.js](https://nodejs.org/en)** para integração com o **[WhatsApp](https://www.whatsapp.com/)**. Ele utiliza a API **[@whiskeysockets/baileys](https://www.npmjs.com/package/@whiskeysockets/baileys)** para gerenciar conexões, envio e recebimento de mensagens, permitindo a construção de interações avançadas.
 
-## Tecnologias Utilizadas
+Além disso, o **Galactic-Cat** possui as seguintes características:
 
-- **Node.js:** Plataforma para execução do JavaScript.
-- **@whiskeysockets/baileys:** API para integração com WhatsApp.
-- **PostgreSQL:** Banco de dados relacional para armazenamento de interações.
-- **FFmpeg & Webpmux:** Utilizados na conversão de mídia para stickers.
-- **Outros:** Módulos internos de utilitários e configuração.
+- **Eficiência e Confiabilidade:** Gerencia múltiplas conexões de forma robusta, garantindo maior estabilidade na comunicação.
+- **Funcionalidades Avançadas:** Inclui recursos que vão desde comandos básicos de interação até integrações mais complexas, ampliando a usabilidade do bot.
+- **Facilidade de Configuração:** Com instruções claras para instalação e configuração, o projeto facilita a entrada de novos desenvolvedores.
+- **Open-Source:** Permite contribuições da comunidade, incentivando melhorias contínuas e a evolução do projeto.
+
+Esta abordagem modular e a utilização de tecnologias modernas tornam o **Galactic-Cat** uma ótima base para quem deseja implementar um sistema de automação para o **WhatsApp** de forma flexível e escalável.
+
 
 ## Como Rodar o Projeto
 
-Siga os passos abaixo para configurar e iniciar o bot:
+**Siga os passos abaixo para configurar e iniciar o bot:**
 
-1. **Clone o repositório:**
+1. **Clone o repositório:** <br>
 
    ```bash
    git clone https://github.com/Kaikygr/galactic-cat.git
    cd galactic-cat
    ```
 
-2. **Instale as dependências:**
+   <br>
+
+2. **Instale as dependências:** <br>
 
    ```bash
    npm install
    ```
 
-3. **Configuração do Ambiente:**
+   <br>
 
-   - Crie um arquivo `.env` com as seguintes variáveis:
+3. **Configuração do Ambiente:** <br>
+- ℹ️ Crie um arquivo `.env` com as seguintes variáveis: <br>
 
-     ```bash
-     GEMINI_APIKEY=1234567890abcdef
-     ZERO_APIKEY=abcdef1234567890
-     GLOBAL_PREFIX=/
-     DB_HOST=localhost
-     DB_PORT=5432
-     DB_NAME=galacticcat
-     DB_USER=usuario_example
-     DB_PASSWORD=senha123
-     ```
+```bash
+GEMINI_APIKEY=1234567890abcdef
+GLOBAL_PREFIX=/
+```
 
-   Para obter a chave da API Gemini, acesse o [Google Developers](https://developers.google.com/).
+  <br>
 
-   Para configurar o banco de dados PostgreSQL, consulte a [documentação oficial do PostgreSQL](https://www.postgresql.org/docs/) com instruções para sistemas Windows e Linux.
+- ℹ️ Para obter a chave da API Gemini, acesse o [Google IA](https://aistudio.google.com/apikey).  
+  <br>
+- ℹ️ Nota: Certifique-se de instalar o FFmpeg e o Webpmux em seu sistema. No Linux, utilize o gerenciador de pacotes correspondente; no Windows, consulte as instruções disponíveis nos sites oficiais. <br>
 
-   Nota: Certifique-se de instalar o FFmpeg e o Webpmux em seu sistema. No Linux, utilize o gerenciador de pacotes correspondente; no Windows, consulte as instruções disponíveis nos sites oficiais.
+1. **Inicie o Bot com PM2:**
 
-   - Configure os parâmetros do bot em [src/config/options.json](src/config/options.json).
+- Para iniciar, execute: <br>
+  ```bash
+  npm start
+  ```
+    <br>
+- Para verificar os logs: <br>
+  ```bash
+  npm run logs
+  ```
+  <br>
 
-4. **Inicie o Bot com PM2:**
+**O bot irá iniciar o processo de conexão (gerenciado por [Connection.js](./src/auth/connection.js)) e exibirá um QR Code no terminal para emparelhamento caso ainda não esteja registrado.**
 
-   - Para iniciar em produção, execute:
-     ```bash
-     npm start
-     ```
-   - Para verificar os logs:
-     ```bash
-     npm run logs
-     ```
 
-   O bot irá iniciar o processo de conexão (gerenciado por connection.js) e exibirá um QR Code no terminal para emparelhamento caso ainda não esteja registrado.
 
 ## Contribuições
 

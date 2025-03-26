@@ -10,7 +10,7 @@ let reconnectAttempts = 0;
 let metricsIntervalId = null;
 
 const logger = require("../utils/logger");
-const { processMessage }  = require("./userSaveData")
+const { processMessage } = require("./userSaveData");
 
 const patchInteractiveMessage = message => {
   return message?.interactiveMessage
