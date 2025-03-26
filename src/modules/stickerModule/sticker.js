@@ -14,25 +14,38 @@ if (!fs.existsSync(tempDir)) {
 }
 
 async function processSticker(client, info, expirationMessage, sender, from, text, isMedia, isQuotedVideo, isQuotedImage) {
-  console.log(JSON.stringify(info, null, 2));
   try {
-    logger.info("[ Processando sticker ] para o: " + sender);
+    console.log(JSON.stringify(info, null, 2));
+    logger.info(`[ Processando sticker ] Usuário: ${sender}`);
+
     let filtro = "fps=10,scale=512:512";
     let processWithFfmpeg = true;
     let encmedia, mediaBuffer, mediaExtension;
 
-    if ((isMedia && info.message.videoMessage) || isQuotedVideo) {
-      const videoDuration = isMedia && info.message.videoMessage ? info.message.videoMessage.seconds : info.message.extendedTextMessage.contextInfo.quotedMessage.videoMessage.seconds;
-      if (videoDuration >= (isQuotedVideo ? 35 : 10)) {
+    if ((isMedia && info.message.videoMessage) || isQuotedVideo || (info.message.extendedTextMessage && info.message.extendedTextMessage.contextInfo && info.message.extendedTextMessage.contextInfo.quotedMessage && info.message.extendedTextMessage.contextInfo.quotedMessage.videoMessage && info.message.extendedTextMessage.contextInfo.quotedMessage.videoMessage.seconds)) {
+      let videoDuration = 0;
+      if (isMedia && info.message.videoMessage) {
+        videoDuration = info.message.videoMessage.seconds;
+      } else if (info.message.extendedTextMessage && info.message.extendedTextMessage.contextInfo && info.message.extendedTextMessage.contextInfo.quotedMessage && info.message.extendedTextMessage.contextInfo.quotedMessage.videoMessage) {
+        videoDuration = info.message.extendedTextMessage.contextInfo.quotedMessage.videoMessage.seconds;
+      }
+
+      if (videoDuration >= 10) {
         await client.sendMessage(from, { react: { text: "⚠️", key: info.key } });
-        await client.sendMessage(from, { text: "_*ℹ️ Vídeo muito longo para sticker animada.*_" }, { quoted: info, ephemeralExpiration: expirationMessage });
+        await client.sendMessage(
+          from,
+          {
+            text: "_*ℹ️ Vídeo muito longo para sticker animada.*_\n\n" + "_A mídia deve ter no máximo 10 segundos._\n\n" + "_*⚠️Aviso: mídias em alta definição podem causar bugs, recomenda-se usar mídias de até 1MB.*_",
+          },
+          { quoted: info, ephemeralExpiration: expirationMessage }
+        );
         return;
       }
+
       encmedia = isQuotedVideo ? info.message.extendedTextMessage.contextInfo.quotedMessage.videoMessage : info.message.videoMessage;
       mediaBuffer = await getFileBuffer(encmedia, "video");
       mediaExtension = ".mp4";
     } else if ((isMedia && info.message.stickerMessage) || (info.message.extendedTextMessage && info.message.extendedTextMessage.contextInfo && info.message.extendedTextMessage.contextInfo.quotedMessage && info.message.extendedTextMessage.contextInfo.quotedMessage.stickerMessage)) {
-      // Para sticker, aceita tanto mensagem direta quanto sticker citado
       encmedia = info.message.extendedTextMessage && info.message.extendedTextMessage.contextInfo && info.message.extendedTextMessage.contextInfo.quotedMessage && info.message.extendedTextMessage.contextInfo.quotedMessage.stickerMessage ? info.message.extendedTextMessage.contextInfo.quotedMessage.stickerMessage : info.message.stickerMessage;
       mediaBuffer = await getFileBuffer(encmedia, "sticker");
       mediaExtension = ".webp";
@@ -110,13 +123,19 @@ async function processSticker(client, info, expirationMessage, sender, from, tex
         const newPublisher = parts[1] !== "" ? parts[1] : storedPublisher;
         stickerPackName = newName;
         stickerPackPublisher = newPublisher;
-        stickerPrefs[key] = { stickerPackName: newName, stickerPackPublisher: newPublisher };
+        stickerPrefs[key] = {
+          stickerPackName: newName,
+          stickerPackPublisher: newPublisher,
+        };
         fs.writeFileSync(prefsPath, JSON.stringify(stickerPrefs, null, 2));
       } else {
         const newName = text.trim() !== "" ? text.trim() : null;
         stickerPackName = newName !== null ? newName : defaultComputedName;
         stickerPackPublisher = storedPublisher || defaultComputedPublisher;
-        stickerPrefs[key] = { stickerPackName: newName, stickerPackPublisher: storedPublisher };
+        stickerPrefs[key] = {
+          stickerPackName: newName,
+          stickerPackPublisher: storedPublisher,
+        };
         fs.writeFileSync(prefsPath, JSON.stringify(stickerPrefs, null, 2));
       }
     } else {
@@ -154,9 +173,21 @@ async function processSticker(client, info, expirationMessage, sender, from, tex
     fs.unlinkSync(mediaPath);
   } catch (error) {
     await client.sendMessage(from, { react: { text: "❌", key: info.key } });
-    await client.sendMessage(from, { text: "❌ *Erro durante o processamento!*\n\nOcorreu um problema ao tentar processar sua solicitação. Por favor, tente novamente mais tarde ou verifique se o arquivo enviado está no formato correto." }, { quoted: info, ephemeralExpiration: expirationMessage });
+    await client.sendMessage(
+      from,
+      {
+        text: "❌ *Erro durante o processamento!*\n\nOcorreu um problema ao tentar processar sua solicitação. Por favor, tente novamente mais tarde ou verifique se o arquivo enviado está no formato correto.",
+      },
+      { quoted: info, ephemeralExpiration: expirationMessage }
+    );
     logger.error("Erro ao processar sticker:", error);
-    await client.sendMessage(config.owner.number, { text: `❌ *Erro ao processar sticker!*\n\nOcorreu um problema ao tentar processar a solicitação de ${sender}.\n\n\`\`\`${error}\`\`\`` }, { quoted: info, ephemeralExpiration: expirationMessage });
+    await client.sendMessage(
+      config.owner.number,
+      {
+        text: `❌ *Erro ao processar sticker!*\n\nOcorreu um problema ao tentar processar a solicitação de ${sender}.\n\n\`\`\`${error}\`\`\``,
+      },
+      { quoted: info, ephemeralExpiration: expirationMessage }
+    );
     return;
   }
 }
