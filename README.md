@@ -8,7 +8,7 @@
 
 ## Visão Geral
 
-_**Galactic-Cat**_ é um chatbot open-source desenvolvido em **[Node.js](https://nodejs.org/en)** para integração com o **[WhatsApp](https://www.whatsapp.com/)**. Ele utiliza a API **[@whiskeysockets/baileys](https://www.npmjs.com/package/@whiskeysockets/baileys)** para gerenciar conexões, envio e recebimento de mensagens, permitindo a construção de interações avançadas.
+_**Galactic-Cat**_ é um chatbot open-source desenvolvido em **[Node.js](https://nodejs.org/en)** para integração com o **[WhatsApp](https://www.whatsapp.com/)**. Ele utiliza a API **[baileys](https://www.npmjs.com/package/baileys)** para gerenciar conexões, envio e recebimento de mensagens, permitindo a construção de interações avançadas.
 
 Além disso, o **Galactic-Cat** possui as seguintes características:
 
@@ -18,7 +18,6 @@ Além disso, o **Galactic-Cat** possui as seguintes características:
 - **Open-Source:** Permite contribuições da comunidade, incentivando melhorias contínuas e a evolução do projeto.
 
 Esta abordagem modular e a utilização de tecnologias modernas tornam o **Galactic-Cat** uma ótima base para quem deseja implementar um sistema de automação para o **WhatsApp** de forma flexível e escalável.
-
 
 ## Como Rodar o Projeto
 
@@ -42,6 +41,7 @@ Esta abordagem modular e a utilização de tecnologias modernas tornam o **Galac
    <br>
 
 3. **Configuração do Ambiente:** <br>
+
 - ℹ️ Crie um arquivo `.env` com as seguintes variáveis: <br>
 
 ```bash
@@ -69,8 +69,6 @@ GLOBAL_PREFIX=/
   <br>
 
 **O bot irá iniciar o processo de conexão (gerenciado por [Connection.js](./src/auth/connection.js)) e exibirá um QR Code no terminal para emparelhamento caso ainda não esteja registrado.**
-
-
 
 ## Contribuições
 

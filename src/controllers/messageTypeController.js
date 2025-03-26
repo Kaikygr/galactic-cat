@@ -1,4 +1,4 @@
-const baileys = require("@whiskeysockets/baileys");
+const baileys = require("baileys");
 
 function preProcessMessage(info) {
   const type = baileys.getContentType(info.message);

@@ -4,7 +4,6 @@ const path = require("path");
 const ConfigfilePath = path.join(__dirname, "../config/options.json");
 const config = require(ConfigfilePath);
 const logger = require("../utils/logger");
-const fs = require("fs");
 
 const { generateAIContent } = require("../modules/geminiModule/gemini");
 const { processSticker } = require(path.join(__dirname, "../modules/stickerModule/sticker"));
@@ -16,18 +15,11 @@ async function handleWhatsAppUpdate(upsert, client) {
     if (!info || !info.key || !info.message) return;
     if (info.key.fromMe) return;
 
-    try {
-      await client.readMessages([info.key]);
-      logger.info(`Mensagem marcada como lida: ${info.key.participant || info.key.remoteJid}`);
-    } catch (error) {
-      logger.error("Erro ao marcar a mensagem como lida:", error);
-    }
-
     const from = info.key.remoteJid;
     const isGroup = from.endsWith("@g.us");
     const sender = isGroup ? info.key.participant : info.key.remoteJid;
-    const userName = info?.pushName || null;
-    const expirationMessage = getExpiration(info) === null ? null : getExpiration(info);
+    const userName = info?.pushName || "Desconhecido";
+    const expirationMessage = getExpiration(info);
 
     const { type, body, isMedia } = preProcessMessage(info);
     const prefixResult = processPrefix(body, process.env.GLOBAL_PREFIX);
@@ -66,8 +58,7 @@ async function handleWhatsAppUpdate(upsert, client) {
         await processSticker(client, info, expirationMessage, sender, from, text, isMedia, isQuotedVideo, isQuotedImage, config, getFileBuffer);
         break;
       }
-      case "teste": {
-        logger.error("Teste de erro");
+      case "grupo": {
         break;
       }
     }

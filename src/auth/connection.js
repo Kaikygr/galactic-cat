@@ -1,8 +1,8 @@
-const { default: makeWASocket, Browsers, makeInMemoryStore } = require("@whiskeysockets/baileys");
+const { default: makeWASocket, Browsers, makeInMemoryStore } = require("baileys");
 const pino = require("pino");
 const path = require("path");
 const NodeCache = require("node-cache");
-const { useMultiFileAuthState } = require("@whiskeysockets/baileys");
+const { useMultiFileAuthState } = require("baileys");
 const groupCache = new NodeCache({ stdTTL: 5 * 60, useClones: false });
 const RECONNECT_INITIAL_DELAY = 2000;
 const RECONNECT_MAX_DELAY = 60000;
