@@ -8,7 +8,7 @@ const config = require("../../config/options.json");
 const { getFileBuffer } = require("../../utils/functions");
 const logger = require("../../utils/logger");
 
-const tempDir = path.join(__dirname, "..", "..", "temp");
+const tempDir = path.join(__dirname, "temp");
 if (!fs.existsSync(tempDir)) {
   fs.mkdirSync(tempDir, { recursive: true });
 }
@@ -98,7 +98,7 @@ async function processSticker(client, info, expirationMessage, sender, from, tex
     }
 
     const formattedSender = sender.replace(/@s\.whatsapp\.net$/, "");
-    const prefsPath = path.join(__dirname, "stickerPrefs.json");
+    const prefsPath = path.join(__dirname, "data", "stickerPrefs.json");
     let stickerPrefs = {};
     if (fs.existsSync(prefsPath)) {
       try {
