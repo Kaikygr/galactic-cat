@@ -1,4 +1,5 @@
 const winston = require("winston");
+const DailyRotateFile = require("winston-daily-rotate-file");
 
 const levels = {
   error: 0,
@@ -28,13 +29,29 @@ const logger = winston.createLogger({
   level: LEVEL,
   levels,
   format: winston.format.combine(
-    winston.format.colorize({ all: true }),
     winston.format.timestamp({
       format: () => new Date().toLocaleString("pt-BR", { timeZone: "America/Boa_Vista" }),
     }),
-    winston.format.printf(({ timestamp, level, message }) => `${timestamp} ${level} [PID:${process.pid}]: ${message}`)
+    winston.format.prettyPrint()
   ),
-  transports: [new winston.transports.Console(), new winston.transports.File({ filename: "logs/app.log" })],
+  transports: [
+    new DailyRotateFile({
+      filename: "logs/application-%DATE%.log",
+      datePattern: "YYYY-MM-DD",
+      zippedArchive: true,
+      maxSize: "20m",
+      maxFiles: "1d",
+    }),
+    new winston.transports.Console({
+      format: winston.format.combine(
+        winston.format.timestamp({
+          format: () => new Date().toLocaleString("pt-BR", { timeZone: "America/Boa_Vista" }),
+        }),
+        winston.format.colorize({ all: true }),
+        winston.format.printf(info => `[ ${info.timestamp} ] [ ${info.level} ] - ${info.message}`)
+      ),
+    }),
+  ],
 });
 
 module.exports = logger;
