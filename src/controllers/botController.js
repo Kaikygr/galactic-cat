@@ -64,7 +64,7 @@ async function handleWhatsAppUpdate(upsert, client) {
 
       case "grupo": {
         try {
-          if (text === "analise") {
+          if (text === "--info") {
             await processGroupMetrics(client, info, from, expirationMessage);
           } else if (text === "usuario") {
             await processUserMetrics(client, info, from);
