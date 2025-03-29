@@ -1,13 +1,11 @@
-const baileys = require("@whiskeysockets/baileys");
+const baileys = require("baileys");
 
 function preProcessMessage(info) {
   const type = baileys.getContentType(info.message);
   const body = info.message?.conversation || info.message?.viewOnceMessageV2?.message?.imageMessage?.caption || info.message?.viewOnceMessageV2?.message?.videoMessage?.caption || info.message?.imageMessage?.caption || info.message?.videoMessage?.caption || info.message?.extendedTextMessage?.text || info.message?.viewOnceMessage?.message?.videoMessage?.caption || info.message?.viewOnceMessage?.message?.imageMessage?.caption || info.message?.documentWithCaptionMessage?.message?.documentMessage?.caption || info.message?.buttonsMessage?.imageMessage?.caption || info.message?.buttonsResponseMessage?.selectedButtonId || info.message?.listResponseMessage?.singleSelectReply?.selectedRowId || info.message?.templateButtonReplyMessage?.selectedId || (info.message?.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson ? JSON.parse(info.message?.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson)?.id : null) || info?.text;
 
-  // Alterado: caso body seja undefined, deve retornar false
   const finalBody = body === undefined ? false : body;
 
-  // Alterado: lista de tipos de mídia adicionais
   const mediaTypes = ["imageMessage", "videoMessage", "audioMessage", "documentMessage", "stickerMessage", "contactMessage", "locationMessage", "productMessage"];
   const isMedia = mediaTypes.includes(type);
 
@@ -16,7 +14,6 @@ function preProcessMessage(info) {
 
 function processPrefix(body, prefixes) {
   if (!body) return null;
-  // Se prefixes for um array, tenta cada um
   const prefix = Array.isArray(prefixes) ? prefixes.find(p => body.startsWith(p)) : prefixes;
   if (!prefix || !body.startsWith(prefix)) return null;
   let withoutPrefix = body.slice(prefix.length).trim();
