@@ -5,8 +5,9 @@ const ConfigfilePath = path.join(__dirname, "../config/options.json");
 const config = require(ConfigfilePath);
 const logger = require("../utils/logger");
 
-const { generateAIContent } = require("../modules/geminiModule/gemini");
+const { processAIContent } = require("../modules/geminiModule/gemini");
 const { processSticker } = require(path.join(__dirname, "../modules/stickerModule/sticker"));
+const { processGroupMetrics } = require(path.join(__dirname, "../modules/groupModule/groupMetrics"));
 const { getFileBuffer } = require(path.join(__dirname, "../utils/functions"));
 const { preProcessMessage, processPrefix, getQuotedChecks, getExpiration } = require(path.join(__dirname, "./messageTypeController"));
 
@@ -30,6 +31,8 @@ async function handleWhatsAppUpdate(upsert, client) {
     const content = JSON.stringify(info.message);
 
     const isOwner = sender === config.owner.number;
+    const ownerPhoneNumber = config.owner.number;
+    const ownerName = config.owner.name;
 
     const { isQuotedMsg, isQuotedImage, isQuotedVideo, isQuotedDocument, isQuotedAudio, isQuotedSticker, isQuotedContact, isQuotedLocation, isQuotedProduct } = getQuotedChecks(type, content);
 
@@ -49,7 +52,7 @@ async function handleWhatsAppUpdate(upsert, client) {
     switch (comando) {
       case "cat":
       case "gemini": {
-        await generateAIContent(client, from, info, expirationMessage, sender, userName, text);
+        await processAIContent(client, from, info, expirationMessage, sender, userName, text);
         break;
       }
 
@@ -58,8 +61,22 @@ async function handleWhatsAppUpdate(upsert, client) {
         await processSticker(client, info, expirationMessage, sender, from, text, isMedia, isQuotedVideo, isQuotedImage, config, getFileBuffer);
         break;
       }
+
       case "grupo": {
-        break;
+        try {
+          if (text === "analise") {
+            await processGroupMetrics(client, info, from, expirationMessage);
+          } else if (text === "usuario") {
+            await processUserMetrics(client, info, from);
+          } else if (text === "status") {
+            await checkBotStatus(client, from);
+          } else {
+            enviar(from, "⚠️ Comando não reconhecido. Tente novamente!");
+          }
+        } catch (error) {
+          enviar(from, "❌ Ocorreu um erro ao processar sua solicitação. Tente novamente mais tarde.");
+          console.error("Erro:", error);
+        }
       }
     }
   }

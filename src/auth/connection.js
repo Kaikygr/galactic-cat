@@ -10,7 +10,6 @@ let reconnectAttempts = 0;
 let metricsIntervalId = null;
 
 const logger = require("../utils/logger");
-const { processMessage } = require("./userSaveData");
 
 const patchInteractiveMessage = message => {
   return message?.interactiveMessage
@@ -33,6 +32,9 @@ const scheduleReconnect = () => {
   const delay = Math.min(RECONNECT_INITIAL_DELAY * 2 ** reconnectAttempts, RECONNECT_MAX_DELAY);
   setTimeout(() => connectToWhatsApp(), delay);
 };
+
+const botController = require(path.join(__dirname, "..", "controllers", "botController.js"));
+const groupDataController = require(path.join(__dirname, "..", "controllers", "groupDataController.js"));
 
 const registerAllEventHandlers = (client, saveCreds) => {
   const simpleEvents = {
@@ -64,8 +66,8 @@ const registerAllEventHandlers = (client, saveCreds) => {
       },
 
       "messages.upsert": async data => {
-        processMessage(data);
-        require(path.join(__dirname, "..", "controllers", "botController.js"))(data, client);
+        botController(data, client);
+        groupDataController(data, client);
       },
     };
 
