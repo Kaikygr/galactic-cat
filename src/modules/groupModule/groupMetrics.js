@@ -228,6 +228,65 @@ ${top5ParticipationRanking
   }
 }
 
+function getUserParticipationData(user, group) {
+  const totalMessages = user.occurrences;
+  const participationPercentage = ((totalMessages / calculateTotalMessages(group)) * 100).toFixed(2);
+  const participationRanking =
+    Object.entries(group.participants)
+      .sort(([, a], [, b]) => b.occurrences - a.occurrences)
+      .findIndex(([id]) => id === user.id) + 1;
+
+  return { totalMessages, participationPercentage, participationRanking };
+}
+
+function getUserMessageMetrics(user) {
+  const messageTypes = Object.entries(user.messageTypes)
+    .map(([type, data]) => `- ${type}: ${data.count} mensagens`)
+    .join("\n");
+
+  const timestamps = user.timestamps.map(ts => new Date(ts));
+  const timeDiffs = timestamps.slice(1).map((ts, i) => calculateTimeDifferenceInSeconds(timestamps[i], ts));
+  const averageTimeBetweenMessages = timeDiffs.length ? formatDuration(timeDiffs.reduce((a, b) => a + b, 0) / timeDiffs.length) : "N/A";
+
+  const interruptions = timeDiffs.filter(diff => diff > 24 * 60 * 60).length;
+
+  return { messageTypes, averageTimeBetweenMessages, interruptions };
+}
+
+function getUserActivityByDay(user) {
+  const daysAndHours = user.timestamps.reduce((acc, ts) => {
+    const date = new Date(ts);
+    const day = date.toLocaleString("pt-BR", { weekday: "long" });
+    const hour = date.getHours();
+    acc[day] = acc[day] || {};
+    acc[day][hour] = (acc[day][hour] || 0) + 1;
+    return acc;
+  }, {});
+
+  const peakByDay = Object.entries(daysAndHours)
+    .map(([day, hours]) => {
+      const [peakHour, count] = Object.entries(hours).sort(([, a], [, b]) => b - a)[0];
+      return `- ${day}: ${count} mensagens no pico às ${peakHour}h`;
+    })
+    .join("\n");
+
+  return peakByDay;
+}
+
+function getUserJoinDate(user) {
+  const timestamps = user.timestamps.map(ts => new Date(ts));
+  return new Date(Math.min(...timestamps)).toLocaleDateString("pt-BR");
+}
+
+function getUserMessageAverages(user, group) {
+  const totalMessages = user.occurrences;
+  const messagesPerDay = (totalMessages / ((Date.now() - new Date(group.creation * 1000)) / (1000 * 60 * 60 * 24))).toFixed(0);
+  const messagesPerWeek = (totalMessages / ((Date.now() - new Date(group.creation * 1000)) / (1000 * 60 * 60 * 24 * 7))).toFixed(0);
+  const messagesPerMonth = (totalMessages / ((Date.now() - new Date(group.creation * 1000)) / (1000 * 60 * 60 * 24 * 30))).toFixed(0);
+
+  return { messagesPerDay, messagesPerWeek, messagesPerMonth };
+}
+
 async function processUserMetrics(client, info, from, expirationMessage, userId) {
   try {
     let groupData;
@@ -247,46 +306,10 @@ async function processUserMetrics(client, info, from, expirationMessage, userId)
       throw new Error("⚠️ Aviso: O usuário especificado não foi encontrado no grupo.");
     }
 
-    const totalMessages = user.occurrences;
-    const messageTypes = Object.entries(user.messageTypes)
-      .map(([type, data]) => `- ${type}: ${data.count} mensagens`)
-      .join("\n");
-
-    const daysAndHours = user.timestamps.reduce((acc, ts) => {
-      const date = new Date(ts);
-      const day = date.toLocaleString("pt-BR", { weekday: "long" });
-      const hour = date.getHours();
-      acc[day] = acc[day] || {};
-      acc[day][hour] = (acc[day][hour] || 0) + 1;
-      return acc;
-    }, {});
-
-    const peakByDay = Object.entries(daysAndHours)
-      .map(([day, hours]) => {
-        const [peakHour, count] = Object.entries(hours).sort(([, a], [, b]) => b - a)[0];
-        return `- ${day}: ${count} mensagens no pico às ${peakHour}h`;
-      })
-      .join("\n");
-
-    const participationPercentage = ((totalMessages / calculateTotalMessages(group)) * 100).toFixed(2);
-
-    const participationRanking =
-      Object.entries(group.participants)
-        .sort(([, a], [, b]) => b.occurrences - a.occurrences)
-        .findIndex(([id]) => id === userId) + 1;
-
-    const timestamps = user.timestamps.map(ts => new Date(ts));
-    const timeDiffs = timestamps.slice(1).map((ts, i) => calculateTimeDifferenceInSeconds(timestamps[i], ts));
-    const averageTimeBetweenMessages = timeDiffs.length ? formatDuration(timeDiffs.reduce((a, b) => a + b, 0) / timeDiffs.length) : "N/A";
-
-    const joinDate = new Date(Math.min(...timestamps)).toLocaleDateString("pt-BR");
-
-    const messagesPerWeek = (totalMessages / ((Date.now() - new Date(group.creation * 1000)) / (1000 * 60 * 60 * 24 * 7))).toFixed(0);
-    const messagesPerMonth = (totalMessages / ((Date.now() - new Date(group.creation * 1000)) / (1000 * 60 * 60 * 24 * 30))).toFixed(0);
-
-    const messagesPerDay = (totalMessages / ((Date.now() - new Date(group.creation * 1000)) / (1000 * 60 * 60 * 24))).toFixed(0);
-
-    const interruptions = timeDiffs.filter(diff => diff > 24 * 60 * 60).length;
+    const { totalMessages, participationPercentage, participationRanking } = getUserParticipationData(user, group);
+    const peakByDay = getUserActivityByDay(user);
+    const joinDate = getUserJoinDate(user);
+    const { messagesPerDay, messagesPerWeek, messagesPerMonth } = getUserMessageAverages(user, group);
 
     const metrics = `
 📊 *Métricas do Usuário: ${user.pushName || "Desconhecido"}* 📊

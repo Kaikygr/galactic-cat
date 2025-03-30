@@ -8,6 +8,7 @@ const logger = require("../utils/logger");
 const { processAIContent } = require("../modules/geminiModule/gemini");
 const { processSticker } = require(path.join(__dirname, "../modules/stickerModule/sticker"));
 const { processGroupMetrics, processUserMetrics } = require(path.join(__dirname, "../modules/groupModule/groupMetrics"));
+
 const { getFileBuffer } = require(path.join(__dirname, "../utils/functions"));
 const { preProcessMessage, processPrefix, getQuotedChecks, getExpiration } = require(path.join(__dirname, "./messageTypeController"));
 
@@ -68,16 +69,9 @@ async function handleWhatsAppUpdate(upsert, client) {
             await processGroupMetrics(client, info, from, expirationMessage);
           } else if (text.startsWith("--me")) {
             const userId = sender;
-
             await processUserMetrics(client, info, from, expirationMessage, userId);
           } else {
-            await client.sendMessage(
-              from,
-              {
-                text: "❌ Comando inválido. Use .grupo --me para obter informações.",
-              },
-              { quoted: info, ephemeralExpiration: expirationMessage }
-            );
+            await client.sendMessage(from, { text: "❌ Comando inválido. Use .grupo --me para obter informações." }, { quoted: info, ephemeralExpiration: expirationMessage });
           }
         } catch (error) {
           enviar(from, "❌ Ocorreu um erro ao processar sua solicitação. Tente novamente mais tarde.");
