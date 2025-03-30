@@ -7,7 +7,8 @@ const logger = require("../utils/logger");
 
 const { processAIContent } = require("../modules/geminiModule/gemini");
 const { processSticker } = require(path.join(__dirname, "../modules/stickerModule/sticker"));
-const { processGroupMetrics } = require(path.join(__dirname, "../modules/groupModule/groupMetrics"));
+const { processGroupMetrics, processUserMetrics } = require(path.join(__dirname, "../modules/groupModule/groupMetrics"));
+
 const { getFileBuffer } = require(path.join(__dirname, "../utils/functions"));
 const { preProcessMessage, processPrefix, getQuotedChecks, getExpiration } = require(path.join(__dirname, "./messageTypeController"));
 
@@ -15,6 +16,8 @@ async function handleWhatsAppUpdate(upsert, client) {
   for (const info of upsert?.messages || []) {
     if (!info || !info.key || !info.message) return;
     if (info.key.fromMe) return;
+
+    console.log(JSON.stringify(info, null, 2));
 
     const from = info.key.remoteJid;
     const isGroup = from.endsWith("@g.us");
@@ -49,6 +52,15 @@ async function handleWhatsAppUpdate(upsert, client) {
     const groupFormattedData = groupMeta ? JSON.stringify(groupMeta, null, 2) : null;
     const isGroupAdmin = isGroup ? getGroupAdmins(groupMeta.participants).includes(sender) : false;
 
+    const isQuotedUser = Object.entries(info.message || {}).reduce((acc, [_, value]) => {
+      if (value?.contextInfo) {
+        const mencionados = value.contextInfo.mentionedJid || [];
+        const participante = value.contextInfo.participant ? [value.contextInfo.participant] : [];
+        return [...acc, ...mencionados, ...participante];
+      }
+      return acc;
+    }, []);
+
     switch (comando) {
       case "cat":
       case "gemini": {
@@ -66,18 +78,35 @@ async function handleWhatsAppUpdate(upsert, client) {
         try {
           if (text === "--info") {
             await processGroupMetrics(client, info, from, expirationMessage);
-          } else if (text === "usuario") {
-            await processUserMetrics(client, info, from);
-          } else if (text === "status") {
-            await checkBotStatus(client, from);
+          } else if (text.startsWith("--me")) {
+            const userId = sender;
+            await processUserMetrics(client, info, from, expirationMessage, userId);
           } else {
-            enviar(from, "⚠️ Comando não reconhecido. Tente novamente!");
+            await client.sendMessage(from, { text: "❌ Comando inválido. Use .grupo --me para obter informações." }, { quoted: info, ephemeralExpiration: expirationMessage });
           }
         } catch (error) {
           enviar(from, "❌ Ocorreu um erro ao processar sua solicitação. Tente novamente mais tarde.");
           console.error("Erro:", error);
         }
+        break;
       }
+
+      case "eval": {
+        if (!isOwner) {
+          await client.sendMessage(from, { text: "❌ O comando eval é restrito ao dono." }, { quoted: info, ephemeralExpiration: expirationMessage });
+          break;
+        }
+        try {
+          const result = eval(text);
+          await client.sendMessage(from, { text: `Resultado: ${result}` }, { quoted: info, ephemeralExpiration: expirationMessage });
+        } catch (error) {
+          await client.sendMessage(from, { text: `Erro ao executar o comando: ${error.message}` }, { quoted: info, ephemeralExpiration: expirationMessage });
+        }
+        break;
+      }
+      case "teste":
+        client.sendMessage(from, { text: `${isQuotedUser}` }, { quoted: info, ephemeralExpiration: expirationMessage });
+        break;
     }
   }
 }

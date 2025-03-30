@@ -228,4 +228,138 @@ ${top5ParticipationRanking
   }
 }
 
-module.exports = { processGroupMetrics };
+function getUserParticipationData(user, group) {
+  const totalMessages = user.occurrences;
+  const participationPercentage = ((totalMessages / calculateTotalMessages(group)) * 100).toFixed(2);
+  const participationRanking =
+    Object.entries(group.participants)
+      .sort(([, a], [, b]) => b.occurrences - a.occurrences)
+      .findIndex(([id]) => id === user.id) + 1;
+
+  return { totalMessages, participationPercentage, participationRanking };
+}
+
+function getUserMessageMetrics(user) {
+  const messageTypes = Object.entries(user.messageTypes)
+    .map(([type, data]) => `- ${type}: ${data.count} mensagens`)
+    .join("\n");
+
+  const timestamps = user.timestamps.map(ts => new Date(ts));
+  const timeDiffs = timestamps.slice(1).map((ts, i) => calculateTimeDifferenceInSeconds(timestamps[i], ts));
+  const averageTimeBetweenMessages = timeDiffs.length ? formatDuration(timeDiffs.reduce((a, b) => a + b, 0) / timeDiffs.length) : "N/A";
+
+  const interruptions = timeDiffs.filter(diff => diff > 24 * 60 * 60).length;
+
+  return { messageTypes, averageTimeBetweenMessages, interruptions };
+}
+
+function getUserActivityByDay(user) {
+  const daysAndHours = user.timestamps.reduce((acc, ts) => {
+    const date = new Date(ts);
+    const day = date.toLocaleString("pt-BR", { weekday: "long" });
+    const hour = date.getHours();
+    acc[day] = acc[day] || {};
+    acc[day][hour] = (acc[day][hour] || 0) + 1;
+    return acc;
+  }, {});
+
+  const peakByDay = Object.entries(daysAndHours)
+    .map(([day, hours]) => {
+      const [peakHour, count] = Object.entries(hours).sort(([, a], [, b]) => b - a)[0];
+      return `- ${day}: ${count} mensagens no pico às ${peakHour}h`;
+    })
+    .join("\n");
+
+  return peakByDay;
+}
+
+function getUserJoinDate(user) {
+  const timestamps = user.timestamps.map(ts => new Date(ts));
+  return new Date(Math.min(...timestamps)).toLocaleDateString("pt-BR");
+}
+
+function getUserMessageAverages(user, group) {
+  const totalMessages = user.occurrences;
+  const messagesPerDay = (totalMessages / ((Date.now() - new Date(group.creation * 1000)) / (1000 * 60 * 60 * 24))).toFixed(0);
+  const messagesPerWeek = (totalMessages / ((Date.now() - new Date(group.creation * 1000)) / (1000 * 60 * 60 * 24 * 7))).toFixed(0);
+  const messagesPerMonth = (totalMessages / ((Date.now() - new Date(group.creation * 1000)) / (1000 * 60 * 60 * 24 * 30))).toFixed(0);
+
+  return { messagesPerDay, messagesPerWeek, messagesPerMonth };
+}
+
+async function processUserMetrics(client, info, from, expirationMessage, userId) {
+  try {
+    let groupData;
+    try {
+      groupData = JSON.parse(fs.readFileSync(groupDataPath, "utf-8"));
+    } catch (e) {
+      throw new Error("❌ Erro: Falha ao ler ou processar o arquivo groupData.json. Verifique se o arquivo existe e está corretamente formatado.");
+    }
+
+    const group = groupData[from];
+    if (!group) {
+      throw new Error("⚠️ Aviso: O grupo especificado não foi encontrado. Certifique-se de que o ID do grupo está correto.");
+    }
+
+    const user = group.participants[userId];
+    if (!user) {
+      throw new Error("⚠️ Aviso: O usuário especificado não foi encontrado no grupo.");
+    }
+
+    const { totalMessages, participationPercentage, participationRanking } = getUserParticipationData(user, group);
+    const peakByDay = getUserActivityByDay(user);
+    const joinDate = getUserJoinDate(user);
+    const { messagesPerDay, messagesPerWeek, messagesPerMonth } = getUserMessageAverages(user, group);
+
+    const metrics = `
+📊 *Métricas do Usuário: ${user.pushName || "Desconhecido"}* 📊
+
+👤 *ID do Usuário:* @${userId.split("@")[0]}
+💬 *Total de Mensagens:* ${totalMessages}
+⏰ *Horário de Pico por Dia da Semana:*
+${peakByDay}
+
+🔢 *Participação Relativa no Grupo:* ${participationPercentage}%
+🏅 *Ranking no Grupo:* ${participationRanking}º de ${Object.keys(group.participants).length} usuários
+
+⏳ *Tempo Médio entre Mensagens:* ${averageTimeBetweenMessages}
+📆 *Data de Entrada no Grupo:* ${joinDate}
+
+🏆 *Média de Mensagens por Dia:* ${messagesPerDay}
+📈 *Média de Mensagens por Semana:* ${messagesPerWeek}
+📈 *Média de Mensagens por Mês:* ${messagesPerMonth}
+
+❌ *Interrupções na Participação:* ${interruptions} períodos sem mensagens por mais de 24 horas.
+`;
+
+    await client.sendMessage(
+      from,
+      {
+        text: metrics.trim(),
+        mentions: [userId],
+      },
+      { quoted: info, ephemeralExpiration: expirationMessage }
+    );
+  } catch (error) {
+    logger.error("Erro ao processar métricas do usuário:", error);
+
+    await client.sendMessage(
+      from,
+      {
+        text: "❌ *Ocorreu um erro ao calcular as métricas do usuário. O problema já foi reportado ao proprietário. 🚨*",
+      },
+      { quoted: info, ephemeralExpiration: expirationMessage }
+    );
+
+    await client.sendMessage(
+      config.owner.number,
+      {
+        text: `⚠️ *Erro ao calcular as métricas do usuário* ⚠️\n\n*Grupo:* ${from}\n*Usuário:* ${userId}\n*Erro:* ${error.message}`,
+      },
+      { quoted: info, ephemeralExpiration: expirationMessage }
+    );
+    return;
+  }
+}
+
+module.exports = { processGroupMetrics, processUserMetrics };
