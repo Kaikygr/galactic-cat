@@ -14,8 +14,9 @@ function preProcessMessage(info) {
 
 function processPrefix(body, prefixes) {
   if (!body) return null;
-  const prefix = Array.isArray(prefixes) ? prefixes.find(p => body.startsWith(p)) : prefixes;
-  if (!prefix || !body.startsWith(prefix)) return null;
+  if (!Array.isArray(prefixes)) prefixes = [prefixes];
+  const prefix = prefixes.find(p => body.startsWith(p));
+  if (!prefix) return null;
   let withoutPrefix = body.slice(prefix.length).trim();
   if (withoutPrefix.startsWith(".")) {
     withoutPrefix = withoutPrefix.slice(1).trim();
