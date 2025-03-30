@@ -50,7 +50,6 @@ function saveUserData(userData) {
   userDataChanged = true;
 }
 
-// Função para mesclar objetos recursivamente preservando campos existentes
 function mergeDeep(target, source) {
   for (const key in source) {
     if (source[key] && typeof source[key] === "object" && !Array.isArray(source[key])) {
@@ -65,16 +64,13 @@ function mergeDeep(target, source) {
   return target;
 }
 
-// Nova função para validar a estrutura dos dados do grupo
 function validateGroupData(data) {
-  // Exemplo de validação: data deve ser um objeto
   if (typeof data !== "object" || data === null) {
     throw new Error("Estrutura de groupData inválida");
   }
   return true;
 }
 
-// Nova função para validar a estrutura dos dados de usuário
 function validateUserData(data) {
   if (typeof data !== "object" || data === null || !data.hasOwnProperty("users")) {
     throw new Error("Estrutura de userData inválida");
@@ -82,7 +78,6 @@ function validateUserData(data) {
   return true;
 }
 
-// Função que garante a existência da pasta de backups
 function ensureBackupFolderExists() {
   try {
     if (!fs.existsSync(BACKUP_FOLDER)) {
@@ -94,7 +89,6 @@ function ensureBackupFolderExists() {
   }
 }
 
-// Modificação na função createBackup para salvar os backups na pasta tempBackup
 function createBackup(filePath) {
   try {
     if (fs.existsSync(filePath)) {
@@ -110,7 +104,6 @@ function createBackup(filePath) {
   }
 }
 
-// Função para limpar backups com mais de 5 minutos (300000 ms) de idade
 function cleanupOldBackups() {
   try {
     ensureBackupFolderExists();
@@ -121,7 +114,6 @@ function cleanupOldBackups() {
       try {
         const stats = fs.statSync(backupFilePath);
         if (now - stats.mtimeMs > 300000) {
-          // 5 minutos em milissegundos
           fs.unlinkSync(backupFilePath);
           logger.info(`Backup removido por expiração: ${backupFilePath}`);
         }
@@ -134,7 +126,6 @@ function cleanupOldBackups() {
   }
 }
 
-// Agendamento da limpeza dos backups antigos a cada 1 minuto
 setInterval(cleanupOldBackups, 60000);
 
 function flushCacheToDisk() {
@@ -148,9 +139,9 @@ function flushCacheToDisk() {
       }
     } catch (error) {
       logger.error("Erro ao processar groupData.json. Reiniciando com dados padrão.", error);
-      originalGroupData = {}; // Reinicia com dados padrão
+      originalGroupData = {};
     }
-    // Cria backup do arquivo groupData.json
+
     createBackup(groupDataFilePath);
     const mergedGroupData = mergeDeep(originalGroupData, groupDataCache);
     try {
@@ -173,7 +164,6 @@ function flushCacheToDisk() {
       logger.error("Erro ao processar userData.json. Reiniciando com dados padrão.", error);
       originalUserData = { users: {} };
     }
-    // Cria backup do arquivo userData.json
     createBackup(userDataFilePath);
     const mergedUserData = mergeDeep(originalUserData, userDataCache);
     try {
