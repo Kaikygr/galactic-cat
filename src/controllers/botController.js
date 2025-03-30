@@ -7,7 +7,7 @@ const logger = require("../utils/logger");
 
 const { processAIContent } = require("../modules/geminiModule/gemini");
 const { processSticker } = require(path.join(__dirname, "../modules/stickerModule/sticker"));
-const { processGroupMetrics } = require(path.join(__dirname, "../modules/groupModule/groupMetrics"));
+const { processGroupMetrics, processUserMetrics } = require(path.join(__dirname, "../modules/groupModule/groupMetrics"));
 const { getFileBuffer } = require(path.join(__dirname, "../utils/functions"));
 const { preProcessMessage, processPrefix, getQuotedChecks, getExpiration } = require(path.join(__dirname, "./messageTypeController"));
 
@@ -66,12 +66,18 @@ async function handleWhatsAppUpdate(upsert, client) {
         try {
           if (text === "--info") {
             await processGroupMetrics(client, info, from, expirationMessage);
-          } else if (text === "usuario") {
-            await processUserMetrics(client, info, from);
-          } else if (text === "status") {
-            await checkBotStatus(client, from);
+          } else if (text.startsWith("--me")) {
+            const userId = sender;
+
+            await processUserMetrics(client, info, from, expirationMessage, userId);
           } else {
-            enviar(from, "⚠️ Comando não reconhecido. Tente novamente!");
+            await client.sendMessage(
+              from,
+              {
+                text: "❌ Comando inválido. Use .grupo --me para obter informações.",
+              },
+              { quoted: info, ephemeralExpiration: expirationMessage }
+            );
           }
         } catch (error) {
           enviar(from, "❌ Ocorreu um erro ao processar sua solicitação. Tente novamente mais tarde.");
