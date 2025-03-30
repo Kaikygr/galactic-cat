@@ -1,5 +1,4 @@
 {
-    "github": "https://github.com/Kaikygr/kaikygr",
     "owner": {
         "number": "559591264582@s.whatsapp.net",
         "name": "Kaiky Gomes",
@@ -8,7 +7,8 @@
         "country": "Brasil",
         "email": "kaikygomesribeiroof@gmail.com",
         "phone": "+55 95 9126-4582",
-        "instagram": "https://instagram.com/kaikygr"
+        "instagram": "https://instagram.com/kaikygr",
+        "github": "https://github.com/Kaikygr/kaikygr"
     },
     "bot": {
         "name": "Galactic Cat Bot",
