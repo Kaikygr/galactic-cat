@@ -13,6 +13,8 @@ let userDataChanged = false;
 const groupMetadataCache = new Map();
 const GROUP_METADATA_CACHE_TTL = 30000;
 
+const BACKUP_FOLDER = path.join(__dirname, "../temp");
+
 function ensureFileExists(filePath, initialData) {
   if (!fs.existsSync(filePath)) {
     fs.writeFileSync(filePath, JSON.stringify(initialData, null, 2));
@@ -48,16 +50,139 @@ function saveUserData(userData) {
   userDataChanged = true;
 }
 
+// Função para mesclar objetos recursivamente preservando campos existentes
+function mergeDeep(target, source) {
+  for (const key in source) {
+    if (source[key] && typeof source[key] === "object" && !Array.isArray(source[key])) {
+      if (!target[key] || typeof target[key] !== "object") {
+        target[key] = {};
+      }
+      mergeDeep(target[key], source[key]);
+    } else {
+      target[key] = source[key];
+    }
+  }
+  return target;
+}
+
+// Nova função para validar a estrutura dos dados do grupo
+function validateGroupData(data) {
+  // Exemplo de validação: data deve ser um objeto
+  if (typeof data !== "object" || data === null) {
+    throw new Error("Estrutura de groupData inválida");
+  }
+  return true;
+}
+
+// Nova função para validar a estrutura dos dados de usuário
+function validateUserData(data) {
+  if (typeof data !== "object" || data === null || !data.hasOwnProperty("users")) {
+    throw new Error("Estrutura de userData inválida");
+  }
+  return true;
+}
+
+// Função que garante a existência da pasta de backups
+function ensureBackupFolderExists() {
+  try {
+    if (!fs.existsSync(BACKUP_FOLDER)) {
+      fs.mkdirSync(BACKUP_FOLDER);
+      logger.info(`Pasta de backups criada: ${BACKUP_FOLDER}`);
+    }
+  } catch (error) {
+    logger.error("Erro ao criar a pasta de backups:", error);
+  }
+}
+
+// Modificação na função createBackup para salvar os backups na pasta tempBackup
+function createBackup(filePath) {
+  try {
+    if (fs.existsSync(filePath)) {
+      ensureBackupFolderExists();
+      const timestamp = Date.now();
+      const fileName = path.basename(filePath);
+      const backupPath = path.join(BACKUP_FOLDER, `${fileName}.bak.${timestamp}`);
+      fs.copyFileSync(filePath, backupPath);
+      logger.info(`Backup criado: ${backupPath}`);
+    }
+  } catch (error) {
+    logger.error(`Erro ao criar backup de ${filePath}:`, error);
+  }
+}
+
+// Função para limpar backups com mais de 5 minutos (300000 ms) de idade
+function cleanupOldBackups() {
+  try {
+    ensureBackupFolderExists();
+    const files = fs.readdirSync(BACKUP_FOLDER);
+    const now = Date.now();
+    files.forEach(file => {
+      const backupFilePath = path.join(BACKUP_FOLDER, file);
+      try {
+        const stats = fs.statSync(backupFilePath);
+        if (now - stats.mtimeMs > 300000) {
+          // 5 minutos em milissegundos
+          fs.unlinkSync(backupFilePath);
+          logger.info(`Backup removido por expiração: ${backupFilePath}`);
+        }
+      } catch (error) {
+        logger.error(`Erro ao processar o arquivo de backup ${backupFilePath}:`, error);
+      }
+    });
+  } catch (error) {
+    logger.error("Erro ao limpar backups antigos:", error);
+  }
+}
+
+// Agendamento da limpeza dos backups antigos a cada 1 minuto
+setInterval(cleanupOldBackups, 60000);
+
 function flushCacheToDisk() {
   if (groupDataChanged) {
-    fs.writeFileSync(groupDataFilePath, JSON.stringify(groupDataCache, null, 2));
-    groupDataChanged = false;
-    logger.info("Dados do grupo persistidos no arquivo.");
+    let originalGroupData = {};
+    try {
+      if (fs.existsSync(groupDataFilePath)) {
+        const fileContent = fs.readFileSync(groupDataFilePath, "utf-8");
+        originalGroupData = JSON.parse(fileContent);
+        validateGroupData(originalGroupData);
+      }
+    } catch (error) {
+      logger.error("Erro ao processar groupData.json. Reiniciando com dados padrão.", error);
+      originalGroupData = {}; // Reinicia com dados padrão
+    }
+    // Cria backup do arquivo groupData.json
+    createBackup(groupDataFilePath);
+    const mergedGroupData = mergeDeep(originalGroupData, groupDataCache);
+    try {
+      fs.writeFileSync(groupDataFilePath, JSON.stringify(mergedGroupData, null, 2));
+      groupDataChanged = false;
+      logger.info("Dados do grupo mesclados, validados e persistidos no arquivo.");
+    } catch (error) {
+      logger.error("Erro ao salvar os dados do grupo:", error);
+    }
   }
   if (userDataChanged) {
-    fs.writeFileSync(userDataFilePath, JSON.stringify(userDataCache, null, 2));
-    userDataChanged = false;
-    logger.info("Dados do usuário persistidos no arquivo.");
+    let originalUserData = {};
+    try {
+      if (fs.existsSync(userDataFilePath)) {
+        const fileContent = fs.readFileSync(userDataFilePath, "utf-8");
+        originalUserData = JSON.parse(fileContent);
+        validateUserData(originalUserData);
+      }
+    } catch (error) {
+      logger.error("Erro ao processar userData.json. Reiniciando com dados padrão.", error);
+      originalUserData = { users: {} };
+    }
+    // Cria backup do arquivo userData.json
+    createBackup(userDataFilePath);
+    const mergedUserData = mergeDeep(originalUserData, userDataCache);
+    try {
+      fs.writeFileSync(userDataFilePath, JSON.stringify(mergedUserData, null, 2));
+      userDataChanged = false;
+      logger.info("Dados do usuário mesclados, validados e persistidos no arquivo.");
+    } catch (error) {
+      logger.error("Erro ao salvar os dados do usuário:", error);
+    }
   }
 }
 

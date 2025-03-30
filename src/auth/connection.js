@@ -34,7 +34,7 @@ const scheduleReconnect = () => {
 };
 
 const botController = require(path.join(__dirname, "..", "controllers", "botController.js"));
-const groupDataController = require(path.join(__dirname, "..", "controllers", "dataController.js"));
+const dataController = require(path.join(__dirname, "..", "controllers", "dataController.js"));
 
 const registerAllEventHandlers = (client, saveCreds) => {
   const simpleEvents = {
@@ -67,7 +67,7 @@ const registerAllEventHandlers = (client, saveCreds) => {
 
       "messages.upsert": async data => {
         botController(data, client);
-        groupDataController(data, client);
+        dataController(data, client);
       },
     };
 

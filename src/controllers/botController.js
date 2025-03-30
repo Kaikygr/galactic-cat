@@ -17,6 +17,8 @@ async function handleWhatsAppUpdate(upsert, client) {
     if (!info || !info.key || !info.message) return;
     if (info.key.fromMe) return;
 
+    console.log(JSON.stringify(info, null, 2));
+
     const from = info.key.remoteJid;
     const isGroup = from.endsWith("@g.us");
     const sender = isGroup ? info.key.participant : info.key.remoteJid;
@@ -50,6 +52,15 @@ async function handleWhatsAppUpdate(upsert, client) {
     const groupFormattedData = groupMeta ? JSON.stringify(groupMeta, null, 2) : null;
     const isGroupAdmin = isGroup ? getGroupAdmins(groupMeta.participants).includes(sender) : false;
 
+    const isQuotedUser = Object.entries(info.message || {}).reduce((acc, [_, value]) => {
+      if (value?.contextInfo) {
+        const mencionados = value.contextInfo.mentionedJid || [];
+        const participante = value.contextInfo.participant ? [value.contextInfo.participant] : [];
+        return [...acc, ...mencionados, ...participante];
+      }
+      return acc;
+    }, []);
+
     switch (comando) {
       case "cat":
       case "gemini": {
@@ -77,7 +88,25 @@ async function handleWhatsAppUpdate(upsert, client) {
           enviar(from, "❌ Ocorreu um erro ao processar sua solicitação. Tente novamente mais tarde.");
           console.error("Erro:", error);
         }
+        break;
       }
+
+      case "eval": {
+        if (!isOwner) {
+          await client.sendMessage(from, { text: "❌ O comando eval é restrito ao dono." }, { quoted: info, ephemeralExpiration: expirationMessage });
+          break;
+        }
+        try {
+          const result = eval(text);
+          await client.sendMessage(from, { text: `Resultado: ${result}` }, { quoted: info, ephemeralExpiration: expirationMessage });
+        } catch (error) {
+          await client.sendMessage(from, { text: `Erro ao executar o comando: ${error.message}` }, { quoted: info, ephemeralExpiration: expirationMessage });
+        }
+        break;
+      }
+      case "teste":
+        client.sendMessage(from, { text: `${isQuotedUser}` }, { quoted: info, ephemeralExpiration: expirationMessage });
+        break;
     }
   }
 }
