@@ -12,22 +12,5 @@
     "proseWrap": "always",
     "htmlWhitespaceSensitivity": "css",
     "quoteProps": "as-needed",
-    "embeddedLanguageFormatting": "auto",
-    "overrides": [
-        {
-            "files": "*.json",
-            "options": {
-                "parser": "json"
-            }
-        },
-        {
-            "files": [
-                "*.js",
-                "*.jsx"
-            ],
-            "options": {
-                "parser": "babel"
-            }
-        }
-    ]
+    "embeddedLanguageFormatting": "auto"
 }

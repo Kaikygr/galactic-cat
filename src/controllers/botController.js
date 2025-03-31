@@ -17,8 +17,6 @@ async function handleWhatsAppUpdate(upsert, client) {
     if (!info || !info.key || !info.message) return;
     if (info.key.fromMe) return;
 
-    console.log(JSON.stringify(info, null, 2));
-
     const from = info.key.remoteJid;
     const isGroup = from.endsWith("@g.us");
     const sender = isGroup ? info.key.participant : info.key.remoteJid;
@@ -26,7 +24,7 @@ async function handleWhatsAppUpdate(upsert, client) {
     const expirationMessage = getExpiration(info);
 
     const { type, body, isMedia } = preProcessMessage(info);
-    const prefixResult = processPrefix(body, process.env.GLOBAL_PREFIX);
+    const prefixResult = processPrefix(body, config.bot.globalSettings.prefix);
     if (!prefixResult) return;
 
     const { comando, args } = prefixResult;

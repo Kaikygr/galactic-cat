@@ -15,6 +15,19 @@
         "version": "0.1.0",
         "description": "Chatbot avançado com inteligência artificial para automação no WhatsApp, integração via API e suporte a múltiplas funcionalidades.",
         "author": "Kaiky Gomes",
-        "repository": "https://github.com/Kaikygr/galactic-cat"
+        "repository": "https://github.com/Kaikygr/galactic-cat",
+        "license": "MIT",
+        "language": "pt-BR",
+        "timezone": "America/Boa_Vista",
+        "dateFormat": "DD/MM/YYYY",
+        "timeFormat": "HH:mm:ss",
+        "globalSettings": {
+            "prefix": [
+                "!",
+                "#",
+                "?",
+                "/"
+            ]
+        }
     }
 }
