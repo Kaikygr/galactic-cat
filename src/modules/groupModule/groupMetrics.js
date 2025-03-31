@@ -234,7 +234,7 @@ function getUserParticipationData(user, group) {
   const participationRanking =
     Object.entries(group.participants)
       .sort(([, a], [, b]) => b.occurrences - a.occurrences)
-      .findIndex(([id]) => id === user.id) + 1;
+      .findIndex(([id]) => id === user.id) + 1; // Corrigir para começar em 1º
 
   return { totalMessages, participationPercentage, participationRanking };
 }
@@ -246,11 +246,9 @@ function getUserMessageMetrics(user) {
 
   const timestamps = user.timestamps.map(ts => new Date(ts));
   const timeDiffs = timestamps.slice(1).map((ts, i) => calculateTimeDifferenceInSeconds(timestamps[i], ts));
-  const averageTimeBetweenMessages = timeDiffs.length ? formatDuration(timeDiffs.reduce((a, b) => a + b, 0) / timeDiffs.length) : "N/A";
-
   const interruptions = timeDiffs.filter(diff => diff > 24 * 60 * 60).length;
 
-  return { messageTypes, averageTimeBetweenMessages, interruptions };
+  return { messageTypes, interruptions };
 }
 
 function getUserActivityByDay(user) {
@@ -289,48 +287,11 @@ function getUserMessageAverages(user, group) {
 
 async function processUserMetrics(client, info, from, expirationMessage, userId) {
   try {
-    let groupData;
-    try {
-      groupData = JSON.parse(fs.readFileSync(groupDataPath, "utf-8"));
-    } catch (e) {
-      throw new Error("❌ Erro: Falha ao ler ou processar o arquivo groupData.json. Verifique se o arquivo existe e está corretamente formatado.");
-    }
+    const groupData = loadGroupData();
+    const group = getGroupData(groupData, from);
+    const user = getUserData(group, userId);
 
-    const group = groupData[from];
-    if (!group) {
-      throw new Error("⚠️ Aviso: O grupo especificado não foi encontrado. Certifique-se de que o ID do grupo está correto.");
-    }
-
-    const user = group.participants[userId];
-    if (!user) {
-      throw new Error("⚠️ Aviso: O usuário especificado não foi encontrado no grupo.");
-    }
-
-    const { totalMessages, participationPercentage, participationRanking } = getUserParticipationData(user, group);
-    const peakByDay = getUserActivityByDay(user);
-    const joinDate = getUserJoinDate(user);
-    const { messagesPerDay, messagesPerWeek, messagesPerMonth } = getUserMessageAverages(user, group);
-
-    const metrics = `
-📊 *Métricas do Usuário: ${user.pushName || "Desconhecido"}* 📊
-
-👤 *ID do Usuário:* @${userId.split("@")[0]}
-💬 *Total de Mensagens:* ${totalMessages}
-⏰ *Horário de Pico por Dia da Semana:*
-${peakByDay}
-
-🔢 *Participação Relativa no Grupo:* ${participationPercentage}%
-🏅 *Ranking no Grupo:* ${participationRanking}º de ${Object.keys(group.participants).length} usuários
-
-⏳ *Tempo Médio entre Mensagens:* ${averageTimeBetweenMessages}
-📆 *Data de Entrada no Grupo:* ${joinDate}
-
-🏆 *Média de Mensagens por Dia:* ${messagesPerDay}
-📈 *Média de Mensagens por Semana:* ${messagesPerWeek}
-📈 *Média de Mensagens por Mês:* ${messagesPerMonth}
-
-❌ *Interrupções na Participação:* ${interruptions} períodos sem mensagens por mais de 24 horas.
-`;
+    const metrics = generateUserMetrics(user, group, userId);
 
     await client.sendMessage(
       from,
@@ -341,25 +302,86 @@ ${peakByDay}
       { quoted: info, ephemeralExpiration: expirationMessage }
     );
   } catch (error) {
-    logger.error("Erro ao processar métricas do usuário:", error);
-
-    await client.sendMessage(
-      from,
-      {
-        text: "❌ *Ocorreu um erro ao calcular as métricas do usuário. O problema já foi reportado ao proprietário. 🚨*",
-      },
-      { quoted: info, ephemeralExpiration: expirationMessage }
-    );
-
-    await client.sendMessage(
-      config.owner.number,
-      {
-        text: `⚠️ *Erro ao calcular as métricas do usuário* ⚠️\n\n*Grupo:* ${from}\n*Usuário:* ${userId}\n*Erro:* ${error.message}`,
-      },
-      { quoted: info, ephemeralExpiration: expirationMessage }
-    );
-    return;
+    handleUserMetricsError(client, info, from, userId, error);
   }
+}
+
+function loadGroupData() {
+  try {
+    return JSON.parse(fs.readFileSync(groupDataPath, "utf-8"));
+  } catch {
+    throw new Error("❌ Erro: Falha ao ler ou processar o arquivo groupData.json. Verifique se o arquivo existe e está corretamente formatado.");
+  }
+}
+
+function getGroupData(groupData, from) {
+  const group = groupData[from];
+  if (!group) {
+    throw new Error("⚠️ Aviso: O grupo especificado não foi encontrado. Certifique-se de que o ID do grupo está correto.");
+  }
+  return group;
+}
+
+function getUserData(group, userId) {
+  const user = group.participants[userId];
+  if (!user) {
+    throw new Error("⚠️ Aviso: O usuário especificado não foi encontrado no grupo.");
+  }
+  return user;
+}
+
+function generateUserMetrics(user, group, userId) {
+  const { totalMessages, participationPercentage, participationRanking } = getUserParticipationData(user, group);
+  const peakByDay = getUserActivityByDay(user);
+  const joinDate = getUserJoinDate(user);
+  const { messagesPerDay, messagesPerWeek, messagesPerMonth } = getUserMessageAverages(user, group);
+  const interruptions = calculateInterruptions(user);
+
+  return `
+📊 *Métricas do Usuário: ${user.pushName || "Desconhecido"}* 📊
+
+👤 *ID do Usuário:* @${userId.split("@")[0]}
+💬 *Total de Mensagens:* ${totalMessages}
+⏰ *Horário de Pico por Dia da Semana:*
+${peakByDay}
+
+🔢 *Participação Relativa no Grupo:* ${participationPercentage}%
+🏅 *Ranking no Grupo:* ${participationRanking}º de ${Object.keys(group.participants).length} usuários
+
+📆 *Data de Entrada no Grupo:* ${joinDate}
+
+🏆 *Média de Mensagens por Dia:* ${messagesPerDay}
+📈 *Média de Mensagens por Semana:* ${messagesPerWeek}
+📈 *Média de Mensagens por Mês:* ${messagesPerMonth}
+
+❌ *Interrupções na Participação:* ${interruptions} períodos sem mensagens por mais de 24 horas.
+`;
+}
+
+function calculateInterruptions(user) {
+  const timestamps = user.timestamps.map(ts => new Date(ts));
+  const timeDiffs = timestamps.slice(1).map((ts, i) => calculateTimeDifferenceInSeconds(timestamps[i], ts));
+  return timeDiffs.filter(diff => diff > 24 * 60 * 60).length;
+}
+
+async function handleUserMetricsError(client, info, from, userId, error) {
+  logger.error("Erro ao processar métricas do usuário:", error);
+
+  await client.sendMessage(
+    from,
+    {
+      text: "❌ *Ocorreu um erro ao calcular as métricas do usuário. O problema já foi reportado ao proprietário. 🚨*",
+    },
+    { quoted: info, ephemeralExpiration: expirationMessage }
+  );
+
+  await client.sendMessage(
+    config.owner.number,
+    {
+      text: `⚠️ *Erro ao calcular as métricas do usuário* ⚠️\n\n*Grupo:* ${from}\n*Usuário:* ${userId}\n*Erro:* ${error.message}`,
+    },
+    { quoted: info, ephemeralExpiration: expirationMessage }
+  );
 }
 
 module.exports = { processGroupMetrics, processUserMetrics };
