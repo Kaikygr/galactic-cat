@@ -3,6 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const logger = require("../utils/logger");
 const options = require("../config/options.json");
+const _ = require("lodash"); // Adicione a importação do lodash
 
 // Configurações de cache e backup
 const CACHE_TTL = options.cacheSettings.cacheTTL * 1000; // Convertido para milissegundos
@@ -150,19 +151,9 @@ function saveUserData(userData) {
   }
 }
 
-// Mescla objetos profundamente, preservando dados existentes
+// Substitua a função mergeDeep pela função lodash.merge
 function mergeDeep(target, source) {
-  for (const key in source) {
-    if (source[key] && typeof source[key] === "object" && !Array.isArray(source[key])) {
-      if (!target[key] || typeof target[key] !== "object") {
-        target[key] = {};
-      }
-      mergeDeep(target[key], source[key]);
-    } else {
-      target[key] = source[key];
-    }
-  }
-  return target;
+  return _.merge(target, source);
 }
 
 // Valida a estrutura dos dados de grupos
