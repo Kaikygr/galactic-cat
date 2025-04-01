@@ -2,10 +2,19 @@
 const fs = require("fs");
 const path = require("path");
 const logger = require("../utils/logger");
+const options = require("../config/options.json");
 
-// Define caminhos para os arquivos de dados
+// Configurações de cache e backup
+const CACHE_TTL = options.cacheSettings.cacheTTL * 1000; // Convertido para milissegundos
+const GROUP_METADATA_CACHE_TTL = options.cacheSettings.groupMetadataTTL * 1000; // Convertido para milissegundos
+const BACKUP_RETENTION_TIME = options.cacheSettings.backupRetentionTime;
+
+// Caminhos para arquivos de dados
 const groupDataFilePath = path.join(__dirname, "../data/groupData.json");
 const userDataFilePath = path.join(__dirname, "../data/userData.json");
+
+// Caminho para a pasta de backups temporários
+const BACKUP_FOLDER = path.join(__dirname, "../backupData");
 
 // Variáveis de cache e controle de mudanças
 let groupDataCache = null;
@@ -15,13 +24,8 @@ let userDataChanged = false;
 
 // Cache para metadados de grupos com TTL (Time To Live)
 const groupMetadataCache = new Map();
-const GROUP_METADATA_CACHE_TTL = 30000; // 30 segundos
-
-// Caminho para a pasta de backups temporários
-const BACKUP_FOLDER = path.join(__dirname, "../backupData");
 
 // TTL para o cache de dados
-const CACHE_TTL = 30 * 60 * 1000; // 30 minutos
 let groupDataCacheTimestamp = null;
 let userDataCacheTimestamp = null;
 
@@ -34,26 +38,26 @@ function isCacheValid(cacheTimestamp) {
 function clearGroupDataCache() {
   groupDataCache = null;
   groupDataCacheTimestamp = null;
-  logger.info("Cache de groupData limpo.");
+  logger.info(`[ CACHE ] O cache de groupData foi limpo com sucesso.`);
 }
 
 function clearUserDataCache() {
   userDataCache = null;
   userDataCacheTimestamp = null;
-  logger.info("Cache de userData limpo.");
+  logger.info(`[ CACHE ] O cache de userData foi limpo com sucesso.`);
 }
 
 function clearAllCaches() {
   clearGroupDataCache();
   clearUserDataCache();
-  logger.info("Todos os caches foram limpos.");
+  logger.info(`[ CACHE ] Todos os caches foram limpos com sucesso.`);
 }
 
 // Garante que o arquivo existe, criando-o com dados iniciais, se necessário
 function ensureFileExists(filePath, initialData) {
   if (!fs.existsSync(filePath)) {
     fs.writeFileSync(filePath, JSON.stringify(initialData, null, 2));
-    logger.info(`Arquivo JSON criado: ${filePath}`);
+    logger.info(`[ ARQUIVO ] Arquivo JSON criado com sucesso: ${filePath}`);
   }
 }
 
@@ -71,17 +75,17 @@ function restoreBackup(filePath, defaultData) {
       try {
         const backupContent = fs.readFileSync(backupPath, "utf-8");
         const parsedData = JSON.parse(backupContent);
-        logger.info(`Backup restaurado com sucesso: ${backupPath}`);
+        logger.info(`[ BACKUP ] Backup restaurado com sucesso: ${backupPath}`);
         return parsedData;
       } catch (error) {
-        logger.warn(`Backup corrompido ignorado: ${backupPath}`);
+        logger.warn(`[ BACKUP ] Backup corrompido ignorado: ${backupPath}`);
       }
     }
   } catch (error) {
-    logger.error("Erro ao restaurar backup:", error);
+    logger.error(`[ BACKUP ] Erro ao restaurar o backup: ${error}`);
   }
 
-  logger.warn("Nenhum backup válido encontrado. Usando dados padrão.");
+  logger.warn(`[ BACKUP ] Nenhum backup válido encontrado. Utilizando dados padrão.`);
   return defaultData;
 }
 
@@ -96,7 +100,7 @@ function loadGroupData() {
     groupDataCache = JSON.parse(fileContent);
     groupDataCacheTimestamp = Date.now(); // Atualiza o timestamp ao carregar
   } catch (error) {
-    logger.error("Erro ao carregar groupData.json. Tentando restaurar backup...", error);
+    logger.error(`[ DATA ] Erro ao carregar o arquivo groupData.json. Tentando restaurar o backup...`, error);
     groupDataCache = restoreBackup(groupDataFilePath, {});
     groupDataCacheTimestamp = Date.now(); // Atualiza o timestamp ao restaurar
   }
@@ -114,7 +118,8 @@ function loadUserData() {
     userDataCache = JSON.parse(fileContent);
     userDataCacheTimestamp = Date.now(); // Atualiza o timestamp ao carregar
   } catch (error) {
-    logger.error("Erro ao carregar userData.json. Tentando restaurar backup...", error);
+    logger.error(`[ DATA ] Erro ao carregar o arquivo userData.json. Tentando restaurar o backup...`, error);
+
     userDataCache = restoreBackup(userDataFilePath, { users: {} });
     userDataCacheTimestamp = Date.now(); // Atualiza o timestamp ao restaurar
   }
@@ -129,7 +134,7 @@ function saveGroupData(groupData) {
     groupDataCacheTimestamp = Date.now();
     groupDataChanged = true;
   } catch (error) {
-    logger.error("Dados de grupo inválidos. Não foram salvos:", error);
+    logger.error(`[ DATA ] Dados de grupo inválidos. Não foram salvos:`, error);
   }
 }
 
@@ -141,7 +146,7 @@ function saveUserData(userData) {
     userDataCacheTimestamp = Date.now();
     userDataChanged = true;
   } catch (error) {
-    logger.error("Dados de usuário inválidos. Não foram salvos:", error);
+    logger.error(`[ DATA ] Dados de usuário inválidos. Não foram salvos:`, error);
   }
 }
 
@@ -181,10 +186,10 @@ function ensureBackupFolderExists() {
   try {
     if (!fs.existsSync(BACKUP_FOLDER)) {
       fs.mkdirSync(BACKUP_FOLDER);
-      logger.info(`Pasta de backups criada: ${BACKUP_FOLDER}`);
+      logger.info(`[ BACKUP ] Pasta de backups criada: ${BACKUP_FOLDER}`);
     }
   } catch (error) {
-    logger.error("Erro ao criar a pasta de backups:", error);
+    logger.error(`[ BACKUP ] Erro ao criar a pasta de backups:`, error);
   }
 }
 
@@ -197,10 +202,10 @@ function createBackup(filePath) {
       const fileName = path.basename(filePath);
       const backupPath = path.join(BACKUP_FOLDER, `${fileName}.bak.${timestamp}`);
       fs.copyFileSync(filePath, backupPath);
-      logger.info(`Backup criado: ${backupPath}`);
+      logger.info(`[ BACKUP ] Backup criado: ${backupPath}`);
     }
   } catch (error) {
-    logger.error(`Erro ao criar backup de ${filePath}:`, error);
+    logger.error(`[ BACKUP ] Erro ao criar backup de ${filePath}:`, error);
   }
 }
 
@@ -218,41 +223,32 @@ function cleanupOldBackups() {
       }))
       .sort((a, b) => b.stats.mtimeMs - a.stats.mtimeMs); // Ordena por data de modificação (mais recente primeiro)
 
-    const groupDataBackups = files.filter(file => file.name.startsWith("groupData.json"));
-    const userDataBackups = files.filter(file => file.name.startsWith("userData.json"));
-
     const now = Date.now();
 
-    // Limpa backups de groupData, mantendo pelo menos 1
-    groupDataBackups.forEach((file, index) => {
-      if (index > 0 && now - file.stats.mtimeMs > 300000) {
+    files.forEach(file => {
+      if (now - file.stats.mtimeMs > BACKUP_RETENTION_TIME) {
         fs.unlinkSync(file.path);
-        logger.info(`Backup de groupData removido por expiração: ${file.path}`);
+        logger.info(`[ BACKUP ] Backup removido por expiração: ${file.path}`);
       }
     });
-
-    // Limpa backups de userData, mantendo pelo menos 1
-    userDataBackups.forEach((file, index) => {
-      if (index > 0 && now - file.stats.mtimeMs > 300000) {
-        fs.unlinkSync(file.path);
-        logger.info(`Backup de userData removido por expiração: ${file.path}`);
-      }
-    });
-
-    if (groupDataBackups.length === 0) {
-      logger.warn("Nenhum backup de groupData disponível. Certifique-se de criar um backup.");
-    }
-
-    if (userDataBackups.length === 0) {
-      logger.warn("Nenhum backup de userData disponível. Certifique-se de criar um backup.");
-    }
   } catch (error) {
-    logger.error("Erro ao limpar backups antigos:", error);
+    logger.error(`[ BACKUP ] Erro ao limpar backups antigos:`, error);
   }
 }
 
-// Sincroniza a limpeza de backups antigos com o intervalo de persistência
-setInterval(cleanupOldBackups, 30 * 60 * 1000);
+// Configurações de intervalos
+const INTERVAL_CLEANUP_OLD_BACKUPS = options.cacheSettings.intervals.cleanupOldBackups * 1000; // Convertido para milissegundos
+const INTERVAL_FLUSH_CACHE_TO_DISK = options.cacheSettings.intervals.flushCacheToDisk * 1000; // Convertido para milissegundos
+const INTERVAL_CLEAR_ALL_CACHES = options.cacheSettings.intervals.clearAllCaches * 1000; // Convertido para milissegundos
+
+// Sincroniza a limpeza de backups antigos com o intervalo configurado
+setInterval(cleanupOldBackups, INTERVAL_CLEANUP_OLD_BACKUPS);
+
+// Sincroniza a persistência de dados com o intervalo configurado
+setInterval(flushCacheToDisk, INTERVAL_FLUSH_CACHE_TO_DISK);
+
+// Limpa todos os caches periodicamente com o intervalo configurado
+setInterval(clearAllCaches, INTERVAL_CLEAR_ALL_CACHES);
 
 // Persiste os dados do cache no disco, criando backups e validando os dados
 function flushCacheToDisk() {
@@ -265,7 +261,7 @@ function flushCacheToDisk() {
         validateGroupData(originalGroupData);
       }
     } catch (error) {
-      logger.error("Erro ao processar groupData.json. Restaurando backup...", error);
+      logger.error(`[ DATA ] Erro ao processar groupData.json. Restaurando backup...`, error);
       originalGroupData = restoreBackup(groupDataFilePath, {});
     }
 
@@ -274,9 +270,9 @@ function flushCacheToDisk() {
     try {
       fs.writeFileSync(groupDataFilePath, JSON.stringify(mergedGroupData, null, 2));
       groupDataChanged = false;
-      logger.info("Dados do grupo mesclados, validados e persistidos no arquivo.");
+      logger.info(`[ DATA ] Dados do grupo mesclados, validados e persistidos no arquivo.`);
     } catch (error) {
-      logger.error("Erro ao salvar os dados do grupo:", error);
+      logger.error(`[ DATA ] Erro ao salvar os dados do grupo:`, error);
     }
   }
   if (userDataChanged) {
@@ -288,7 +284,7 @@ function flushCacheToDisk() {
         validateUserData(originalUserData);
       }
     } catch (error) {
-      logger.error("Erro ao processar userData.json. Restaurando backup...", error);
+      logger.error(`[ DATA ] Erro ao processar userData.json. Restaurando backup...`, error);
       originalUserData = restoreBackup(userDataFilePath, { users: {} });
     }
     createBackup(userDataFilePath);
@@ -296,18 +292,12 @@ function flushCacheToDisk() {
     try {
       fs.writeFileSync(userDataFilePath, JSON.stringify(mergedUserData, null, 2));
       userDataChanged = false;
-      logger.info("Dados do usuário mesclados, validados e persistidos no arquivo.");
+      logger.info(`[ DATA ] Dados do usuário mesclados, validados e persistidos no arquivo.`);
     } catch (error) {
-      logger.error("Erro ao salvar os dados do usuário:", error);
+      logger.error(`[ DATA ] Erro ao salvar os dados do usuário:`, error);
     }
   }
 }
-
-// Sincroniza a persistência de dados com o intervalo de 30 minutos
-setInterval(flushCacheToDisk, 30 * 60 * 1000);
-
-// Limpa todos os caches periodicamente
-setInterval(clearAllCaches, 30 * 60 * 1000);
 
 // Obtém metadados de grupos com cache para evitar chamadas repetidas
 async function getGroupMetadataWithCache(client, groupId) {
@@ -316,7 +306,7 @@ async function getGroupMetadataWithCache(client, groupId) {
   if (groupMetadataCache.has(groupId)) {
     const cachedData = groupMetadataCache.get(groupId);
     if (now - cachedData.timestamp < GROUP_METADATA_CACHE_TTL) {
-      logger.info(`Metadados do grupo obtidos do cache: ${groupId}S`);
+      logger.info(`[ CACHE ] Metadados do grupo obtidos do cache: ${groupId}`);
       return cachedData.data;
     }
     groupMetadataCache.delete(groupId);
@@ -325,12 +315,12 @@ async function getGroupMetadataWithCache(client, groupId) {
   try {
     const groupMeta = await client.groupMetadata(groupId);
     groupMetadataCache.set(groupId, { data: groupMeta, timestamp: now });
-    logger.info(`Metadados do grupo atualizados no cache: ${groupId}`);
+    logger.info(`[ CACHE ] Metadados do grupo atualizados no cache: ${groupId}`);
     return groupMeta;
   } catch (error) {
-    logger.error(`Erro ao obter metadados do grupo: ${groupId}`, error);
+    logger.error(`[ DATA ] Erro ao obter metadados do grupo: ${groupId}`, error);
     if (groupMetadataCache.has(groupId)) {
-      logger.warn(`Usando metadados do cache expirado para o grupo: ${groupId}`);
+      logger.warn(`[ CACHE ] Usando metadados do cache expirado para o grupo: ${groupId}`);
       return groupMetadataCache.get(groupId).data;
     }
     throw error;
@@ -348,7 +338,7 @@ function updateParticipantData(participantData, messageType) {
   participantData.messageTypes[messageType].count += 1;
   participantData.messageTypes[messageType].dates.push(new Date().toISOString());
 
-  logger.info(`Participante atualizado`);
+  logger.info(`[ DATA ] Participante atualizado`);
 }
 
 // Atualiza os dados de um usuário, incluindo mensagens e tipos de mensagens
@@ -370,7 +360,7 @@ function updateUserData(userData, sender, pushName, messageType, isGroup) {
   // Atualiza o pushName se for diferente do atual
   if (pushName && user.pushName !== pushName) {
     user.pushName = pushName;
-    logger.info(`pushName atualizado para o usuário ${sender}: ${pushName}`);
+    logger.info(`[ DATA ] pushName atualizado para o usuário ${sender}: ${pushName}`);
   }
 
   user.totalMessages += 1;
@@ -390,13 +380,13 @@ function updateUserData(userData, sender, pushName, messageType, isGroup) {
 
   userData.users[sender] = user;
 
-  logger.info(`Dados do usuário atualizados`);
+  logger.info(`[ DATA ] Dados do usuário atualizados`);
 }
 
 // Processa dados de mensagens recebidas, atualizando informações de grupos e usuários
 async function groupProcessData(data, client) {
   try {
-    logger.info("Processando nova mensagem...");
+    logger.info(`[ DATA ] Processando nova mensagem...`);
     const from = data.messages[0].key.remoteJid;
     if (data.messages[0].key.fromMe === true) return;
 
@@ -452,7 +442,7 @@ async function groupProcessData(data, client) {
 
       if (!groupHistory.length || groupHistory[groupHistory.length - 1].size !== currentSize) {
         groupHistory.push({ size: currentSize, timestamp: new Date().toISOString() });
-        logger.info(`Histórico de crescimento atualizado para o grupo: ${groupId}`);
+        logger.info(`[ DATA ] Histórico de crescimento atualizado para o grupo: ${groupId}`);
       }
 
       groupData[groupId] = {
@@ -491,7 +481,7 @@ async function groupProcessData(data, client) {
 
       saveGroupData(groupData);
 
-      logger.info(`Mensagem processada com sucesso para o grupo: ${groupId}`);
+      logger.info(`[ DATA ] Mensagem processada com sucesso para o grupo: ${groupId}`);
     }
 
     let userData = loadUserData();
@@ -499,9 +489,9 @@ async function groupProcessData(data, client) {
 
     saveUserData(userData);
 
-    logger.info(`Mensagem processada com sucesso para o usuário: ${sender}`);
+    logger.info(`[ DATA ] Mensagem processada com sucesso para o usuário: ${sender}`);
   } catch (error) {
-    logger.error("Erro ao processar mensagem:", error);
+    logger.error(`[ DATA ] Erro ao processar mensagem:`, error);
     throw error;
   }
 }
