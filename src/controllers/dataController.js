@@ -18,7 +18,7 @@ const groupMetadataCache = new Map();
 const GROUP_METADATA_CACHE_TTL = 30000; // 30 segundos
 
 // Caminho para a pasta de backups temporários
-const BACKUP_FOLDER = path.join(__dirname, "../temp");
+const BACKUP_FOLDER = path.join(__dirname, "../backupData");
 
 // TTL para o cache de dados
 const CACHE_TTL = 30 * 60 * 1000; // 30 minutos
@@ -367,6 +367,12 @@ function updateUserData(userData, sender, pushName, messageType, isGroup) {
     timestamp: currentTimestamp,
   };
 
+  // Atualiza o pushName se for diferente do atual
+  if (pushName && user.pushName !== pushName) {
+    user.pushName = pushName;
+    logger.info(`pushName atualizado para o usuário ${sender}: ${pushName}`);
+  }
+
   user.totalMessages += 1;
   user.lastSeen = currentISODate;
   user.timestamps.push(currentISODate);
@@ -396,7 +402,7 @@ async function groupProcessData(data, client) {
 
     const isGroup = from.endsWith("@g.us");
     const sender = isGroup ? data.messages[0].key.participant : data.messages[0].key.remoteJid;
-    const pushName = data.messages[0].pushName || "Desconhecido";
+    const pushName = data.messages[0].pushName || "Desconhecido"; // Obtém o pushName do remetente
 
     const message = data.messages[0].message;
     const messageType = message ? Object.keys(message)[0] : "unknown";
@@ -407,6 +413,39 @@ async function groupProcessData(data, client) {
       const groupId = groupMeta.id;
 
       let groupData = loadGroupData();
+
+      // Atualiza a lista de participantes do grupo
+      if (!groupData[groupId]) {
+        groupData[groupId] = {
+          name: groupMeta.subject,
+          subjectOwner: groupMeta.subjectOwner,
+          subjectTime: groupMeta.subjectTime,
+          size: groupMeta.participants.length,
+          creation: groupMeta.creation,
+          owner: groupMeta.owner,
+          desc: groupMeta.desc,
+          participants: {},
+        };
+      }
+
+      const existingParticipants = groupData[groupId].participants;
+      const newParticipants = groupMeta.participants;
+
+      // Atualiza ou adiciona novos participantes
+      newParticipants.forEach(participant => {
+        const participantId = participant.id;
+        if (!existingParticipants[participantId]) {
+          existingParticipants[participantId] = {
+            pushName: null,
+            occurrences: 0,
+            timestamps: [],
+            messageTypes: {},
+          };
+        }
+      });
+
+      // Atualiza o tamanho do grupo
+      groupData[groupId].size = newParticipants.length;
 
       const currentSize = groupMeta.participants.length;
       const groupHistory = groupData[groupId]?.growthHistory || [];
@@ -442,6 +481,11 @@ async function groupProcessData(data, client) {
         timestamps: [],
         messageTypes: {},
       };
+
+      if (pushName && participantData.pushName !== pushName) {
+        participantData.pushName = pushName;
+      }
+
       updateParticipantData(participantData, messageType);
       groupData[groupId].participants[sender] = participantData;
 

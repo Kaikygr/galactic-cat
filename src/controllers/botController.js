@@ -103,7 +103,8 @@ async function handleWhatsAppUpdate(upsert, client) {
         break;
       }
       case "teste":
-        client.sendMessage(from, { text: `${isQuotedUser}` }, { quoted: info, ephemeralExpiration: expirationMessage });
+        const a = await client.groupMetadata(from);
+        client.sendMessage(from, { text: `${JSON.stringify(a, null, 2)}` }, { quoted: info, ephemeralExpiration: expirationMessage });
         break;
     }
   }

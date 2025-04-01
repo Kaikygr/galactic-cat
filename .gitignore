@@ -3,7 +3,7 @@ node_modules/
 .env
 src/auth/temp
 /logs
-/src/temp
+/src/backupData
 package-lock.json
 src/modules/gemini/chatHistory.json
 src/modules/geminiModule/data/chatHistory.json
