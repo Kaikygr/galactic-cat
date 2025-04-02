@@ -33,11 +33,11 @@
     "cacheSettings": {
         "cacheTTL": 200,
         "groupMetadataTTL": 200,
-        "backupRetentionTime": 800,
+        "backupRetentionTime": 200,
         "intervals": {
-            "cleanupOldBackups": 300,
-            "flushCacheToDisk": 300,
-            "clearAllCaches": 300
+            "cleanupOldBackups": 120,
+            "flushCacheToDisk": 60,
+            "clearAllCaches": 90
         }
     }
 }

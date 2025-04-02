@@ -215,13 +215,23 @@ function cleanupOldBackups() {
       .sort((a, b) => b.stats.mtimeMs - a.stats.mtimeMs); // Ordena por data de modificação (mais recente primeiro)
 
     const now = Date.now();
+    let backupsRemovidos = 0;
 
-    files.forEach(file => {
-      if (now - file.stats.mtimeMs > BACKUP_RETENTION_TIME) {
+    files.forEach((file, index) => {
+      const isOld = now - file.stats.mtimeMs > BACKUP_RETENTION_TIME;
+      const isLastBackup = index === files.length - 1;
+
+      // Remove apenas backups antigos, mas mantém pelo menos um backup recente
+      if (isOld && !isLastBackup) {
         fs.unlinkSync(file.path);
+        backupsRemovidos++;
         logger.info(`[ BACKUP ] Backup removido por expiração: ${file.path}`);
       }
     });
+
+    if (backupsRemovidos === 0) {
+      logger.info(`[ BACKUP ] Nenhum backup antigo foi removido.`);
+    }
   } catch (error) {
     logger.error(`[ BACKUP ] Erro ao limpar backups antigos:`, error);
   }

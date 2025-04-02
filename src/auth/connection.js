@@ -35,6 +35,7 @@ const scheduleReconnect = () => {
 
 const botController = require(path.join(__dirname, "..", "controllers", "botController.js"));
 const dataController = require(path.join(__dirname, "..", "controllers", "dataController.js"));
+const processUserWelcome = require(path.join(__dirname, "..", "controllers", "welcomeController.js"));
 
 const registerAllEventHandlers = (client, saveCreds) => {
   const simpleEvents = {
@@ -51,7 +52,8 @@ const registerAllEventHandlers = (client, saveCreds) => {
     },
 
     "group-participants.update": async event => {
-      logger.info(`Evento de atualização de participantes de grupo: ${JSON.stringify(event)}`);
+      logger.info(`Evento de atualização de participantes de grupo`);
+      await processUserWelcome(event, client);
     },
   };
 
