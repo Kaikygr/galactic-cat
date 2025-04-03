@@ -91,12 +91,6 @@ const handleConnectionUpdate = async (update, client) => {
     if (connection === "open") {
       logger.info("✅ Conexão aberta com sucesso. Bot disponível.");
       reconnectAttempts = 0;
-
-      const config = require("../config/options.json");
-      await client.sendMessage(config.owner.number, {
-        text: "🟢 O bot foi iniciado com sucesso.",
-      });
-      logger.info("🛠️ Mensagem de status enviada para o proprietário.");
     }
     if (connection === "close") {
       if (metricsIntervalId) {

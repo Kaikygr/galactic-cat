@@ -28,7 +28,7 @@ function processPrefix(body, prefixes) {
   return { comando, args: parts };
 }
 
-function getQuotedChecks(type, content) {
+function processQuotedChecks(type, content) {
   const quotedTypes = {
     textMessage: "isQuotedMsg",
     imageMessage: "isQuotedImage",
@@ -72,4 +72,4 @@ function getExpiration(info) {
   return null;
 }
 
-module.exports = { preProcessMessage, processPrefix, getQuotedChecks, getExpiration };
+module.exports = { preProcessMessage, processPrefix, processQuotedChecks, getExpiration };
