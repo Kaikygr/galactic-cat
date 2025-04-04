@@ -1,10 +1,62 @@
-const { initDatabase } = require("../utils/db");
+const { initDatabase } = require("../utils/processDatabase");
 
 let db;
 
+async function createTables() {
+  try {
+    if (!db) {
+      console.log("DB não inicializado, aguardando inicialização...");
+      db = await initDatabase();
+    }
+
+    // Cria tabela 'groups'
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS \`groups\` (
+        id VARCHAR(255) PRIMARY KEY,
+        name VARCHAR(255),
+        owner VARCHAR(255),
+        created_at DATETIME,
+        description TEXT
+      ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    console.log("✅ Tabela 'groups' criada/verificada.");
+
+    // Cria tabela 'users'
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS users (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        sender VARCHAR(255),
+        pushName VARCHAR(255),
+        isGroup TINYINT,
+        messageType VARCHAR(255),
+        messageContent TEXT,
+        timestamp DATETIME,
+        group_id VARCHAR(255) DEFAULT 'privado',
+        FOREIGN KEY (group_id) REFERENCES \`groups\`(id) ON DELETE SET NULL
+      ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    console.log("✅ Tabela 'users' criada/verificada.");
+
+    // Cria tabela 'group_participants'
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS group_participants (
+        group_id VARCHAR(255),
+        participant VARCHAR(255),
+        isAdmin TINYINT,
+        PRIMARY KEY (group_id, participant)
+      ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    console.log("✅ Tabela 'group_participants' criada/verificada.");
+  } catch (error) {
+    console.error("❌ Erro ao criar/verificar tabelas:", error);
+  }
+}
+
+// Chama a função de criação de tabelas ao inicializar o banco
 initDatabase()
-  .then(connection => {
+  .then(async connection => {
     db = connection;
+    await createTables();
   })
   .catch(err => console.error("❌ Erro na inicialização do MySQL:", err));
 
@@ -12,7 +64,7 @@ async function saveUserToDB(info) {
   try {
     if (!db) {
       console.log("DB não inicializado, aguardando inicialização...");
-      db = await require("../utils/db").initDatabase();
+      db = await require("../utils/processDatabase").initDatabase();
     }
     const from = info?.key?.remoteJid;
     const isGroup = from?.endsWith("@g.us") ? 1 : 0;
@@ -55,7 +107,7 @@ async function saveGroupToDB(groupMeta) {
   try {
     if (!db) {
       console.log("DB não inicializado, aguardando inicialização...");
-      db = await require("../utils/db").initDatabase();
+      db = await require("../utils/processDatabase").initDatabase();
     }
     const id = groupMeta.id || null;
     const name = groupMeta.subject || groupMeta.name || "Grupo Desconhecido";
@@ -120,7 +172,7 @@ function runQuery(query, params) {
     try {
       if (!db) {
         console.log("DB não inicializado, aguardando inicialização...");
-        db = await require("../utils/db").initDatabase();
+        db = await require("../utils/processDatabase").initDatabase();
       }
       const [result] = await db.execute(query, params);
       resolve(result.insertId || result);

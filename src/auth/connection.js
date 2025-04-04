@@ -35,6 +35,7 @@ const scheduleReconnect = () => {
 
 const botController = require(path.join(__dirname, "..", "controllers", "botController.js"));
 const processUserData = require(path.join(__dirname, "..", "controllers", "userDataController.js"));
+
 const registerAllEventHandlers = (client, saveCreds) => {
   const simpleEvents = {
     "chats.upsert": () => {},
