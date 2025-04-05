@@ -93,6 +93,7 @@
  */
 const logger = require("../utils/logger");
 const { initDatabase, connection } = require("../utils/processDatabase");
+const moment = require("moment-timezone");
 let db = connection; // Reutiliza a conexão compartilhada
 
 async function createTables() {
@@ -106,14 +107,24 @@ async function createTables() {
       }
     }
 
-    /* Cria a tabela 'groups' se ela não existir, usando charset seguro */
+    /* Atualiza a tabela 'groups' para incluir novos campos */
     await db.execute(`
       CREATE TABLE IF NOT EXISTS \`groups\` (
         id VARCHAR(255) PRIMARY KEY,
         name VARCHAR(255),
         owner VARCHAR(255),
         created_at DATETIME,
-        description TEXT
+        description TEXT,
+        description_id VARCHAR(255),
+        subject_owner VARCHAR(255),
+        subject_time DATETIME,
+        size INT,
+        \`restrict\` TINYINT, -- Corrigido para evitar conflito com palavra reservada
+        announce TINYINT,
+        is_community TINYINT,
+        is_community_announce TINYINT,
+        join_approval_mode TINYINT,
+        member_add_mode TINYINT
       ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
     logger.info("✅ Tabela 'groups' criada/verificada.");
@@ -199,25 +210,21 @@ Divide a responsabilidade de verificação do grupo para evitar inconsistência 
 async function saveUserToDB(info) {
   try {
     await ensureDatabaseConnection();
-    /* Processa dados do remetente */
-    const from = info?.key?.remoteJid;
+    const from = info?.key?.remoteJid || null;
     const isGroup = from?.endsWith("@g.us") ? 1 : 0;
-    const userId = isGroup ? info.key.participant : from;
-    const pushName = info.pushName;
-    const messageType = Object.keys(info.message || {})[0];
-    const messageContent = JSON.stringify(info.message?.[messageType]);
-    const timestamp = new Date(info.messageTimestamp * 1000).toISOString().slice(0, 19).replace("T", " ");
-    let groupId = isGroup ? from : "privado";
-
-    /* Garante que o grupo exista na tabela 'groups' */
+    const userId = isGroup ? info.key.participant || null : from;
+    const pushName = info.pushName || null;
+    const messageType = Object.keys(info.message || {})[0] || null;
+    const messageContent = info.message?.[messageType] ? JSON.stringify(info.message[messageType]) : null;
+    const timestamp = moment.tz("America/Sao_Paulo").format("YYYY-MM-DD HH:mm:ss");
+    const groupId = isGroup ? from : "privado";
     const groupExistsQuery = `SELECT id FROM \`groups\` WHERE id = ?`;
     const [groupExists] = await db.execute(groupExistsQuery, [groupId]);
     if (groupExists.length === 0) {
       logger.warn(`Grupo '${groupId}' não encontrado. Criando grupo '${groupId}'.`);
-      await saveGroupToDB({ id: groupId, name: isGroup ? "Grupo Desconhecido" : "Mensagens Privadas", owner: null, creation: null, desc: null });
+      await saveGroupToDB({ id: groupId, subject: isGroup ? "Grupo Desconhecido" : "Mensagens Privadas" });
     }
 
-    /* Insere os dados do usuário/mensagem na tabela */
     const query = `
       INSERT INTO users (sender, pushName, isGroup, messageType, messageContent, timestamp, group_id)
       VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -243,16 +250,40 @@ async function saveGroupToDB(groupMeta) {
     const owner = groupMeta.owner || null;
     const createdAt = groupMeta.creation ? new Date(groupMeta.creation * 1000).toISOString().slice(0, 19).replace("T", " ") : new Date().toISOString().slice(0, 19).replace("T", " ");
     const description = groupMeta.desc || null;
+    const descriptionId = groupMeta.descId || null;
+    const subjectOwner = groupMeta.subjectOwner || null;
+    const subjectTime = groupMeta.subjectTime ? new Date(groupMeta.subjectTime * 1000).toISOString().slice(0, 19).replace("T", " ") : null;
+    const size = groupMeta.size || 0;
+    const restrict = groupMeta.restrict ? 1 : 0;
+    const announce = groupMeta.announce ? 1 : 0;
+    const isCommunity = groupMeta.isCommunity ? 1 : 0;
+    const isCommunityAnnounce = groupMeta.isCommunityAnnounce ? 1 : 0;
+    const joinApprovalMode = groupMeta.joinApprovalMode ? 1 : 0;
+    const memberAddMode = groupMeta.memberAddMode ? 1 : 0;
 
     const query = `
-      INSERT INTO \`groups\` (id, name, owner, created_at, description)
-      VALUES (?, ?, ?, ?, ?)
-      ON DUPLICATE KEY UPDATE name = VALUES(name),
+      INSERT INTO \`groups\` (
+        id, name, owner, created_at, description, description_id, subject_owner, subject_time, size,
+        \`restrict\`, announce, is_community, is_community_announce, join_approval_mode, member_add_mode
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        name = VALUES(name),
         owner = VALUES(owner),
         created_at = VALUES(created_at),
-        description = VALUES(description)
+        description = VALUES(description),
+        description_id = VALUES(description_id),
+        subject_owner = VALUES(subject_owner),
+        subject_time = VALUES(subject_time),
+        size = VALUES(size),
+        \`restrict\` = VALUES(\`restrict\`),
+        announce = VALUES(announce),
+        is_community = VALUES(is_community),
+        is_community_announce = VALUES(is_community_announce),
+        join_approval_mode = VALUES(join_approval_mode),
+        member_add_mode = VALUES(member_add_mode)
     `;
-    const result = await runQuery(query, [id, name, owner, createdAt, description]);
+    const result = await runQuery(query, [id, name, owner, createdAt, description, descriptionId, subjectOwner, subjectTime, size, restrict, announce, isCommunity, isCommunityAnnounce, joinApprovalMode, memberAddMode]);
     logger.info("✅ Grupo salvo/atualizado:", id);
     return result;
   } catch (error) {
