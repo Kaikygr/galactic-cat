@@ -7,18 +7,16 @@ const logger = require("../utils/logger");
 
 const { processAIContent } = require("../modules/geminiModule/gemini");
 const { processSticker } = require(path.join(__dirname, "../modules/stickerModule/sticker"));
-const { processGroupMetrics, processUserMetrics } = require(path.join(__dirname, "../modules/groupModule/groupMetrics"));
-
 const { getFileBuffer } = require(path.join(__dirname, "../utils/functions"));
-const { preProcessMessage, processPrefix, getQuotedChecks, getExpiration } = require(path.join(__dirname, "./messageTypeController"));
+const { preProcessMessage, processPrefix, processQuotedChecks, getExpiration } = require(path.join(__dirname, "./messageTypeController"));
 
 async function handleWhatsAppUpdate(upsert, client) {
   for (const info of upsert?.messages || []) {
-    if (!info || !info.key || !info.message) return;
-    if (info.key.fromMe) return;
+    if (!info.key || !info.message) return;
+    if (info?.key?.fromMe) return;
 
-    const from = info.key.remoteJid;
-    const isGroup = from.endsWith("@g.us");
+    const from = info?.key?.remoteJid;
+    const isGroup = from?.endsWith("@g.us");
     const sender = isGroup ? info.key.participant : info.key.remoteJid;
     const userName = info?.pushName || "Desconhecido";
     const expirationMessage = getExpiration(info);
@@ -35,7 +33,7 @@ async function handleWhatsAppUpdate(upsert, client) {
     const ownerPhoneNumber = config.owner.number;
     const ownerName = config.owner.name;
 
-    const { isQuotedMsg, isQuotedImage, isQuotedVideo, isQuotedDocument, isQuotedAudio, isQuotedSticker, isQuotedContact, isQuotedLocation, isQuotedProduct } = getQuotedChecks(type, content);
+    const { isQuotedMsg, isQuotedImage, isQuotedVideo, isQuotedDocument, isQuotedAudio, isQuotedSticker, isQuotedContact, isQuotedLocation, isQuotedProduct } = processQuotedChecks(type, content);
 
     function getGroupAdmins(participants) {
       const admins = [];
@@ -69,37 +67,6 @@ async function handleWhatsAppUpdate(upsert, client) {
       case "sticker":
       case "s": {
         await processSticker(client, info, expirationMessage, sender, from, text, isMedia, isQuotedVideo, isQuotedImage, config, getFileBuffer);
-        break;
-      }
-
-      case "grupo": {
-        try {
-          if (text === "--info") {
-            await processGroupMetrics(client, info, from, expirationMessage);
-          } else if (text.startsWith("--me")) {
-            const userId = sender;
-            await processUserMetrics(client, info, from, expirationMessage, userId);
-          } else {
-            await client.sendMessage(from, { text: "❌ Comando inválido. Use .grupo --me para obter informações." }, { quoted: info, ephemeralExpiration: expirationMessage });
-          }
-        } catch (error) {
-          enviar(from, "❌ Ocorreu um erro ao processar sua solicitação. Tente novamente mais tarde.");
-          console.error("Erro:", error);
-        }
-        break;
-      }
-
-      case "eval": {
-        if (!isOwner) {
-          await client.sendMessage(from, { text: "❌ O comando eval é restrito ao dono." }, { quoted: info, ephemeralExpiration: expirationMessage });
-          break;
-        }
-        try {
-          const result = eval(text);
-          await client.sendMessage(from, { text: `Resultado: ${result}` }, { quoted: info, ephemeralExpiration: expirationMessage });
-        } catch (error) {
-          await client.sendMessage(from, { text: `Erro ao executar o comando: ${error.message}` }, { quoted: info, ephemeralExpiration: expirationMessage });
-        }
         break;
       }
     }

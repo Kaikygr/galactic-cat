@@ -34,8 +34,7 @@ const scheduleReconnect = () => {
 };
 
 const botController = require(path.join(__dirname, "..", "controllers", "botController.js"));
-const dataController = require(path.join(__dirname, "..", "controllers", "dataController.js"));
-const processUserWelcome = require(path.join(__dirname, "..", "controllers", "welcomeController.js"));
+const processUserData = require(path.join(__dirname, "..", "controllers", "userDataController.js"));
 
 const registerAllEventHandlers = (client, saveCreds) => {
   const simpleEvents = {
@@ -53,7 +52,6 @@ const registerAllEventHandlers = (client, saveCreds) => {
 
     "group-participants.update": async event => {
       logger.info(`Evento de atualização de participantes de grupo`);
-      await processUserWelcome(event, client);
     },
   };
 
@@ -69,7 +67,7 @@ const registerAllEventHandlers = (client, saveCreds) => {
 
       "messages.upsert": async data => {
         botController(data, client);
-        dataController(data, client);
+        processUserData(data, client);
       },
     };
 
@@ -91,12 +89,6 @@ const handleConnectionUpdate = async (update, client) => {
     if (connection === "open") {
       logger.info("✅ Conexão aberta com sucesso. Bot disponível.");
       reconnectAttempts = 0;
-
-      const config = require("../config/options.json");
-      await client.sendMessage(config.owner.number, {
-        text: "🟢 O bot foi iniciado com sucesso.",
-      });
-      logger.info("🛠️ Mensagem de status enviada para o proprietário.");
     }
     if (connection === "close") {
       if (metricsIntervalId) {
