@@ -19,6 +19,75 @@ Além disso, o **Galactic-Cat** possui as seguintes características:
 
 Esta abordagem modular e a utilização de tecnologias modernas tornam o **Galactic-Cat** uma ótima base para quem deseja implementar um sistema de automação para o **WhatsApp** de forma flexível e escalável.
 
+---
+
+## Estrutura do Banco de Dados
+
+O **Galactic-Cat** utiliza um banco de dados MySQL para armazenar informações relacionadas a mensagens, grupos e participantes. Abaixo estão as tabelas principais e suas relações:
+
+### Tabelas e Relações
+
+1. **Tabela `groups`**
+
+   - Armazena informações sobre os grupos do WhatsApp.
+   - **Colunas**:
+     - `id` (VARCHAR, PRIMARY KEY): Identificador único do grupo.
+     - `name` (VARCHAR): Nome do grupo.
+     - `owner` (VARCHAR): Identificador do dono do grupo.
+     - `created_at` (DATETIME): Data de criação do grupo.
+     - `description` (TEXT): Descrição do grupo.
+
+2. **Tabela `users`**
+
+   - Armazena mensagens enviadas por usuários.
+   - **Colunas**:
+     - `id` (INT, PRIMARY KEY): Identificador único da mensagem.
+     - `sender` (VARCHAR): Identificador do remetente.
+     - `pushName` (VARCHAR): Nome de exibição do remetente.
+     - `isGroup` (TINYINT): Indica se a mensagem é de um grupo (1) ou privada (0).
+     - `messageType` (VARCHAR): Tipo da mensagem (ex.: texto, imagem).
+     - `messageContent` (TEXT): Conteúdo da mensagem.
+     - `timestamp` (DATETIME): Data e hora do envio.
+     - `group_id` (VARCHAR, FOREIGN KEY): Relaciona a mensagem a um grupo (ou "privado" para mensagens diretas).
+
+3. **Tabela `group_participants`**
+   - Armazena os participantes de cada grupo.
+   - **Colunas**:
+     - `group_id` (VARCHAR, FOREIGN KEY): Identificador do grupo.
+     - `participant` (VARCHAR): Identificador do participante.
+     - `isAdmin` (TINYINT): Indica se o participante é administrador (1) ou não (0).
+
+### Relações
+
+- A tabela `users` possui uma chave estrangeira (`group_id`) que referencia a tabela `groups`.
+- A tabela `group_participants` possui uma chave composta (`group_id`, `participant`) e referencia a tabela `groups`.
+
+---
+
+## Configuração do Ambiente
+
+Certifique-se de configurar as variáveis de ambiente corretamente antes de iniciar o projeto. As variáveis necessárias são:
+
+### Variáveis de Ambiente
+
+- `MYSQL_LOGIN_USER`: Usuário do banco de dados MySQL (obrigatório).
+- `MYSQL_LOGIN_PASSWORD`: Senha do usuário do banco de dados MySQL (obrigatório).
+- `MYSQL_HOST`: Host do banco de dados MySQL (opcional, padrão: `localhost`).
+- `MYSQL_DATABASE`: Nome do banco de dados (opcional, padrão: `cat`).
+- `GEMINI_APIKEY`: Sua chave de acesso do Google IA (Gemini).
+
+Exemplo de arquivo `.env`:
+
+```env
+GEMINI_APIKEY=NZ9323ZB3
+MYSQL_LOGIN_USER=root
+MYSQL_LOGIN_PASSWORD=senha"123"
+MYSQL_HOST=localhost
+MYSQL_DATABASE=galactic_cat
+```
+
+---
+
 ## Como Rodar o Projeto
 
 **Siga os passos abaixo para configurar e iniciar o bot:**
@@ -30,45 +99,33 @@ Esta abordagem modular e a utilização de tecnologias modernas tornam o **Galac
    cd galactic-cat
    ```
 
-   <br>
-
 2. **Instale as dependências:** <br>
 
    ```bash
    npm install
    ```
 
-   <br>
-
 3. **Configuração do Ambiente:** <br>
 
-- ℹ️ Crie um arquivo `.env` com as seguintes variáveis: <br>
+   - Crie um arquivo `.env` com as variáveis descritas acima.
+   - Certifique-se de que o MySQL está instalado e configurado no sistema.
 
-```bash
-GEMINI_APIKEY=1234567890abcdef
-GLOBAL_PREFIX=/
-```
+4. **Inicie o Banco de Dados e as Tabelas:** <br>
 
-  <br>
+   O banco de dados será inicializado automaticamente ao iniciar o bot. As tabelas serão criadas se ainda não existirem.
 
-- ℹ️ Para obter a chave da API Gemini, acesse o [Google IA](https://aistudio.google.com/apikey).  
-  <br>
-- ℹ️ Nota: Certifique-se de instalar o FFmpeg e o Webpmux em seu sistema. No Linux, utilize o gerenciador de pacotes correspondente; no Windows, consulte as instruções disponíveis nos sites oficiais. <br>
+5. **Inicie o Bot com PM2:** <br>
 
-1. **Inicie o Bot com PM2:**
+   - Para iniciar, execute: <br>
+     ```bash
+     npm start
+     ```
+   - Para verificar os logs: <br>
+     ```bash
+     npm run logs
+     ```
 
-- Para iniciar, execute: <br>
-  ```bash
-  npm start
-  ```
-    <br>
-- Para verificar os logs: <br>
-  ```bash
-  npm run logs
-  ```
-  <br>
-
-**O bot irá iniciar o processo de conexão (gerenciado por [Connection.js](./src/auth/connection.js)) e exibirá um QR Code no terminal para emparelhamento caso ainda não esteja registrado.**
+---
 
 ## Contribuições
 
@@ -77,9 +134,13 @@ Contribuições para melhorias, correções e novas funcionalidades são bem-vin
 - Crie uma branch para sua feature ou correção.
 - Envie um _Pull Request_ com suas alterações.
 
+---
+
 ## Licença
 
 Este projeto é licenciado sob a MIT License.
+
+---
 
 ## Autor
 

@@ -51,22 +51,25 @@ const dbConfig = {
 
 module.exports = dbConfig;
 
+let connection; // Variável para armazenar a conexão compartilhada
+
 /* Inicializa o banco de dados */
 async function initDatabase() {
-  let connection;
   try {
     const databaseName = process.env.MYSQL_DATABASE || "cat";
 
-    /* Cria conexão inicial */
-    connection = await mysql.createConnection(dbConfig);
+    if (!connection) {
+      /* Cria conexão inicial */
+      connection = await mysql.createConnection(dbConfig);
 
-    /* Cria o banco de dados, se necessário */
-    await connection.execute(`CREATE DATABASE IF NOT EXISTS \`${databaseName}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
-    logger.info(`Banco '${databaseName}' criado ou já existente.`);
+      /* Cria o banco de dados, se necessário */
+      await connection.execute(`CREATE DATABASE IF NOT EXISTS \`${databaseName}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
+      logger.info(`Banco '${databaseName}' criado ou já existente.`);
 
-    /* Reconfigura a conexão para usar o banco criado */
-    await connection.changeUser({ database: databaseName });
-    logger.info(`Conectado ao banco '${databaseName}'.`);
+      /* Reconfigura a conexão para usar o banco criado */
+      await connection.changeUser({ database: databaseName });
+      logger.info(`Conectado ao banco '${databaseName}'.`);
+    }
   } catch (error) {
     /* Loga e propaga erros */
     logger.error(`Erro ao inicializar banco: ${error.stack}`);
@@ -79,4 +82,5 @@ async function initDatabase() {
 module.exports = {
   dbConfig,
   initDatabase,
+  connection, // Exporta a conexão compartilhada
 };

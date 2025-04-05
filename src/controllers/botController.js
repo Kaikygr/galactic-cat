@@ -69,9 +69,6 @@ async function handleWhatsAppUpdate(upsert, client) {
         await processSticker(client, info, expirationMessage, sender, from, text, isMedia, isQuotedVideo, isQuotedImage, config, getFileBuffer);
         break;
       }
-      case "teste": {
-        console.log(groupFormattedData);
-      }
     }
   }
 }

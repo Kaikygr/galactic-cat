@@ -29,15 +29,5 @@
                 "/"
             ]
         }
-    },
-    "cacheSettings": {
-        "cacheTTL": 200,
-        "groupMetadataTTL": 200,
-        "backupRetentionTime": 200,
-        "intervals": {
-            "cleanupOldBackups": 120,
-            "flushCacheToDisk": 60,
-            "clearAllCaches": 90
-        }
     }
 }
