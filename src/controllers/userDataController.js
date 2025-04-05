@@ -96,6 +96,9 @@ const { initDatabase, connection } = require("../utils/processDatabase");
 const moment = require("moment-timezone");
 let db = connection; // Reutiliza a conexão compartilhada
 
+// Função helper para evitar valores null
+const sanitizeData = (value, defaultValue = "") => (value == null ? defaultValue : value);
+
 async function createTables() {
   try {
     /* Verifica se a conexão com o banco de dados está estabelecida */
@@ -212,10 +215,22 @@ async function saveUserToDB(info) {
     await ensureDatabaseConnection();
     const from = info?.key?.remoteJid || null;
     const isGroup = from?.endsWith("@g.us") ? 1 : 0;
-    const userId = isGroup ? info.key.participant || null : from;
-    const pushName = info.pushName || null;
-    const messageType = Object.keys(info.message || {})[0] || null;
-    const messageContent = info.message?.[messageType] ? JSON.stringify(info.message[messageType]) : null;
+    const userId = isGroup ? info.key.participant : from;
+
+    // Verifica se o sender (userId) não é nulo
+    if (!userId) {
+      throw new Error("sender cannot be null");
+    }
+
+    let pushName = info.pushName || null;
+    let messageType = Object.keys(info.message || {})[0] || null;
+    let messageContent = info.message?.[messageType] ? JSON.stringify(info.message[messageType]) : null;
+
+    // Aplica a sanitização para evitar nulls
+    pushName = sanitizeData(pushName);
+    messageType = sanitizeData(messageType);
+    messageContent = sanitizeData(messageContent);
+
     const timestamp = moment.tz("America/Sao_Paulo").format("YYYY-MM-DD HH:mm:ss");
     const groupId = isGroup ? from : "privado";
     const groupExistsQuery = `SELECT id FROM \`groups\` WHERE id = ?`;
@@ -246,13 +261,16 @@ async function saveGroupToDB(groupMeta) {
   try {
     await ensureDatabaseConnection();
     const id = groupMeta.id || null;
+    if (!id) {
+      throw new Error("group id cannot be null");
+    }
     const name = groupMeta.subject || "Grupo Desconhecido";
     const owner = groupMeta.owner || null;
     const createdAt = groupMeta.creation ? new Date(groupMeta.creation * 1000).toISOString().slice(0, 19).replace("T", " ") : new Date().toISOString().slice(0, 19).replace("T", " ");
-    const description = groupMeta.desc || null;
-    const descriptionId = groupMeta.descId || null;
-    const subjectOwner = groupMeta.subjectOwner || null;
-    const subjectTime = groupMeta.subjectTime ? new Date(groupMeta.subjectTime * 1000).toISOString().slice(0, 19).replace("T", " ") : null;
+    let description = groupMeta.desc || null;
+    let descriptionId = groupMeta.descId || null;
+    let subjectOwner = groupMeta.subjectOwner || null;
+    let subjectTime = groupMeta.subjectTime ? new Date(groupMeta.subjectTime * 1000).toISOString().slice(0, 19).replace("T", " ") : null;
     const size = groupMeta.size || 0;
     const restrict = groupMeta.restrict ? 1 : 0;
     const announce = groupMeta.announce ? 1 : 0;
@@ -260,6 +278,11 @@ async function saveGroupToDB(groupMeta) {
     const isCommunityAnnounce = groupMeta.isCommunityAnnounce ? 1 : 0;
     const joinApprovalMode = groupMeta.joinApprovalMode ? 1 : 0;
     const memberAddMode = groupMeta.memberAddMode ? 1 : 0;
+
+    // Aplicar sanitização para evitar valores null
+    description = sanitizeData(description);
+    descriptionId = sanitizeData(descriptionId);
+    subjectOwner = sanitizeData(subjectOwner);
 
     const query = `
       INSERT INTO \`groups\` (
@@ -321,6 +344,7 @@ async function processUserData(data, client) {
   try {
     /* Extrai a primeira mensagem do payload de dados */
     const info = data.messages[0];
+    if (info?.key?.fromMe === true) return;
     await saveUserToDB(info);
 
     /* Se for mensagem de grupo, processa os metadados do grupo */
