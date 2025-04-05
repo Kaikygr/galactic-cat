@@ -15,6 +15,7 @@
   "license": "MIT",
   "dependencies": {
     "@adiwajshing/keyed-db": "latest",
+    "@distube/ytdl-core": "^4.16.8",
     "@google/generative-ai": "0.23.0",
     "@hapi/boom": "10.0.1",
     "axios": "^1.8.4",
@@ -31,7 +32,8 @@
     "pm2": "^6.0.5",
     "qrcode-terminal": "0.12.0",
     "winston": "^3.17.0",
-    "winston-daily-rotate-file": "^5.0.0"
+    "winston-daily-rotate-file": "^5.0.0",
+    "yt-search": "^2.12.1"
   },
   "repository": {
     "type": "git",
