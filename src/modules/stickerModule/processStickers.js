@@ -15,8 +15,7 @@ if (!fs.existsSync(tempDir)) {
 
 async function processSticker(client, info, expirationMessage, sender, from, text, isMedia, isQuotedVideo, isQuotedImage) {
   try {
-    console.log(JSON.stringify(info, null, 2));
-    logger.info(`[ Processando sticker ] Usuário: ${sender}`);
+    logger.info(`🎨✨ [ Criando Sticker ] Processando pedido para o usuário: ${sender.split("@")[0]} 🚀🛠️`);
 
     let filtro = "fps=10,scale=512:512";
     let processWithFfmpeg = true;
