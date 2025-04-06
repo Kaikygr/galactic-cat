@@ -7,8 +7,6 @@ const logger = require("../utils/logger");
 
 const { processAIContent } = require("../modules/geminiModule/gemini");
 const { processSticker } = require(path.join(__dirname, "../modules/stickerModule/sticker"));
-const { processYoutubeAudioDownload } = require(path.join(__dirname, "../modules/youtubeModule/processDistube"));
-
 const { getFileBuffer } = require(path.join(__dirname, "../utils/functions"));
 const { preProcessMessage, processPrefix, processQuotedChecks, getExpiration } = require(path.join(__dirname, "./messageTypeController"));
 
@@ -71,9 +69,6 @@ async function handleWhatsAppUpdate(upsert, client) {
         await processSticker(client, info, expirationMessage, sender, from, text, isMedia, isQuotedVideo, isQuotedImage, config, getFileBuffer);
         break;
       }
-      case "play":
-        await processYoutubeAudioDownload(client, from, info, sender, expirationMessage, text);
-        break;
     }
   }
 }
