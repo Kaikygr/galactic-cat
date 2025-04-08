@@ -17,73 +17,28 @@ async function processSticker(client, info, expirationMessage, sender, from, tex
   try {
     logger.info(`🎨✨ [ Criando Sticker ] Processando pedido para o usuário: ${sender.split("@")[0]} 🚀🛠️`);
 
-    let filtro = "fps=10,scale=512:512";
-    let processWithFfmpeg = true;
-    let encmedia, mediaBuffer, mediaExtension;
+    const caminhosPossiveis = {
+      image: [info.message?.imageMessage, info.message?.extendedTextMessage?.contextInfo?.quotedMessage?.imageMessage, info.message?.extendedTextMessage?.contextInfo?.quotedMessage?.viewOnceMessage?.message?.imageMessage],
+      video: [info.message?.videoMessage, info.message?.extendedTextMessage?.contextInfo?.quotedMessage?.videoMessage, info.message?.extendedTextMessage?.contextInfo?.quotedMessage?.viewOnceMessage?.message?.videoMessage],
+      sticker: [info.message?.stickerMessage, info.message?.extendedTextMessage?.contextInfo?.quotedMessage?.stickerMessage],
+      document: [info.message?.documentMessage, info.message?.extendedTextMessage?.contextInfo?.quotedMessage?.documentWithCaptionMessage?.message?.documentMessage, info?.message.extendedTextMessage?.contextInfo.quotedMessage?.documentMessage],
+    };
 
-    if ((isMedia && info.message.videoMessage) || isQuotedVideo || (info.message.extendedTextMessage && info.message.extendedTextMessage.contextInfo && info.message.extendedTextMessage.contextInfo.quotedMessage && info.message.extendedTextMessage.contextInfo.quotedMessage.videoMessage && info.message.extendedTextMessage.contextInfo.quotedMessage.videoMessage.seconds)) {
-      let videoDuration = 0;
-      if (isMedia && info.message.videoMessage) {
-        videoDuration = info.message.videoMessage.seconds;
-      } else if (info.message.extendedTextMessage && info.message.extendedTextMessage.contextInfo && info.message.extendedTextMessage.contextInfo.quotedMessage && info.message.extendedTextMessage.contextInfo.quotedMessage.videoMessage) {
-        videoDuration = info.message.extendedTextMessage.contextInfo.quotedMessage.videoMessage.seconds;
-      }
+    let tipoMidia = null;
+    let encmedia = null;
 
-      if (videoDuration >= 10) {
-        await client.sendMessage(from, { react: { text: "⚠️", key: info.key } });
-        await client.sendMessage(
-          from,
-          {
-            text: "_*ℹ️ Vídeo muito longo para sticker animada.*_\n\n" + "_A mídia deve ter no máximo 10 segundos._\n\n" + "_*⚠️Aviso: mídias em alta definição podem causar bugs, recomenda-se usar mídias de até 1MB.*_",
-          },
-          { quoted: info, ephemeralExpiration: expirationMessage }
-        );
-        return;
+    for (const [tipo, caminhos] of Object.entries(caminhosPossiveis)) {
+      for (const caminho of caminhos) {
+        if (caminho) {
+          tipoMidia = tipo;
+          encmedia = caminho;
+          break;
+        }
       }
+      if (encmedia) break;
+    }
 
-      encmedia = isQuotedVideo ? info.message.extendedTextMessage.contextInfo.quotedMessage.videoMessage : info.message.videoMessage;
-      mediaBuffer = await getFileBuffer(encmedia, "video");
-      mediaExtension = ".mp4";
-    } else if ((isMedia && info.message.stickerMessage) || (info.message.extendedTextMessage && info.message.extendedTextMessage.contextInfo && info.message.extendedTextMessage.contextInfo.quotedMessage && info.message.extendedTextMessage.contextInfo.quotedMessage.stickerMessage)) {
-      encmedia = info.message.extendedTextMessage && info.message.extendedTextMessage.contextInfo && info.message.extendedTextMessage.contextInfo.quotedMessage && info.message.extendedTextMessage.contextInfo.quotedMessage.stickerMessage ? info.message.extendedTextMessage.contextInfo.quotedMessage.stickerMessage : info.message.stickerMessage;
-      mediaBuffer = await getFileBuffer(encmedia, "sticker");
-      mediaExtension = ".webp";
-      processWithFfmpeg = false;
-    } else if ((isMedia && info.message.imageMessage) || isQuotedImage) {
-      encmedia = isQuotedImage ? info.message.extendedTextMessage.contextInfo.quotedMessage.imageMessage : info.message.imageMessage;
-      mediaBuffer = await getFileBuffer(encmedia, "image");
-      mediaExtension = ".jpg";
-    } else if (info.message.extendedTextMessage && info.message.extendedTextMessage.contextInfo && info.message.extendedTextMessage.contextInfo.quotedMessage && info.message.extendedTextMessage.contextInfo.quotedMessage.documentMessage) {
-      // NOVA BRANCH: tratar quoted documentMessage presente em extendedTextMessage
-      encmedia = info.message.extendedTextMessage.contextInfo.quotedMessage.documentMessage;
-      const mimetype = encmedia.mimetype;
-      if (mimetype && mimetype.includes("gif")) {
-        mediaBuffer = await getFileBuffer(encmedia, "document");
-        mediaExtension = ".gif";
-        processWithFfmpeg = true; // converter o GIF usando ffmpeg
-        filtro = "scale=512:512";
-      } else {
-        mediaBuffer = await getFileBuffer(encmedia, "document");
-        mediaExtension = ".jpg"; // tratar como imagem comum
-        processWithFfmpeg = false;
-        filtro = "scale=512:512";
-      }
-    } else if (info.message.documentMessage) {
-      // NOVA BRANCH: tratar documentMessage para mídia de sticker
-      encmedia = info.message.documentMessage;
-      const mimetype = encmedia.mimetype;
-      if (mimetype && mimetype.includes("gif")) {
-        mediaBuffer = await getFileBuffer(encmedia, "video");
-        mediaExtension = ".gif";
-        processWithFfmpeg = true; // converter o GIF usando ffmpeg
-        filtro = "scale=512:512";
-      } else {
-        mediaBuffer = await getFileBuffer(encmedia, "image");
-        mediaExtension = ".jpg"; // trata como imagem comum
-        processWithFfmpeg = false;
-        filtro = "scale=512:512";
-      }
-    } else {
+    if (!encmedia) {
       await client.sendMessage(from, { react: { text: "⚠️", key: info.key } });
       await client.sendMessage(
         from,
@@ -108,12 +63,85 @@ async function processSticker(client, info, expirationMessage, sender, from, tex
         },
         { quoted: info, ephemeralExpiration: expirationMessage }
       );
-
       return;
     }
 
-    if (mediaExtension === ".jpg") {
-      filtro = "scale=512:512";
+    if (tipoMidia === "document") {
+      const mimetype = encmedia.mimetype || "";
+      if (mimetype.startsWith("image/")) {
+        tipoMidia = "image";
+      } else if (mimetype.startsWith("video/")) {
+        tipoMidia = "video";
+      } else {
+        await client.sendMessage(from, { react: { text: "⚠️", key: info.key } });
+        await client.sendMessage(
+          from,
+          {
+            text: "❌ *Erro: Tipo de documento não suportado!*\n\nApenas documentos de imagem ou vídeo são aceitos.",
+          },
+          { quoted: info, ephemeralExpiration: expirationMessage }
+        );
+        return;
+      }
+    }
+
+    const fileLength = encmedia?.fileLength || 0;
+    const maxFileSize = 1.5 * 1024 * 1024;
+
+    if ((tipoMidia === "video" || tipoMidia === "sticker") && fileLength > maxFileSize) {
+      await client.sendMessage(from, { react: { text: "⚠️", key: info.key } });
+      await client.sendMessage(
+        from,
+        {
+          text: "❌ *Erro: Arquivo muito grande!*\n\nO arquivo enviado excede o limite de *1,5 MB*. Por favor, envie um arquivo menor.",
+        },
+        { quoted: info, ephemeralExpiration: expirationMessage }
+      );
+      return;
+    }
+
+    let mediaExtension = "";
+    let processWithFfmpeg = true;
+    let mediaBuffer;
+
+    try {
+      mediaBuffer = await getFileBuffer(encmedia, tipoMidia);
+
+      switch (tipoMidia) {
+        case "image":
+          mediaExtension = ".jpg";
+          break;
+        case "video":
+          mediaExtension = ".mp4";
+          break;
+        case "sticker":
+          mediaExtension = ".webp";
+          processWithFfmpeg = false;
+          break;
+      }
+    } catch (e) {
+      if (e.message.includes("bad decrypt")) {
+        logger.error("Erro ao obter mídia: problema de descriptografia", e);
+        await client.sendMessage(from, { react: { text: "❌", key: info.key } });
+        await client.sendMessage(
+          from,
+          {
+            text: "❌ *Erro ao processar o documento!*\n\nOcorreu um problema de descriptografia ao tentar acessar o arquivo. Por favor, envie novamente ou tente outro arquivo.",
+          },
+          { quoted: info, ephemeralExpiration: expirationMessage }
+        );
+      } else {
+        logger.error("Erro ao obter mídia:", e);
+        await client.sendMessage(from, { react: { text: "❌", key: info.key } });
+        await client.sendMessage(
+          from,
+          {
+            text: "❌ *Erro ao processar a mídia enviada!*\n\nPor favor, tente novamente mais tarde.",
+          },
+          { quoted: info, ephemeralExpiration: expirationMessage }
+        );
+      }
+      return;
     }
 
     const mediaPath = path.join(tempDir, `temp_file_${Date.now()}${mediaExtension}`);
@@ -121,6 +149,7 @@ async function processSticker(client, info, expirationMessage, sender, from, tex
 
     let outputPath = path.join(tempDir, `sticker_${Date.now()}.webp`);
     if (processWithFfmpeg) {
+      const filtro = tipoMidia === "video" ? "fps=10,scale=512:512" : "scale=512:512";
       await execProm(`ffmpeg -i "${mediaPath}" -vcodec libwebp -lossless 1 -loop 0 -preset default -an -vf "${filtro}" "${outputPath}"`);
     } else {
       fs.copyFileSync(mediaPath, outputPath);
