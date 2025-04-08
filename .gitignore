@@ -11,3 +11,4 @@ src/modules/stickerModule/data/stickerPrefs.json
 src/modules/stickerModule/temp/
 src/data/groupData.json
 src/data/userData.json
+src/modules/youtubeModule/cookies.json

@@ -6,7 +6,7 @@ const config = require(ConfigfilePath);
 const logger = require("../utils/logger");
 
 const { processAIContent } = require("../modules/geminiModule/gemini");
-const { processSticker } = require(path.join(__dirname, "../modules/stickerModule/sticker"));
+const { processSticker, processConverterSticker } = require(path.join(__dirname, "../modules/stickerModule/processStickers"));
 const { getFileBuffer } = require(path.join(__dirname, "../utils/functions"));
 const { preProcessMessage, processPrefix, processQuotedChecks, getExpiration } = require(path.join(__dirname, "./messageTypeController"));
 
@@ -14,6 +14,8 @@ async function handleWhatsAppUpdate(upsert, client) {
   for (const info of upsert?.messages || []) {
     if (!info.key || !info.message) return;
     if (info?.key?.fromMe) return;
+
+    console.log("info", JSON.stringify(info, null, 2));
 
     const from = info?.key?.remoteJid;
     const isGroup = from?.endsWith("@g.us");
@@ -69,8 +71,6 @@ async function handleWhatsAppUpdate(upsert, client) {
         await processSticker(client, info, expirationMessage, sender, from, text, isMedia, isQuotedVideo, isQuotedImage, config, getFileBuffer);
         break;
       }
-      case "teste":
-        console.log(groupFormattedData);
     }
   }
 }
