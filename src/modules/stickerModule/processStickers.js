@@ -15,8 +15,7 @@ if (!fs.existsSync(tempDir)) {
 
 async function processSticker(client, info, expirationMessage, sender, from, text, isMedia, isQuotedVideo, isQuotedImage) {
   try {
-    console.log(JSON.stringify(info, null, 2));
-    logger.info(`[ Processando sticker ] Usuário: ${sender}`);
+    logger.info(`🎨✨ [ Criando Sticker ] Processando pedido para o usuário: ${sender.split("@")[0]} 🚀🛠️`);
 
     let filtro = "fps=10,scale=512:512";
     let processWithFfmpeg = true;
@@ -54,6 +53,36 @@ async function processSticker(client, info, expirationMessage, sender, from, tex
       encmedia = isQuotedImage ? info.message.extendedTextMessage.contextInfo.quotedMessage.imageMessage : info.message.imageMessage;
       mediaBuffer = await getFileBuffer(encmedia, "image");
       mediaExtension = ".jpg";
+    } else if (info.message.extendedTextMessage && info.message.extendedTextMessage.contextInfo && info.message.extendedTextMessage.contextInfo.quotedMessage && info.message.extendedTextMessage.contextInfo.quotedMessage.documentMessage) {
+      // NOVA BRANCH: tratar quoted documentMessage presente em extendedTextMessage
+      encmedia = info.message.extendedTextMessage.contextInfo.quotedMessage.documentMessage;
+      const mimetype = encmedia.mimetype;
+      if (mimetype && mimetype.includes("gif")) {
+        mediaBuffer = await getFileBuffer(encmedia, "document");
+        mediaExtension = ".gif";
+        processWithFfmpeg = true; // converter o GIF usando ffmpeg
+        filtro = "scale=512:512";
+      } else {
+        mediaBuffer = await getFileBuffer(encmedia, "document");
+        mediaExtension = ".jpg"; // tratar como imagem comum
+        processWithFfmpeg = false;
+        filtro = "scale=512:512";
+      }
+    } else if (info.message.documentMessage) {
+      // NOVA BRANCH: tratar documentMessage para mídia de sticker
+      encmedia = info.message.documentMessage;
+      const mimetype = encmedia.mimetype;
+      if (mimetype && mimetype.includes("gif")) {
+        mediaBuffer = await getFileBuffer(encmedia, "video");
+        mediaExtension = ".gif";
+        processWithFfmpeg = true; // converter o GIF usando ffmpeg
+        filtro = "scale=512:512";
+      } else {
+        mediaBuffer = await getFileBuffer(encmedia, "image");
+        mediaExtension = ".jpg"; // trata como imagem comum
+        processWithFfmpeg = false;
+        filtro = "scale=512:512";
+      }
     } else {
       await client.sendMessage(from, { react: { text: "⚠️", key: info.key } });
       await client.sendMessage(

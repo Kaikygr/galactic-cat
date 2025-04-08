@@ -1,5 +1,4 @@
 {
-    "github": "https://github.com/Kaikygr/kaikygr",
     "owner": {
         "number": "559591264582@s.whatsapp.net",
         "name": "Kaiky Gomes",
@@ -8,13 +7,27 @@
         "country": "Brasil",
         "email": "kaikygomesribeiroof@gmail.com",
         "phone": "+55 95 9126-4582",
-        "instagram": "https://instagram.com/kaikygr"
+        "instagram": "https://instagram.com/kaikygr",
+        "github": "https://github.com/Kaikygr/kaikygr"
     },
     "bot": {
         "name": "Galactic Cat Bot",
-        "version": "0.1.0",
+        "version": "0.1.1",
         "description": "Chatbot avançado com inteligência artificial para automação no WhatsApp, integração via API e suporte a múltiplas funcionalidades.",
         "author": "Kaiky Gomes",
-        "repository": "https://github.com/Kaikygr/galactic-cat"
+        "repository": "https://github.com/Kaikygr/galactic-cat",
+        "license": "MIT",
+        "language": "pt-BR",
+        "timezone": "America/Boa_Vista",
+        "dateFormat": "DD/MM/YYYY",
+        "timeFormat": "HH:mm:ss",
+        "globalSettings": {
+            "prefix": [
+                "!",
+                "#",
+                "?",
+                "/"
+            ]
+        }
     }
 }
