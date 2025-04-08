@@ -47,7 +47,6 @@ async function processSticker(client, info, expirationMessage, sender, from, tex
             "📌 *Atenção!*\n\n" +
             "Envie ou marque uma imagem para processamento.\n\n" +
             "🔹 *Vídeos:*\n" +
-            "- Máximo de *10 segundos* de duração.\n" +
             "- *Alta definição pode causar erros*, prefira qualidade menor.\n" +
             "- *Recomendação:* 5 segundos e até *1MB* para melhor compatibilidade.\n\n" +
             "📏 *Formato padrão:* Todas as mídias serão ajustadas para *512x512*.\n\n" +
@@ -63,6 +62,14 @@ async function processSticker(client, info, expirationMessage, sender, from, tex
         },
         { quoted: info, ephemeralExpiration: expirationMessage }
       );
+      await client.sendMessage(
+        config.owner.number,
+        {
+          text: `⚠️ *Usuário com possível dificuldade no comando de sticker!*\n\n👤 *User:* ${sender.split("@")[0]}\n📎 *Tipo de mídia:* ${tipoMidia !== null ? tipoMidia : "Não foi fornecida mídia para o processo."}\n📝 *Texto:* ${text || "Nenhum texto informado."}\n\n🚨 *Verifique o conteúdo acima para análise.*`,
+        },
+        { quoted: info, ephemeralExpiration: expirationMessage }
+      );
+
       return;
     }
 
@@ -242,7 +249,7 @@ async function processSticker(client, info, expirationMessage, sender, from, tex
     await client.sendMessage(
       config.owner.number,
       {
-        text: `❌ *Erro ao processar sticker!*\n\nOcorreu um problema ao tentar processar a solicitação de ${sender}.\n\n\`\`\`${error}\`\`\``,
+        text: `❌ *Erro ao processar sticker!*\n\nOcorreu um problema ao tentar processar a solicitação de ${sender.split("@")[0]}.\n\n\`\`\`${error}\`\`\``,
       },
       { quoted: info, ephemeralExpiration: expirationMessage }
     );
