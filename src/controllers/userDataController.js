@@ -233,7 +233,7 @@ async function runQuery(query, params = []) {
     const [result] = await db.execute(query, params);
 
     const retorno = result?.insertId ? result.insertId : result;
-    logger.debug("✅ Query executada com sucesso.");
+    //logger.debug(`🔄 Executando a query:\n${query}\n→ Parâmetros: ${JSON.stringify(params)}\n\n✅ Resultado da query:\n${JSON.stringify(retorno, null, 2)}`);
 
     return retorno;
   } catch (err) {
@@ -364,7 +364,7 @@ async function saveGroupToDB(groupMeta) {
     let description = groupMeta.desc || "Sem descrição";
     let descriptionId = groupMeta.descId || "Sem ID de descrição";
     let subjectOwner = groupMeta.subjectOwner || "Desconhecido";
-    let subjectTime = groupMeta.subjectTime ? new Date(groupMeta.subjectTime * 1000).toISOString().slice(0, 19).replace("T", " ") : "Sem data de assunto";
+    let subjectTime = groupMeta.subjectTime ? new Date(groupMeta.subjectTime * 1000).toISOString().slice(0, 19).replace("T", " ") : null;
     const size = groupMeta.size || 0;
     const restrict = groupMeta.restrict ? 1 : 0;
     const announce = groupMeta.announce ? 1 : 0;
@@ -373,7 +373,7 @@ async function saveGroupToDB(groupMeta) {
     const joinApprovalMode = groupMeta.joinApprovalMode ? 1 : 0;
     const memberAddMode = groupMeta.memberAddMode ? 1 : 0;
     const isPremium = groupMeta.isPremium ? 1 : 0;
-    const premiumTemp = groupMeta.premiumTemp ? new Date(groupMeta.premiumTemp * 1000).toISOString().slice(0, 19).replace("T", " ") : "Sem data de expiração";
+    const premiumTemp = groupMeta.premiumTemp ? new Date(groupMeta.premiumTemp * 1000).toISOString().slice(0, 19).replace("T", " ") : null;
 
     // Aplicar sanitização para evitar valores null
     description = sanitizeData(description);
