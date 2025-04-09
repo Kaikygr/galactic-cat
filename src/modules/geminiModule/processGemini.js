@@ -41,6 +41,46 @@ async function processAIContent(client, from, info, expirationMessage, sender, u
     return;
   }
 
+  // Verificação de limite diário para usuários comuns (10 comandos / 24h)
+  let globalData = {};
+  try {
+    if (fs.existsSync(historyFilePath)) {
+      const fileContent = fs.readFileSync(historyFilePath, "utf8");
+      globalData = fileContent ? JSON.parse(fileContent) : {};
+    }
+  } catch (err) {
+    logger.error("[ GEMINI MODEL ] Falha ao ler o histórico para verificação de limite:", err);
+  }
+  if (!globalData[sender]) {
+    globalData[sender] = { systemInstruction: null, history: [], totalChamados: 0, datasChamados: [], tipo: "comum" };
+  } else if (!globalData[sender].tipo) {
+    globalData[sender].tipo = "comum";
+  }
+  const currentProfile = globalData[sender];
+  if (currentProfile.tipo === "comum") {
+    const cutoff = Date.now() - 24 * 3600 * 1000;
+    const recentCalls = currentProfile.datasChamados.filter(date => new Date(date).getTime() > cutoff);
+    if (recentCalls.length >= 10) {
+      const earliest = Math.min(...recentCalls.map(date => new Date(date).getTime()));
+      const resetTime = earliest + 24 * 3600 * 1000;
+      const remainingMs = resetTime - Date.now();
+      const sec = Math.floor(remainingMs / 1000) % 60;
+      const min = Math.floor(remainingMs / (1000 * 60)) % 60;
+      const hrs = Math.floor(remainingMs / (1000 * 60 * 60));
+      await client.sendMessage(from, { react: { text: "⏳", key: info.key } });
+
+      await client.sendMessage(
+        from,
+        {
+          text: `*⚠️ Limite diário atingido: 10 comandos em 24h!*\n\n` + `🕒 Aguarde *${hrs}h ${min}m ${sec}s* para usar novamente.\n\n` + `✨ *Assine o plano Premium* e aproveite:\n` + `• Comandos ilimitados\n` + `• Recursos e funções exclusivas\n` + `• Acesso antecipado a atualizações\n` + `• Suporte prioritário\n\n` + `🚀 Esta é uma forma de melhorar cada vez mais a experiência dos usuários e garantir um serviço mais estável e completo.\n\n` + `📩 *Fale com o proprietário para assinar seu plano Premium!*`,
+        },
+        { quoted: info, ephemeralExpiration: expirationMessage }
+      );
+
+      return;
+    }
+  }
+
   try {
     if (text.trim() === "--lp") {
       let data = {};
@@ -54,33 +94,36 @@ async function processAIContent(client, from, info, expirationMessage, sender, u
         }
       }
 
-      if (data && data[sender]) {
-        delete data[sender];
-        logger.info("[ GEMINI MODEL ] Excluindo histórico do usuário...");
-
-        try {
-          fs.writeFileSync(historyFilePath, JSON.stringify(data, null, 2));
-
-          await client.sendMessage(from, { react: { text: "🗑️", key: info.key } });
-          await client.sendMessage(
-            from,
-            {
-              text: `_🗑️ *O histórico de conversa foi removido com sucesso!*_\n\n✅ Para que as novas instruções ou personalizações sejam aplicadas corretamente, por favor, utilize o comando novamente.\n\nSe precisar de ajuda, estou por aqui! 🚀😊`,
-            },
-            { quoted: info, ephemeralExpiration: expirationMessage }
-          );
-        } catch (writeErr) {
-          throw new Error("Falha ao salvar as alterações: " + writeErr);
-        }
+      if (data[sender]) {
+        data[sender].tipo = data[sender].tipo || "comum"; // Garante que o tipo seja salvo
+        data[sender].history = [];
+        data[sender].totalChamados = (data[sender].totalChamados || 0) + 1;
+        data[sender].datasChamados = data[sender].datasChamados || [];
+        data[sender].datasChamados.push(new Date().toISOString());
+        logger.info("[ GEMINI MODEL ] Histórico do usuário limpo, mantendo as demais preferências...");
       } else {
-        await client.sendMessage(from, { react: { text: "❓", key: info.key } });
+        data[sender] = {
+          systemInstruction: null,
+          history: [],
+          totalChamados: 1,
+          datasChamados: [new Date().toISOString()],
+          tipo: "comum", // Define o tipo padrão
+        };
+        logger.info("[ GEMINI MODEL ] Perfil do usuário criado com histórico vazio.");
+      }
+
+      try {
+        fs.writeFileSync(historyFilePath, JSON.stringify(data, null, 2));
+        await client.sendMessage(from, { react: { text: "🗑️", key: info.key } });
         await client.sendMessage(
           from,
           {
-            text: `_❓ *Não foi encontrado nenhum histórico associado que possa ser removido.*_\n\nℹ️ Caso deseje iniciar uma nova conversa ou definir instruções personalizadas, utilize os comandos apropriados. Estou à disposição para ajudar!`,
+            text: `_🗑️ *O histórico de conversa foi removido com sucesso!*_\n\n✅ As configurações do perfil foram preservadas.\n\nSe precisar de ajuda, estou por aqui! 🚀😊`,
           },
           { quoted: info, ephemeralExpiration: expirationMessage }
         );
+      } catch (writeErr) {
+        throw new Error("Falha ao salvar as alterações: " + writeErr);
       }
       return;
     }
@@ -113,18 +156,30 @@ async function processAIContent(client, from, info, expirationMessage, sender, u
       let data = {};
 
       if (fs.existsSync(historyFilePath)) {
-        data = JSON.parse(fs.readFileSync(historyFilePath, "utf8"));
+        try {
+          data = JSON.parse(fs.readFileSync(historyFilePath, "utf8"));
+        } catch (readErr) {
+          throw new Error("Falha ao ler o histórico: " + readErr);
+        }
       }
 
-      let userHistory = [];
       if (data[sender]) {
-        userHistory = data[sender].history || [];
+        data[sender].tipo = data[sender].tipo || "comum"; // Garante que o tipo seja salvo
+        data[sender].systemInstruction = instructionText;
+        data[sender].totalChamados = (data[sender].totalChamados || 0) + 1;
+        data[sender].datasChamados = data[sender].datasChamados || [];
+        data[sender].datasChamados.push(new Date().toISOString());
+      } else {
+        data[sender] = {
+          systemInstruction: instructionText,
+          history: [],
+          totalChamados: 1,
+          datasChamados: [new Date().toISOString()],
+          tipo: "comum", // Define o tipo padrão
+        };
       }
 
-      data[sender] = { history: userHistory, systemInstruction: instructionText };
-
-      logger.info("[ GEMINI MODEL ] atualizando instrução do sistema...");
-
+      logger.info("[ GEMINI MODEL ] Atualizando instrução do sistema...");
       fs.writeFileSync(historyFilePath, JSON.stringify(data, null, 2));
       await client.sendMessage(from, { react: { text: "⚙️", key: info.key } });
       await client.sendMessage(
@@ -159,21 +214,24 @@ async function processAIContent(client, from, info, expirationMessage, sender, u
   }
 
   let history, systemInstruction;
+  let userRecord = {};
 
   if (fs.existsSync(historyFilePath)) {
-    const data = fs.readFileSync(historyFilePath, "utf8");
-    const historyData = JSON.parse(data);
+    const fileContent = fs.readFileSync(historyFilePath, "utf8");
+    const historyData = JSON.parse(fileContent);
 
-    logger.info("[ GEMINI MODEL ] carregando historico do usuario...");
+    logger.info("[ GEMINI MODEL ] Carregando perfil do usuário...");
 
-    const userRecord = historyData[sender] || { history: [], systemInstruction: null };
-    const prazo = 72 * 3600 * 1000;
-
-    userRecord.history = userRecord.history.filter(record => Date.now() - record.timestamp < prazo);
+    userRecord = historyData[sender] || { systemInstruction: null, history: [], totalChamados: 0, datasChamados: [], tipo: "comum" };
+    userRecord.tipo = userRecord.tipo || "comum"; // Garante que o tipo seja salvo
     history = userRecord.history;
     systemInstruction = userRecord.systemInstruction;
+    userRecord.totalChamados = (userRecord.totalChamados || 0) + 1;
+    userRecord.datasChamados = userRecord.datasChamados || [];
+    userRecord.datasChamados.push(new Date().toISOString());
   } else {
-    history = [];
+    userRecord = { systemInstruction: null, history: [], totalChamados: 1, datasChamados: [new Date().toISOString()], tipo: "comum" };
+    history = userRecord.history;
     systemInstruction = null;
   }
 
@@ -181,12 +239,9 @@ async function processAIContent(client, from, info, expirationMessage, sender, u
 
   const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash", systemInstruction });
 
-  let now = Date.now();
-  let formattedNow = new Date(now).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
+  history.push({ role: "user", content: text });
 
-  history.push({ role: "user", name: userName, parts: [{ text: text }], timestamp: now, formattedTimestamp: formattedNow });
-
-  const historyForAPI = history.map(({ timestamp, name, formattedTimestamp, ...msg }) => msg);
+  const historyForAPI = history.map(({ role, content }) => ({ role, parts: [{ text: content }] }));
   const chat = model.startChat({ history: historyForAPI });
   let result;
 
@@ -214,11 +269,9 @@ async function processAIContent(client, from, info, expirationMessage, sender, u
     return;
   }
 
-  logger.info("[ GEMINI MODEL ] gerando resposta do modelo...");
+  logger.info("[ GEMINI MODEL ] Gerando resposta do modelo...");
 
-  now = Date.now();
-  formattedNow = new Date(now).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
-  history.push({ role: "model", parts: [{ text: result.response.text() }], timestamp: now, formattedTimestamp: formattedNow });
+  history.push({ role: "model", content: result.response.text() });
 
   try {
     let dataToSave = {};
@@ -226,11 +279,11 @@ async function processAIContent(client, from, info, expirationMessage, sender, u
       dataToSave = JSON.parse(fs.readFileSync(historyFilePath, "utf8"));
     }
 
-    dataToSave[sender] = { history, systemInstruction };
-    logger.info("[ GEMINI MODEL ] salvando historico do usuario...");
+    dataToSave[sender] = userRecord; // Salva o tipo no JSON
+    logger.info("[ GEMINI MODEL ] Salvando perfil do usuário...");
     fs.writeFileSync(historyFilePath, JSON.stringify(dataToSave, null, 2));
   } catch (err) {
-    logger.error("[ GEMINI MODEL ] Erro ao salvar historico do usuario:", err);
+    logger.error("[ GEMINI MODEL ] Erro ao salvar perfil do usuário:", err);
 
     await client.sendMessage(from, { react: { text: "‼️", key: info.key } });
     await client.sendMessage(
