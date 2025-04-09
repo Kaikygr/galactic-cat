@@ -15,8 +15,6 @@ async function handleWhatsAppUpdate(upsert, client) {
     if (!info.key || !info.message) return;
     if (info?.key?.fromMe) return;
 
-    console.log("info", JSON.stringify(info, null, 2));
-
     const from = info?.key?.remoteJid;
     const isGroup = from?.endsWith("@g.us");
     const sender = isGroup ? info.key.participant : info.key.remoteJid;
