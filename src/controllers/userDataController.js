@@ -1,96 +1,118 @@
 /**
- * Inicializa e verifica as tabelas necessárias do banco de dados.
- * Esta função cria as seguintes tabelas, caso elas não existam:
- * - `groups` para armazenar os metadados dos grupos.
- * - `users` para armazenar as mensagens dos usuários.
- * - `group_participants` para armazenar os participantes dos grupos.
- * Registra cada ação e lança um erro se ocorrer alguma falha na criação ou verificação das tabelas.
+ * Initializes and creates the necessary tables in the database (i.e., groups, users, group_participants).
  *
  * @async
  * @function createTables
- * @throws {Error} Se ocorrer um erro ao criar ou verificar as tabelas.
+ * @throws {Error} If the database connection fails or table creation encounters an error.
  */
 
 /**
- * Garante que a conexão com o banco de dados esteja ativa.
- * Se a conexão (`db`) não estiver inicializada, ela será iniciada utilizando initDatabase.
+ * Ensures that the database connection is active. If not, initializes a new connection.
  *
  * @async
  * @function ensureDatabaseConnection
- * @throws {Error} Se a conexão com o banco de dados falhar ao iniciar.
+ * @throws {Error} If the connection initialization fails.
  */
 
 /**
- * Executa uma query SQL com parâmetros utilizando placeholders para prevenir ataques de SQL Injection.
+ * Executes a SQL query with provided parameters using prepared statements to prevent SQL injection.
  *
  * @async
  * @function runQuery
- * @param {string} query - A query SQL a ser executada.
- * @param {Array<*>} params - Os parâmetros que serão injetados de forma segura na query.
- * @returns {Promise<*>} O insertId da operação, se disponível, ou o resultado da query.
- * @throws {Error} Se a query falhar ao ser executada.
+ * @param {string} query - The SQL query string containing placeholders.
+ * @param {Array<*>} params - The array of parameter values to substitute into the query.
+ * @returns {(number|Object)} The result of the query execution, typically an insertId or a result object.
+ * @throws {Error} If the query execution fails.
  */
 
 /**
- * Salva os dados da mensagem de um usuário no banco de dados.
- * Processa o remetente, determina se a mensagem é de um grupo ou privada,
- * garante que o grupo exista no banco (criando-o se necessário) e insere o registro.
+ * Determines if a user is premium based on the 'isPremium' flag and valid 'premiumTemp' expiration.
+ *
+ * @async
+ * @function isUserPremium
+ * @param {string} userId - The unique identifier (sender) of the user.
+ * @returns {Promise<boolean>} Resolves to true if the user is premium and their premium period is still valid, otherwise false.
+ * @throws {Error} If the query to check the user's premium status fails.
+ */
+
+/**
+ * Determines if a group is premium based on the 'isPremium' flag and valid 'premiumTemp' expiration.
+ *
+ * @async
+ * @function isGroupPremium
+ * @param {string} groupId - The unique identifier of the group.
+ * @returns {Promise<boolean>} Resolves to true if the group is premium and its premium period is still valid, otherwise false.
+ * @throws {Error} If the query to check the group's premium status fails.
+ */
+
+/**
+ * Saves the user's message and related information into the database. Also ensures that the group exists;
+ * if not, it creates a new group record.
  *
  * @async
  * @function saveUserToDB
- * @param {Object} info - Os dados da mensagem.
- * @param {Object} info.key - Contém os identificadores do remetente e possivelmente do grupo.
- * @param {string} [info.pushName] - O nome de exibição do remetente.
- * @param {Object} info.message - A mensagem, onde a chave representa o tipo da mensagem.
- * @param {number} info.messageTimestamp - Timestamp UNIX (em segundos) de quando a mensagem foi enviada.
- * @returns {Promise<*>} O resultado da operação de inserção na tabela `users`.
- * @throws {Error} Se houver falha ao salvar os dados da mensagem/usuário.
+ * @param {Object} info - The message information object.
+ * @param {Object} info.key - Contains keys related to the message (e.g., remoteJid, participant).
+ * @param {string} [info.pushName] - The display name of the user.
+ * @param {Object} [info.message] - The actual message object.
+ * @returns {Promise<(number|Object)>} The result from the database insertion operation.
+ * @throws {Error} If required sender information is missing or if the query execution fails.
  */
 
 /**
- * Salva ou atualiza os metadados de um grupo no banco de dados.
- * Utiliza uma query INSERT com ON DUPLICATE KEY UPDATE para inserir um novo grupo ou atualizar um existente.
+ * Inserts or updates group metadata in the database using "ON DUPLICATE KEY UPDATE" to maintain data consistency.
  *
  * @async
  * @function saveGroupToDB
- * @param {Object} groupMeta - O objeto com os metadados do grupo.
- * @param {string} groupMeta.id - O identificador único do grupo.
- * @param {string} [groupMeta.subject] - O nome ou assunto do grupo.
- * @param {string} [groupMeta.owner] - O identificador do dono do grupo.
- * @param {number} [groupMeta.creation] - Timestamp UNIX (em segundos) representando a data de criação do grupo.
- * @param {string} [groupMeta.desc] - A descrição do grupo.
- * @returns {Promise<*>} O resultado da operação de inserção ou atualização.
- * @throws {Error} Se houver falha ao salvar ou atualizar os dados do grupo.
+ * @param {Object} groupMeta - An object containing group metadata.
+ * @param {string} groupMeta.id - The unique identifier of the group.
+ * @param {string} [groupMeta.subject] - The name or subject of the group.
+ * @param {string} [groupMeta.owner] - The owner identifier of the group.
+ * @param {number} [groupMeta.creation] - Unix timestamp of the group's creation time.
+ * @param {string} [groupMeta.desc] - The group's description.
+ * @param {string} [groupMeta.descId] - An identifier for the description.
+ * @param {string} [groupMeta.subjectOwner] - Indicates who changed the group subject.
+ * @param {number} [groupMeta.subjectTime] - Unix timestamp of when the subject was set.
+ * @param {number} [groupMeta.size] - The size (i.e., member count) of the group.
+ * @param {*} [groupMeta.restrict] - Flag indicating if restrictions are applied to the group.
+ * @param {*} [groupMeta.announce] - Flag indicating if group announcements are enabled.
+ * @param {*} [groupMeta.isCommunity] - Flag indicating if the group is a community.
+ * @param {*} [groupMeta.isCommunityAnnounce] - Flag indicating if community announcements are enabled.
+ * @param {*} [groupMeta.joinApprovalMode] - Mode setting for join approval.
+ * @param {*} [groupMeta.memberAddMode] - Mode setting for adding group members.
+ * @param {*} [groupMeta.isPremium] - Flag indicating if the group is premium.
+ * @param {number} [groupMeta.premiumTemp] - Unix timestamp indicating when premium access expires.
+ * @returns {Promise<(number|Object)>} The result of the insertion or update database operation.
+ * @throws {Error} If the group id is missing or if the query execution fails.
  */
 
 /**
- * Salva os participantes de um grupo no banco de dados.
- * Insere cada participante na tabela `group_participants` utilizando INSERT IGNORE para evitar duplicações.
+ * Saves the participants of a group into the database using INSERT IGNORE to avoid duplication.
  *
  * @async
  * @function saveGroupParticipantsToDB
- * @param {Object} groupMeta - O objeto com os metadados do grupo que inclui os participantes.
- * @param {string} groupMeta.id - O identificador único do grupo.
- * @param {Array<Object>} groupMeta.participants - Um array contendo objetos dos participantes.
- * @param {string} groupMeta.participants[].id - O identificador do participante.
- * @param {string} groupMeta.participants[].admin - O papel do participante (espera-se "admin" para administradores).
+ * @param {Object} groupMeta - An object containing the group's metadata.
+ * @param {string} groupMeta.id - The unique identifier of the group.
+ * @param {Array<Object>} groupMeta.participants - An array of participant objects.
+ * @param {string} groupMeta.participants[].id - The unique identifier for a participant.
+ * @param {string} [groupMeta.participants[].admin] - Indicates if the participant has admin rights ("admin" if true).
  * @returns {Promise<void>}
- * @throws {Error} Se houver falha ao salvar os participantes.
+ * @throws {Error} If the query for inserting participants fails.
  */
 
 /**
- * Processa os dados do usuário recebidos.
- * Extrai a primeira mensagem, salva a mensagem do usuário no banco de dados,
- * e, se a mensagem for de um grupo, recupera e salva os metadados e os dados dos participantes do grupo.
+ * Processes the incoming user data. Saves user messages and, for group messages, fetches and updates group metadata
+ * and participants.
  *
  * @async
  * @function processUserData
- * @param {Object} data - O objeto contendo os dados da mensagem.
- * @param {Array<Object>} data.messages - Um array contendo os objetos das mensagens.
- * @param {Object} client - A instância do cliente utilizada para recuperar os metadados do grupo.
+ * @param {Object} data - The incoming data payload containing messages.
+ * @param {Array<Object>} data.messages - Array of message objects.
+ * @param {Object} client - The client instance used to fetch additional group metadata.
  * @returns {Promise<void>}
- * @throws {Error} Se houver falha ao processar os dados do usuário ou do grupo.
+ * @throws {Error} If processing the user data or fetching/updating group details fails.
  */
+
 const logger = require("../utils/logger");
 const { initDatabase, connection } = require("../utils/processDatabase");
 const moment = require("moment-timezone");
