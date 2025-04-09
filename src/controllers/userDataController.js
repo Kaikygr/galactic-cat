@@ -1,134 +1,133 @@
 /**
- * Initializes and creates the necessary tables in the database (i.e., groups, users, group_participants).
+ * Inicializa e cria as tabelas necessárias no banco de dados (ou seja, groups, users, group_participants).
  *
  * @async
  * @function createTables
- * @throws {Error} If the database connection fails or table creation encounters an error.
+ * @throws {Error} Se a conexão com o banco de dados falhar ou ocorrer um erro na criação das tabelas.
  */
 
 /**
- * Ensures that the database connection is active. If not, initializes a new connection.
+ * Garante que a conexão com o banco de dados está ativa. Se não estiver, inicializa uma nova conexão.
  *
  * @async
  * @function ensureDatabaseConnection
- * @throws {Error} If the connection initialization fails.
+ * @throws {Error} Se a inicialização da conexão falhar.
  */
 
 /**
- * Executes a SQL query with provided parameters using prepared statements to prevent SQL injection.
+ * Executa uma consulta SQL com os parâmetros fornecidos usando prepared statements para evitar SQL injection.
  *
  * @async
  * @function runQuery
- * @param {string} query - The SQL query string containing placeholders.
- * @param {Array<*>} params - The array of parameter values to substitute into the query.
- * @returns {(number|Object)} The result of the query execution, typically an insertId or a result object.
- * @throws {Error} If the query execution fails.
+ * @param {string} query - A string da consulta SQL contendo placeholders.
+ * @param {Array<*>} params - Array com os valores dos parâmetros a serem substituídos na consulta.
+ * @returns {(number|Object)} O resultado da execução da consulta, geralmente um insertId ou um objeto de resultado.
+ * @throws {Error} Se a execução da consulta falhar.
  */
 
 /**
- * Determines if a user is premium based on the 'isPremium' flag and valid 'premiumTemp' expiration.
+ * Verifica se um usuário é premium com base no campo 'isPremium' e na validade do campo 'premiumTemp'.
  *
  * @async
  * @function isUserPremium
- * @param {string} userId - The unique identifier (sender) of the user.
- * @returns {Promise<boolean>} Resolves to true if the user is premium and their premium period is still valid, otherwise false.
- * @throws {Error} If the query to check the user's premium status fails.
+ * @param {string} userId - O identificador único (sender) do usuário.
+ * @returns {Promise<boolean>} Retorna true se o usuário for premium e o período premium ainda estiver válido, senão false.
+ * @throws {Error} Se a consulta para verificar o status premium do usuário falhar.
  */
 
 /**
- * Determines if a group is premium based on the 'isPremium' flag and valid 'premiumTemp' expiration.
+ * Verifica se um grupo é premium com base no campo 'isPremium' e na validade do campo 'premiumTemp'.
  *
  * @async
  * @function isGroupPremium
- * @param {string} groupId - The unique identifier of the group.
- * @returns {Promise<boolean>} Resolves to true if the group is premium and its premium period is still valid, otherwise false.
- * @throws {Error} If the query to check the group's premium status fails.
+ * @param {string} groupId - O identificador único do grupo.
+ * @returns {Promise<boolean>} Retorna true se o grupo for premium e o período premium ainda estiver válido, senão false.
+ * @throws {Error} Se a consulta para verificar o status premium do grupo falhar.
  */
 
 /**
- * Saves the user's message and related information into the database. Also ensures that the group exists;
- * if not, it creates a new group record.
+ * Salva a mensagem do usuário e as informações relacionadas no banco de dados. Também garante que o grupo exista;
+ * caso contrário, cria um novo registro de grupo.
  *
  * @async
  * @function saveUserToDB
- * @param {Object} info - The message information object.
- * @param {Object} info.key - Contains keys related to the message (e.g., remoteJid, participant).
- * @param {string} [info.pushName] - The display name of the user.
- * @param {Object} [info.message] - The actual message object.
- * @returns {Promise<(number|Object)>} The result from the database insertion operation.
- * @throws {Error} If required sender information is missing or if the query execution fails.
+ * @param {Object} info - O objeto com informações da mensagem.
+ * @param {Object} info.key - Contém chaves relacionadas à mensagem (ex: remoteJid, participant).
+ * @param {string} [info.pushName] - O nome de exibição do usuário.
+ * @param {Object} [info.message] - O objeto da mensagem propriamente dita.
+ * @returns {Promise<(number|Object)>} O resultado da operação de inserção no banco de dados.
+ * @throws {Error} Se as informações obrigatórias do remetente estiverem ausentes ou se a execução da consulta falhar.
  */
 
 /**
- * Inserts or updates group metadata in the database using "ON DUPLICATE KEY UPDATE" to maintain data consistency.
+ * Insere ou atualiza os metadados do grupo no banco de dados usando "ON DUPLICATE KEY UPDATE" para manter a consistência dos dados.
  *
  * @async
  * @function saveGroupToDB
- * @param {Object} groupMeta - An object containing group metadata.
- * @param {string} groupMeta.id - The unique identifier of the group.
- * @param {string} [groupMeta.subject] - The name or subject of the group.
- * @param {string} [groupMeta.owner] - The owner identifier of the group.
- * @param {number} [groupMeta.creation] - Unix timestamp of the group's creation time.
- * @param {string} [groupMeta.desc] - The group's description.
- * @param {string} [groupMeta.descId] - An identifier for the description.
- * @param {string} [groupMeta.subjectOwner] - Indicates who changed the group subject.
- * @param {number} [groupMeta.subjectTime] - Unix timestamp of when the subject was set.
- * @param {number} [groupMeta.size] - The size (i.e., member count) of the group.
- * @param {*} [groupMeta.restrict] - Flag indicating if restrictions are applied to the group.
- * @param {*} [groupMeta.announce] - Flag indicating if group announcements are enabled.
- * @param {*} [groupMeta.isCommunity] - Flag indicating if the group is a community.
- * @param {*} [groupMeta.isCommunityAnnounce] - Flag indicating if community announcements are enabled.
- * @param {*} [groupMeta.joinApprovalMode] - Mode setting for join approval.
- * @param {*} [groupMeta.memberAddMode] - Mode setting for adding group members.
- * @param {*} [groupMeta.isPremium] - Flag indicating if the group is premium.
- * @param {number} [groupMeta.premiumTemp] - Unix timestamp indicating when premium access expires.
- * @returns {Promise<(number|Object)>} The result of the insertion or update database operation.
- * @throws {Error} If the group id is missing or if the query execution fails.
+ * @param {Object} groupMeta - Um objeto contendo os metadados do grupo.
+ * @param {string} groupMeta.id - O identificador único do grupo.
+ * @param {string} [groupMeta.subject] - O nome ou assunto do grupo.
+ * @param {string} [groupMeta.owner] - O identificador do dono do grupo.
+ * @param {number} [groupMeta.creation] - Timestamp Unix da criação do grupo.
+ * @param {string} [groupMeta.desc] - A descrição do grupo.
+ * @param {string} [groupMeta.descId] - Um identificador para a descrição.
+ * @param {string} [groupMeta.subjectOwner] - Indica quem alterou o assunto do grupo.
+ * @param {number} [groupMeta.subjectTime] - Timestamp Unix de quando o assunto foi definido.
+ * @param {number} [groupMeta.size] - O tamanho (quantidade de membros) do grupo.
+ * @param {*} [groupMeta.restrict] - Flag indicando se há restrições aplicadas ao grupo.
+ * @param {*} [groupMeta.announce] - Flag indicando se os anúncios estão ativados no grupo.
+ * @param {*} [groupMeta.isCommunity] - Flag indicando se o grupo é uma comunidade.
+ * @param {*} [groupMeta.isCommunityAnnounce] - Flag indicando se anúncios da comunidade estão ativados.
+ * @param {*} [groupMeta.joinApprovalMode] - Modo de aprovação para entrada no grupo.
+ * @param {*} [groupMeta.memberAddMode] - Modo de adição de membros no grupo.
+ * @param {*} [groupMeta.isPremium] - Flag indicando se o grupo é premium.
+ * @param {number} [groupMeta.premiumTemp] - Timestamp Unix indicando quando expira o acesso premium.
+ * @returns {Promise<(number|Object)>} O resultado da operação de inserção ou atualização no banco.
+ * @throws {Error} Se o ID do grupo estiver ausente ou se a execução da consulta falhar.
  */
 
 /**
- * Saves the participants of a group into the database using INSERT IGNORE to avoid duplication.
+ * Salva os participantes de um grupo no banco de dados usando INSERT IGNORE para evitar duplicações.
  *
  * @async
  * @function saveGroupParticipantsToDB
- * @param {Object} groupMeta - An object containing the group's metadata.
- * @param {string} groupMeta.id - The unique identifier of the group.
- * @param {Array<Object>} groupMeta.participants - An array of participant objects.
- * @param {string} groupMeta.participants[].id - The unique identifier for a participant.
- * @param {string} [groupMeta.participants[].admin] - Indicates if the participant has admin rights ("admin" if true).
+ * @param {Object} groupMeta - Um objeto contendo os metadados do grupo.
+ * @param {string} groupMeta.id - O identificador único do grupo.
+ * @param {Array<Object>} groupMeta.participants - Um array com objetos dos participantes.
+ * @param {string} groupMeta.participants[].id - O identificador único de um participante.
+ * @param {string} [groupMeta.participants[].admin] - Indica se o participante é admin ("admin", se verdadeiro).
  * @returns {Promise<void>}
- * @throws {Error} If the query for inserting participants fails.
+ * @throws {Error} Se a consulta para inserir os participantes falhar.
  */
 
 /**
- * Processes the incoming user data. Saves user messages and, for group messages, fetches and updates group metadata
- * and participants.
+ * Processa os dados do usuário recebidos. Salva mensagens de usuários e, no caso de mensagens em grupo,
+ * busca e atualiza os metadados e participantes do grupo.
  *
  * @async
  * @function processUserData
- * @param {Object} data - The incoming data payload containing messages.
- * @param {Array<Object>} data.messages - Array of message objects.
- * @param {Object} client - The client instance used to fetch additional group metadata.
+ * @param {Object} data - O payload de dados recebidos contendo mensagens.
+ * @param {Array<Object>} data.messages - Array de objetos de mensagens.
+ * @param {Object} client - A instância do cliente usada para buscar metadados adicionais do grupo.
  * @returns {Promise<void>}
- * @throws {Error} If processing the user data or fetching/updating group details fails.
+ * @throws {Error} Se o processamento dos dados do usuário ou a atualização dos dados do grupo falhar.
  */
 
 const logger = require("../utils/logger");
 const { initDatabase, connection } = require("../utils/processDatabase");
 const moment = require("moment-timezone");
-let db = connection; // Reutiliza a conexão compartilhada
+let db = connection;
 
-// Função helper para evitar valores null
 const sanitizeData = (value, defaultValue = "") => (value == null ? defaultValue : value);
 
 async function createTables() {
   try {
     /* Verifica se a conexão com o banco de dados está estabelecida */
     if (!db) {
-      console.info("Inicializando conexão com o banco de dados...");
+      logger.info("🔄 Inicializando conexão com o banco de dados...");
       db = await initDatabase();
       if (!db) {
-        throw new Error("Falha na inicialização da conexão com o banco de dados.");
+        throw new Error("🚫 Falha na inicialização da conexão com o banco de dados.");
       }
     }
 
@@ -154,7 +153,7 @@ async function createTables() {
         premiumTemp DATETIME DEFAULT NULL -- Data de término do plano premium
       ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
-    logger.info("✅ Tabela 'groups' atualizada com colunas 'isPremium' e 'premiumTemp'.");
+    logger.info("✅ Tabela de groups verificada com sucesso.");
 
     /* Cria a tabela 'users' com restrição de chave estrangeira segura */
     await db.execute(`
@@ -172,7 +171,7 @@ async function createTables() {
         CONSTRAINT fk_group_id FOREIGN KEY (group_id) REFERENCES \`groups\`(id) ON DELETE SET NULL
       ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
-    logger.info("✅ Tabela 'users' atualizada com colunas 'isPremium' e 'premiumTemp'.");
+    logger.info("✅ Tabela de users verificada com sucesso.");
 
     /* Cria a tabela 'group_participants' com integridade referencial e chave composta */
     await db.execute(`
@@ -184,11 +183,10 @@ async function createTables() {
         CONSTRAINT fk_group_participants FOREIGN KEY (group_id) REFERENCES \`groups\`(id) ON DELETE CASCADE
       ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
-    logger.info("✅ Tabela 'group_participants' criada/verificada.");
+    logger.info("✅ Tabela de group_participants verificada com sucesso.");
   } catch (error) {
-    /* Em caso de erro, loga a mensagem detalhada e relança o erro para manuseio global */
-    logger.info("❌ Erro ao criar/verificar tabelas:", error);
-    throw error;
+    logger.error("❌ Erro crítico ao criar ou verificar as tabelas no banco de dados. O sistema será encerrado por segurança.", error);
+    process.exit(1);
   }
 }
 
@@ -199,9 +197,11 @@ initDatabase()
   .then(async connection => {
     db = connection;
     await createTables();
+    logger.info("✅ Banco de dados inicializado e tabelas verificadas/criadas com sucesso.");
   })
   .catch(err => {
-    logger.error("❌ Erro na inicialização do MySQL:", err);
+    logger.error(`❌ Erro crítico ao inicializar o MySQL. O sistema será encerrado.`, err);
+    process.exit(1); // Encerra o processo por falha crítica de inicialização
   });
 
 /* 
@@ -210,10 +210,16 @@ Caso não esteja, inicializa a conexão.
 */
 async function ensureDatabaseConnection() {
   if (!db) {
-    console.info("DB não inicializado, inicializando conexão...");
-    db = await initDatabase();
-    if (!db) {
-      throw new Error("Falha na inicialização da conexão com o banco de dados.");
+    logger.warn("⚠️ Conexão com o banco de dados não detectada. Tentando inicializar...");
+    try {
+      db = await initDatabase();
+      if (!db) {
+        throw new Error("Conexão retornou valor indefinido.");
+      }
+      logger.info("✅ Conexão com o banco de dados estabelecida com sucesso.");
+    } catch (error) {
+      logger.error("❌ Erro crítico: não foi possível estabelecer a conexão com o banco de dados, encerrando o processo.", error);
+      process.exit(1); // Encerra o processo se a conexão não puder ser estabelecida
     }
   }
 }
@@ -221,14 +227,18 @@ async function ensureDatabaseConnection() {
 /* 
 Executa uma query com tratamento de erros e prevenção de SQL Injection usando placeholders.
 */
-async function runQuery(query, params) {
+async function runQuery(query, params = []) {
   try {
     await ensureDatabaseConnection();
     const [result] = await db.execute(query, params);
-    return result.insertId || result;
+
+    const retorno = result?.insertId ? result.insertId : result;
+    logger.debug("✅ Query executada com sucesso.");
+
+    return retorno;
   } catch (err) {
-    logger.error("❌ Erro na execução da query:", err);
-    throw err;
+    logger.error(`❌ Erro ao executar a query:\n→ Query: ${query}\n→ Parâmetros: ${JSON.stringify(params)}\n→ Detalhes: ${err.message}`);
+    throw new Error("Erro na execução da consulta ao banco de dados.");
   }
 }
 
@@ -287,17 +297,24 @@ Divide a responsabilidade de verificação do grupo para evitar inconsistência 
 async function saveUserToDB(info) {
   try {
     await ensureDatabaseConnection();
-    const from = info?.key?.remoteJid || null;
+
+    if (!info || !info.key) {
+      logger.error("❌ Erro: Dados da mensagem inválidos ou ausentes. Dados recebidos:", { info });
+      throw new Error("Dados da mensagem inválidos ou ausentes.");
+    }
+
+    const from = info.key.remoteJid;
     const isGroup = from?.endsWith("@g.us") ? 1 : 0;
     const userId = isGroup ? info.key.participant : from;
 
     // Verifica se o sender (userId) não é nulo
     if (!userId) {
-      throw new Error("sender cannot be null");
+      logger.error("❌ Erro: 'sender' está nulo. Dados recebidos:", { info });
+      throw new Error("Sender está nulo.");
     }
 
-    let pushName = info.pushName || null;
-    let messageType = Object.keys(info.message || {})[0] || null;
+    let pushName = info.pushName || "Desconhecido";
+    let messageType = Object.keys(info.message || {})[0] || "tipo desconhecido";
     let messageContent = info.message?.[messageType] ? JSON.stringify(info.message[messageType]) : null;
 
     // Aplica a sanitização para evitar nulls
@@ -307,6 +324,8 @@ async function saveUserToDB(info) {
 
     const timestamp = moment.tz("America/Sao_Paulo").format("YYYY-MM-DD HH:mm:ss");
     const groupId = isGroup ? from : "privado";
+
+    // Verifica se o grupo existe no banco de dados
     const groupExistsQuery = `SELECT id FROM \`groups\` WHERE id = ?`;
     const [groupExists] = await db.execute(groupExistsQuery, [groupId]);
     if (groupExists.length === 0) {
@@ -323,7 +342,7 @@ async function saveUserToDB(info) {
     return result;
   } catch (error) {
     logger.error("❌ Erro ao salvar usuário/mensagem no banco:", error);
-    throw error;
+    throw new Error("Erro ao salvar usuário/mensagem no banco.");
   }
 }
 
@@ -334,17 +353,18 @@ Utiliza ON DUPLICATE KEY UPDATE para prevenir duplicação e manter a integridad
 async function saveGroupToDB(groupMeta) {
   try {
     await ensureDatabaseConnection();
-    const id = groupMeta.id || null;
+    const id = groupMeta.id;
     if (!id) {
-      throw new Error("group id cannot be null");
+      logger.error("❌ Erro: ID do grupo ausente. Dados recebidos:", { groupMeta });
+      throw new Error("ID do grupo ausente.");
     }
     const name = groupMeta.subject || "Grupo Desconhecido";
-    const owner = groupMeta.owner || null;
+    const owner = groupMeta.owner || "Desconhecido";
     const createdAt = groupMeta.creation ? new Date(groupMeta.creation * 1000).toISOString().slice(0, 19).replace("T", " ") : new Date().toISOString().slice(0, 19).replace("T", " ");
-    let description = groupMeta.desc || null;
-    let descriptionId = groupMeta.descId || null;
-    let subjectOwner = groupMeta.subjectOwner || null;
-    let subjectTime = groupMeta.subjectTime ? new Date(groupMeta.subjectTime * 1000).toISOString().slice(0, 19).replace("T", " ") : null;
+    let description = groupMeta.desc || "Sem descrição";
+    let descriptionId = groupMeta.descId || "Sem ID de descrição";
+    let subjectOwner = groupMeta.subjectOwner || "Desconhecido";
+    let subjectTime = groupMeta.subjectTime ? new Date(groupMeta.subjectTime * 1000).toISOString().slice(0, 19).replace("T", " ") : "Sem data de assunto";
     const size = groupMeta.size || 0;
     const restrict = groupMeta.restrict ? 1 : 0;
     const announce = groupMeta.announce ? 1 : 0;
@@ -353,7 +373,7 @@ async function saveGroupToDB(groupMeta) {
     const joinApprovalMode = groupMeta.joinApprovalMode ? 1 : 0;
     const memberAddMode = groupMeta.memberAddMode ? 1 : 0;
     const isPremium = groupMeta.isPremium ? 1 : 0;
-    const premiumTemp = groupMeta.premiumTemp ? new Date(groupMeta.premiumTemp * 1000).toISOString().slice(0, 19).replace("T", " ") : null;
+    const premiumTemp = groupMeta.premiumTemp ? new Date(groupMeta.premiumTemp * 1000).toISOString().slice(0, 19).replace("T", " ") : "Sem data de expiração";
 
     // Aplicar sanitização para evitar valores null
     description = sanitizeData(description);
@@ -385,11 +405,11 @@ async function saveGroupToDB(groupMeta) {
         premiumTemp = VALUES(premiumTemp)
     `;
     const result = await runQuery(query, [id, name, owner, createdAt, description, descriptionId, subjectOwner, subjectTime, size, restrict, announce, isCommunity, isCommunityAnnounce, joinApprovalMode, memberAddMode, isPremium, premiumTemp]);
-    logger.info("✅ Grupo salvo/atualizado:", id);
+    logger.info("✅ Grupo salvo ou atualizado no banco de dados:", id);
     return result;
   } catch (error) {
-    logger.error("❌ Erro ao salvar grupo no banco:", error);
-    throw error;
+    logger.error("❌ Erro ao salvar ou atualizar grupo no banco de dados:", error);
+    throw new Error("Erro ao salvar ou atualizar grupo no banco de dados.");
   }
 }
 
@@ -410,7 +430,7 @@ async function saveGroupParticipantsToDB(groupMeta) {
     logger.info("✅ Participantes do grupo salvos:", groupMeta.id);
   } catch (error) {
     logger.error("❌ Erro ao salvar participantes do grupo:", error);
-    throw error;
+    throw new Error("Erro ao salvar participantes do grupo.");
   }
 }
 
@@ -420,13 +440,26 @@ Se a mensagem for de grupo, também processa os metadados e participantes do gru
 */
 async function processUserData(data, client) {
   try {
+    // Verifica se os dados recebidos são válidos
+    if (!data || !Array.isArray(data.messages) || data.messages.length === 0) {
+      logger.error("❌ Dados inválidos ou ausentes no payload:", { data });
+      throw new Error("Payload de dados inválido.");
+    }
+
     /* Extrai a primeira mensagem do payload de dados */
     const info = data.messages[0];
     if (info?.key?.fromMe === true) return;
+
+    // Verifica se o remetente está presente antes de salvar
+    if (!info.key?.remoteJid) {
+      logger.error("❌ Erro: 'remoteJid' ausente na mensagem. Dados recebidos:", { info });
+      throw new Error("remoteJid ausente na mensagem.");
+    }
+
     await saveUserToDB(info);
 
     /* Se for mensagem de grupo, processa os metadados do grupo */
-    const from = info?.key?.remoteJid;
+    const from = info.key.remoteJid;
     if (from?.endsWith("@g.us")) {
       try {
         const groupMeta = await client.groupMetadata(from);
@@ -434,11 +467,12 @@ async function processUserData(data, client) {
         await saveGroupParticipantsToDB(groupMeta);
       } catch (gError) {
         logger.error("❌ Erro ao processar os dados do grupo:", gError);
+        throw new Error("Erro ao processar os dados do grupo.");
       }
     }
   } catch (error) {
     logger.error("❌ Erro ao processar os dados do usuário:", error);
-    throw error;
+    throw new Error("Erro ao processar os dados do usuário.");
   }
 }
 
