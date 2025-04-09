@@ -6,7 +6,7 @@ const config = require(ConfigfilePath);
 const logger = require("../utils/logger");
 
 const { processAIContent } = require("../modules/geminiModule/gemini");
-const { processSticker, processConverterSticker } = require(path.join(__dirname, "../modules/stickerModule/processStickers"));
+const { processSticker } = require(path.join(__dirname, "../modules/stickerModule/processStickers"));
 const { getFileBuffer } = require(path.join(__dirname, "../utils/functions"));
 const { preProcessMessage, processPrefix, processQuotedChecks, getExpiration } = require(path.join(__dirname, "./messageTypeController"));
 
