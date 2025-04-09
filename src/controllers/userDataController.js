@@ -235,6 +235,30 @@ async function isUserPremium(userId) {
 }
 
 /* 
+Valida se o grupo é premium com base em 'premiumTemp'.
+*/
+async function isGroupPremium(groupId) {
+  try {
+    const query = `
+      SELECT isPremium, premiumTemp
+      FROM \`groups\`
+      WHERE id = ?
+    `;
+    const [result] = await runQuery(query, [groupId]);
+
+    if (result.length > 0) {
+      const { isPremium, premiumTemp } = result[0];
+      const now = moment().format("YYYY-MM-DD HH:mm:ss");
+      return isPremium === 1 && premiumTemp && premiumTemp > now;
+    }
+    return false;
+  } catch (error) {
+    logger.error("❌ Erro ao verificar status premium do grupo:", error);
+    throw error;
+  }
+}
+
+/* 
 Salva os dados do usuário/mensagem no banco de dados.
 Divide a responsabilidade de verificação do grupo para evitar inconsistência de dados.
 */
