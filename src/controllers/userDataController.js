@@ -127,10 +127,12 @@ async function createTables() {
         is_community TINYINT,
         is_community_announce TINYINT,
         join_approval_mode TINYINT,
-        member_add_mode TINYINT
+        member_add_mode TINYINT,
+        isPremium TINYINT DEFAULT 0, -- Indica se o grupo é premium
+        premiumTemp DATETIME DEFAULT NULL -- Data de término do plano premium
       ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
-    logger.info("✅ Tabela 'groups' criada/verificada.");
+    logger.info("✅ Tabela 'groups' atualizada com colunas 'isPremium' e 'premiumTemp'.");
 
     /* Cria a tabela 'users' com restrição de chave estrangeira segura */
     await db.execute(`
@@ -143,10 +145,12 @@ async function createTables() {
         messageContent TEXT,
         timestamp DATETIME,
         group_id VARCHAR(255) DEFAULT 'message in private',
+        isPremium TINYINT DEFAULT 0, -- Indica se o usuário é premium
+        premiumTemp DATETIME DEFAULT NULL, -- Data de término do plano premium
         CONSTRAINT fk_group_id FOREIGN KEY (group_id) REFERENCES \`groups\`(id) ON DELETE SET NULL
       ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
-    logger.info("✅ Tabela 'users' criada/verificada.");
+    logger.info("✅ Tabela 'users' atualizada com colunas 'isPremium' e 'premiumTemp'.");
 
     /* Cria a tabela 'group_participants' com integridade referencial e chave composta */
     await db.execute(`
@@ -203,6 +207,30 @@ async function runQuery(query, params) {
   } catch (err) {
     logger.error("❌ Erro na execução da query:", err);
     throw err;
+  }
+}
+
+/* 
+Valida se o usuário é premium com base em 'premiumTemp'.
+*/
+async function isUserPremium(userId) {
+  try {
+    const query = `
+      SELECT isPremium, premiumTemp
+      FROM users
+      WHERE sender = ?
+    `;
+    const [result] = await runQuery(query, [userId]);
+
+    if (result.length > 0) {
+      const { isPremium, premiumTemp } = result[0];
+      const now = moment().format("YYYY-MM-DD HH:mm:ss");
+      return isPremium === 1 && premiumTemp && premiumTemp > now;
+    }
+    return false;
+  } catch (error) {
+    logger.error("❌ Erro ao verificar status premium do usuário:", error);
+    throw error;
   }
 }
 
@@ -278,6 +306,8 @@ async function saveGroupToDB(groupMeta) {
     const isCommunityAnnounce = groupMeta.isCommunityAnnounce ? 1 : 0;
     const joinApprovalMode = groupMeta.joinApprovalMode ? 1 : 0;
     const memberAddMode = groupMeta.memberAddMode ? 1 : 0;
+    const isPremium = groupMeta.isPremium ? 1 : 0;
+    const premiumTemp = groupMeta.premiumTemp ? new Date(groupMeta.premiumTemp * 1000).toISOString().slice(0, 19).replace("T", " ") : null;
 
     // Aplicar sanitização para evitar valores null
     description = sanitizeData(description);
@@ -287,9 +317,9 @@ async function saveGroupToDB(groupMeta) {
     const query = `
       INSERT INTO \`groups\` (
         id, name, owner, created_at, description, description_id, subject_owner, subject_time, size,
-        \`restrict\`, announce, is_community, is_community_announce, join_approval_mode, member_add_mode
+        \`restrict\`, announce, is_community, is_community_announce, join_approval_mode, member_add_mode, isPremium, premiumTemp
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE
         name = VALUES(name),
         owner = VALUES(owner),
@@ -304,9 +334,11 @@ async function saveGroupToDB(groupMeta) {
         is_community = VALUES(is_community),
         is_community_announce = VALUES(is_community_announce),
         join_approval_mode = VALUES(join_approval_mode),
-        member_add_mode = VALUES(member_add_mode)
+        member_add_mode = VALUES(member_add_mode),
+        isPremium = VALUES(isPremium),
+        premiumTemp = VALUES(premiumTemp)
     `;
-    const result = await runQuery(query, [id, name, owner, createdAt, description, descriptionId, subjectOwner, subjectTime, size, restrict, announce, isCommunity, isCommunityAnnounce, joinApprovalMode, memberAddMode]);
+    const result = await runQuery(query, [id, name, owner, createdAt, description, descriptionId, subjectOwner, subjectTime, size, restrict, announce, isCommunity, isCommunityAnnounce, joinApprovalMode, memberAddMode, isPremium, premiumTemp]);
     logger.info("✅ Grupo salvo/atualizado:", id);
     return result;
   } catch (error) {
