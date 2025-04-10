@@ -3,7 +3,7 @@
  * @description Módulo para inicializar e configurar um banco de dados MySQL e suas tabelas.
  *
  * Este módulo valida as variáveis de ambiente essenciais e exporta um
- * objeto de configuração MySQL (dbConfig) juntamente com uma função assíncrona (initDatabase)
+ * objeto de configuração MySQL (databaseConfig) juntamente com uma função assíncrona (initDatabase)
  * que:
  *  - Cria o banco de dados especificado (ou um padrão caso não seja informado),
  *  - Estabelece uma conexão segura com o banco de dados.
@@ -16,7 +16,7 @@
  *
  * Exporta:
  * @module processDatabase
- * @property {Object} dbConfig - Objeto de configuração para criar uma conexão MySQL.
+ * @property {Object} databaseConfig - Objeto de configuração para criar uma conexão MySQL.
  * @property {Function} initDatabase - Função assíncrona que inicializa o banco de dados.
  *
  * @throws {Error} Lança um erro se qualquer variável de ambiente necessária estiver faltando,
@@ -40,7 +40,7 @@ requiredEnvVars.forEach(envVar => {
 });
 
 /* Configuração do banco de dados */
-const dbConfig = {
+const databaseConfig = {
   host: process.env.MYSQL_HOST || "localhost",
   user: process.env.MYSQL_LOGIN_USER,
   password: process.env.MYSQL_LOGIN_PASSWORD,
@@ -49,7 +49,7 @@ const dbConfig = {
   charset: "utf8mb4",
 };
 
-module.exports = dbConfig;
+module.exports = databaseConfig;
 
 let connection; // Variável para armazenar a conexão compartilhada
 
@@ -60,7 +60,7 @@ async function initDatabase() {
 
     if (!connection) {
       /* Cria conexão inicial */
-      connection = await mysql.createConnection(dbConfig);
+      connection = await mysql.createConnection(databaseConfig);
 
       /* Cria o banco de dados, se necessário */
       await connection.execute(`CREATE DATABASE IF NOT EXISTS \`${databaseName}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
@@ -80,7 +80,7 @@ async function initDatabase() {
 }
 
 module.exports = {
-  dbConfig,
+  databaseConfig,
   initDatabase,
   connection, // Exporta a conexão compartilhada
 };
