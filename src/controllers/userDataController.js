@@ -132,7 +132,9 @@ async function createTables() {
       }
     }
 
-    /* Atualiza a tabela 'groups' para incluir novos campos */
+    logger.info("🔄 Criando/verificando tabelas no banco de dados...");
+
+    /* Cria a tabela 'groups' */
     await database.execute(`
       CREATE TABLE IF NOT EXISTS \`groups\` (
         id VARCHAR(255) PRIMARY KEY,
@@ -154,27 +156,36 @@ async function createTables() {
         premiumTemp DATETIME DEFAULT NULL
       ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
-    logger.info("✅ Tabela de groups verificada com sucesso.");
+    logger.info("✅ Tabela 'groups' criada/verificada com sucesso.");
 
-    /* Cria a tabela 'users' com restrição de chave estrangeira segura */
+    /* Cria a tabela 'users' */
     await database.execute(`
       CREATE TABLE IF NOT EXISTS users (
         id INT AUTO_INCREMENT PRIMARY KEY,
-        sender VARCHAR(255) NOT NULL,
+        sender VARCHAR(255) NOT NULL UNIQUE,
         pushName VARCHAR(255),
-        isGroup TINYINT,
+        isPremium TINYINT DEFAULT 0,
+        premiumTemp DATETIME DEFAULT NULL
+      ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    logger.info("✅ Tabela 'users' criada/verificada com sucesso.");
+
+    /* Cria a tabela 'messages' */
+    await database.execute(`
+      CREATE TABLE IF NOT EXISTS messages (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        sender_id VARCHAR(255) NOT NULL,
+        group_id VARCHAR(255),
         messageType VARCHAR(255),
         messageContent TEXT,
         timestamp DATETIME,
-        group_id VARCHAR(255) DEFAULT 'message in private',
-        isPremium TINYINT DEFAULT 0,
-        premiumTemp DATETIME DEFAULT NULL,
+        CONSTRAINT fk_sender_id FOREIGN KEY (sender_id) REFERENCES users(sender) ON DELETE CASCADE,
         CONSTRAINT fk_group_id FOREIGN KEY (group_id) REFERENCES \`groups\`(id) ON DELETE SET NULL
       ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
-    logger.info("✅ Tabela de users verificada com sucesso.");
+    logger.info("✅ Tabela 'messages' criada/verificada com sucesso.");
 
-    /* Cria a tabela 'group_participants' com integridade referencial e chave composta */
+    /* Cria a tabela 'group_participants' */
     await database.execute(`
       CREATE TABLE IF NOT EXISTS group_participants (
         group_id VARCHAR(255) NOT NULL,
@@ -184,7 +195,7 @@ async function createTables() {
         CONSTRAINT fk_group_participants FOREIGN KEY (group_id) REFERENCES \`groups\`(id) ON DELETE CASCADE
       ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
-    logger.info("✅ Tabela de group_participants verificada com sucesso.");
+    logger.info("✅ Tabela 'group_participants' criada/verificada com sucesso.");
   } catch (error) {
     logger.error("❌ Erro crítico ao criar ou verificar as tabelas no banco de dados.", error);
     throw new Error(error);
@@ -308,32 +319,49 @@ async function saveUserTodatabase(info) {
     const isGroup = from?.endsWith("@g.us") ? 1 : 0;
     const userId = isGroup ? info.key.participant : from;
 
-    // Verifica se o sender (userId) não é nulo
     if (!userId) {
       logger.error("❌ Erro: 'sender' está nulo. Dados recebidos:", { info });
       throw new Error("Sender está nulo.");
     }
 
     let pushName = info.pushName || "Desconhecido";
-    let messageType = Object.keys(info.message || {})[0] || "tipo desconhecido";
-    let messageContent = info.message?.[messageType] ? JSON.stringify(info.message[messageType]) : null;
-
     const timestamp = moment.tz("America/Sao_Paulo").format("YYYY-MM-DD HH:mm:ss");
-    const groupId = isGroup ? from : "privado";
 
-    // Verifica se o grupo existe no banco de dados
-    const groupExistsQuery = `SELECT id FROM \`groups\` WHERE id = ?`;
-    const [groupExists] = await database.execute(groupExistsQuery, [groupId]);
-    if (groupExists.length === 0) {
-      logger.warn(`Grupo '${groupId}' não encontrado. Criando grupo '${groupId}'.`);
-      await saveGroupTodatabase({ id: groupId, subject: isGroup ? "Grupo Desconhecido" : "Mensagens Privadas" });
+    // Insere ou atualiza o usuário na tabela 'users'
+    const userQuery = `
+      INSERT INTO users (sender, pushName)
+      VALUES (?, ?)
+      ON DUPLICATE KEY UPDATE pushName = VALUES(pushName)
+    `;
+    await runQuery(userQuery, [userId, pushName]);
+
+    // Verifica se o grupo existe antes de salvar a mensagem
+    const groupId = isGroup ? from : null;
+    if (groupId) {
+      const groupExistsQuery = `SELECT id FROM \`groups\` WHERE id = ?`;
+      const groupExists = await runQuery(groupExistsQuery, [groupId]);
+
+      if (!groupExists || groupExists.length === 0) {
+        logger.warn(`Grupo '${groupId}' não encontrado. Criando grupo '${groupId}' com valores padrão.`);
+        const defaultGroupData = {
+          id: groupId,
+          subject: "Grupo Desconhecido",
+          owner: "Desconhecido",
+          creation: moment().unix(),
+        };
+        await saveGroupTodatabase(defaultGroupData);
+      }
     }
 
-    const query = `
-      INSERT INTO users (sender, pushName, isGroup, messageType, messageContent, timestamp, group_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+    // Insere a mensagem na tabela 'messages'
+    const messageType = Object.keys(info.message || {})[0] || "tipo desconhecido";
+    const messageContent = info.message?.[messageType] ? JSON.stringify(info.message[messageType]) : null;
+
+    const messageQuery = `
+      INSERT INTO messages (sender_id, group_id, messageType, messageContent, timestamp)
+      VALUES (?, ?, ?, ?, ?)
     `;
-    const result = await runQuery(query, [userId, pushName, isGroup, messageType, messageContent, timestamp, groupId]);
+    const result = await runQuery(messageQuery, [userId, groupId, messageType, messageContent, timestamp]);
     logger.info("✅ Mensagem salva no histórico do usuário:", userId);
     return result;
   } catch (error) {
@@ -354,28 +382,29 @@ async function saveGroupTodatabase(groupMeta) {
       logger.error("❌ Erro: ID do grupo ausente. Dados recebidos:", { groupMeta });
       throw new Error("ID do grupo ausente.");
     }
-    const name = groupMeta.subject || "Grupo Desconhecido";
-    const owner = groupMeta.owner || "Desconhecido";
+
+    // Log detalhado para verificar os metadados recebidos
+    logger.info("🔄 Salvando metadados do grupo:", JSON.stringify(groupMeta, null, 2));
+
+    // Extração e sanitização dos metadados do grupo
+    const name = sanitizeData(groupMeta.subject, "Grupo Desconhecido");
+    const owner = sanitizeData(groupMeta.owner, "Desconhecido");
     const createdAt = groupMeta.creation ? new Date(groupMeta.creation * 1000).toISOString().slice(0, 19).replace("T", " ") : new Date().toISOString().slice(0, 19).replace("T", " ");
-    let description = groupMeta.desc || "Sem descrição";
-    let descriptionId = groupMeta.descId || "Sem ID de descrição";
-    let subjectOwner = groupMeta.subjectOwner || "Desconhecido";
-    let subjectTime = groupMeta.subjectTime ? new Date(groupMeta.subjectTime * 1000).toISOString().slice(0, 19).replace("T", " ") : null;
+    const description = sanitizeData(groupMeta.desc, "Sem descrição");
+    const descriptionId = sanitizeData(groupMeta.descId, "Sem ID de descrição");
+    const subjectOwner = sanitizeData(groupMeta.subjectOwner, "Desconhecido");
+    const subjectTime = groupMeta.subjectTime ? new Date(groupMeta.subjectTime * 1000).toISOString().slice(0, 19).replace("T", " ") : null;
     const size = groupMeta.size || 0;
     const restrict = groupMeta.restrict ? 1 : 0;
     const announce = groupMeta.announce ? 1 : 0;
     const isCommunity = groupMeta.isCommunity ? 1 : 0;
     const isCommunityAnnounce = groupMeta.isCommunityAnnounce ? 1 : 0;
     const joinApprovalMode = groupMeta.joinApprovalMode ? 1 : 0;
-    const memberAddMode = groupMeta.memberAddMode ? 1 : 0;
+    const member_add_mode = groupMeta.memberAddMode ? 1 : 0;
     const isPremium = groupMeta.isPremium ? 1 : 0;
     const premiumTemp = groupMeta.premiumTemp ? new Date(groupMeta.premiumTemp * 1000).toISOString().slice(0, 19).replace("T", " ") : null;
 
-    // Aplicar sanitização para evitar valores null
-    description = sanitizeData(description);
-    descriptionId = sanitizeData(descriptionId);
-    subjectOwner = sanitizeData(subjectOwner);
-
+    // Query para salvar ou atualizar os metadados do grupo
     const query = `
       INSERT INTO \`groups\` (
         id, name, owner, created_at, description, description_id, subject_owner, subject_time, size,
@@ -400,7 +429,7 @@ async function saveGroupTodatabase(groupMeta) {
         isPremium = VALUES(isPremium),
         premiumTemp = VALUES(premiumTemp)
     `;
-    const result = await runQuery(query, [id, name, owner, createdAt, description, descriptionId, subjectOwner, subjectTime, size, restrict, announce, isCommunity, isCommunityAnnounce, joinApprovalMode, memberAddMode, isPremium, premiumTemp]);
+    const result = await runQuery(query, [id, name, owner, createdAt, description, descriptionId, subjectOwner, subjectTime, size, restrict, announce, isCommunity, isCommunityAnnounce, joinApprovalMode, member_add_mode, isPremium, premiumTemp]);
     logger.info("✅ Grupo salvo ou atualizado no banco de dados:", id);
     return result;
   } catch (error) {
@@ -436,63 +465,81 @@ Se a mensagem for de grupo, também processa os metadados e participantes do gru
 */
 async function processUserData(data, client) {
   try {
-    // Verifica se os dados recebidos são válidos
     if (!data || !Array.isArray(data.messages) || data.messages.length === 0) {
       logger.error("❌ Dados inválidos ou ausentes no payload:", { data });
       throw new Error("Payload de dados inválido.");
     }
 
-    /* Extrai a primeira mensagem do payload de dados */
     const info = data.messages[0];
     if (info?.key?.fromMe === true) return;
 
-    // Verifica se o remetente está presente antes de salvar
     if (!info.key?.remoteJid) {
-      logger.error("❌ Erro: 'remoteJid' ausente na mensagem. Dados recebidos:", { info });
+      logger.error("❌ Erro: 'remoteJid' ausente na mensagem:", { info });
       throw new Error("remoteJid ausente na mensagem.");
     }
 
     await saveUserTodatabase(info);
-
-    /* Se for mensagem de grupo, processa os metadados do grupo */
     const from = info.key.remoteJid;
+
+    // Se for uma mensagem de grupo
     if (from?.endsWith("@g.us")) {
+      logger.info(`🔄 Processando metadados do grupo: ${from}`);
+
       try {
-        // Cache dos metadados dos grupos e contador de chamadas
-        if (!global.groupMetadataCache) {
-          global.groupMetadataCache = {};
-        }
-        if (!global.groupMetadataCallCount) {
-          global.groupMetadataCallCount = {};
+        // Verifica se o client está disponível
+        if (!client || typeof client.groupMetadata !== "function") {
+          logger.error("❌ Cliente WhatsApp inválido ou método groupMetadata não disponível");
+          throw new Error("Cliente WhatsApp inválido");
         }
 
-        const cacheThreshold = 5; // A cada 4 chamadas, atualiza os dados do grupo
+        // Sistema de cache com tempo de expiração
+        const cacheKey = from;
+        const cacheExpiry = 5 * 60 * 1000; // 5 minutos
 
-        if (!global.groupMetadataCache[from]) {
-          // Se não estiver em cache, busca os metadados e inicializa o contador
-          const groupMeta = await client.groupMetadata(from);
-          global.groupMetadataCache[from] = groupMeta;
-          global.groupMetadataCallCount[from] = 1;
+        let groupMeta;
+        const cachedData = global.groupMetadataCache?.[cacheKey];
+        const now = Date.now();
+
+        if (cachedData && now - cachedData.timestamp < cacheExpiry) {
+          logger.info(`📦 Usando metadados em cache para o grupo: ${from}`);
+          groupMeta = cachedData.data;
         } else {
-          // Incrementa o contador de chamadas para este grupo
-          global.groupMetadataCallCount[from] = (global.groupMetadataCallCount[from] || 0) + 1;
-          // A cada "cacheThreshold" chamadas, busca os dados atualizados
-          if (global.groupMetadataCallCount[from] % cacheThreshold === 0) {
-            const updatedGroupMeta = await client.groupMetadata(from);
-            global.groupMetadataCache[from] = updatedGroupMeta;
+          logger.info(`🔄 Buscando novos metadados para o grupo: ${from}`);
+          try {
+            groupMeta = await client.groupMetadata(from);
+
+            if (!groupMeta || !groupMeta.id) {
+              throw new Error("Metadados do grupo retornados são inválidos");
+            }
+
+            // Atualiza o cache
+            if (!global.groupMetadataCache) global.groupMetadataCache = {};
+            global.groupMetadataCache[cacheKey] = {
+              data: groupMeta,
+              timestamp: now,
+            };
+
+            logger.info(`✅ Metadados do grupo obtidos com sucesso: ${from}`);
+          } catch (fetchError) {
+            logger.error(`❌ Erro ao buscar metadados do grupo ${from}:`, fetchError);
+            throw fetchError;
           }
         }
-        const groupMeta = global.groupMetadataCache[from];
-        await saveGroupTodatabase(groupMeta);
-        await saveGroupParticipantsTodatabase(groupMeta);
+
+        if (groupMeta) {
+          logger.info(`🔄 Salvando metadados do grupo ${from} no banco de dados`);
+          await saveGroupTodatabase(groupMeta);
+          await saveGroupParticipantsTodatabase(groupMeta);
+          logger.info(`✅ Metadados do grupo ${from} salvos com sucesso`);
+        }
       } catch (gError) {
-        logger.error("❌ Erro ao processar os dados do grupo:", gError);
-        throw new Error("Erro ao processar os dados do grupo.");
+        logger.error(`❌ Erro ao processar grupo ${from}:`, gError);
+        // Não lança o erro para permitir que o processamento continue para outras mensagens
       }
     }
   } catch (error) {
-    logger.error("❌ Erro ao processar os dados do usuário:", error);
-    throw new Error("Erro ao processar os dados do usuário.");
+    logger.error("❌ Erro ao processar dados do usuário:", error);
+    throw error;
   }
 }
 
