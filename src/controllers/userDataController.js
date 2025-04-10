@@ -458,7 +458,31 @@ async function processUserData(data, client) {
     const from = info.key.remoteJid;
     if (from?.endsWith("@g.us")) {
       try {
-        const groupMeta = await client.groupMetadata(from);
+        // Cache dos metadados dos grupos e contador de chamadas
+        if (!global.groupMetadataCache) {
+          global.groupMetadataCache = {};
+        }
+        if (!global.groupMetadataCallCount) {
+          global.groupMetadataCallCount = {};
+        }
+
+        const cacheThreshold = 5; // A cada 4 chamadas, atualiza os dados do grupo
+
+        if (!global.groupMetadataCache[from]) {
+          // Se não estiver em cache, busca os metadados e inicializa o contador
+          const groupMeta = await client.groupMetadata(from);
+          global.groupMetadataCache[from] = groupMeta;
+          global.groupMetadataCallCount[from] = 1;
+        } else {
+          // Incrementa o contador de chamadas para este grupo
+          global.groupMetadataCallCount[from] = (global.groupMetadataCallCount[from] || 0) + 1;
+          // A cada "cacheThreshold" chamadas, busca os dados atualizados
+          if (global.groupMetadataCallCount[from] % cacheThreshold === 0) {
+            const updatedGroupMeta = await client.groupMetadata(from);
+            global.groupMetadataCache[from] = updatedGroupMeta;
+          }
+        }
+        const groupMeta = global.groupMetadataCache[from];
         await saveGroupTodatabase(groupMeta);
         await saveGroupParticipantsTodatabase(groupMeta);
       } catch (gError) {
