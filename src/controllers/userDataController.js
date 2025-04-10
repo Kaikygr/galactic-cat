@@ -120,6 +120,7 @@ async function runQuery(query, params = []) {
 
     // Identifica o tipo de query pelo primeiro comando
     const queryType = query.trim().split(" ")[0].toUpperCase();
+    const isIgnoreQuery = query.toUpperCase().includes("INSERT IGNORE");
 
     // Validações e retornos específicos por tipo de operação
     switch (queryType) {
@@ -131,7 +132,8 @@ async function runQuery(query, params = []) {
         return result;
 
       case "INSERT":
-        if (!result.affectedRows) {
+        // Se for INSERT IGNORE, não lança erro quando nenhuma linha é inserida
+        if (!result.affectedRows && !isIgnoreQuery) {
           throw new Error("Nenhuma linha foi inserida");
         }
         return {
