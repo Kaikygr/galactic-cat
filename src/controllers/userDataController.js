@@ -129,16 +129,62 @@ async function runQuery(query, params = []) {
 }
 
 /* 
-Salva os dados do usuário/mensagem no banco de dados.
-Divide a responsabilidade de verificação do grupo para evitar inconsistência de dados.
+Salva ou atualiza dados do usuário no banco.
+*/
+async function saveUserToDatabase(userId, pushName = "Desconhecido") {
+  const query = `
+    INSERT INTO users (sender, pushName)
+    VALUES (?, ?)
+    ON DUPLICATE KEY UPDATE pushName = VALUES(pushName)
+  `;
+  await runQuery(query, [userId, pushName]);
+  logger.info("✅ Usuário salvo/atualizado:", userId);
+}
+
+/* 
+Verifica se grupo existe e cria com valores padrão se necessário.
+*/
+async function saveGroupIfNotExists(groupId) {
+  const groupExistsQuery = `SELECT id FROM \`groups\` WHERE id = ?`;
+  const groupExists = await runQuery(groupExistsQuery, [groupId]);
+
+  if (!groupExists || groupExists.length === 0) {
+    logger.warn(`Grupo '${groupId}' não encontrado. Criando com valores padrão.`);
+    const defaultGroupData = {
+      id: groupId,
+      subject: "Grupo Desconhecido",
+      owner: "Desconhecido",
+      creation: moment().unix(),
+    };
+    await saveGroupTodatabase(defaultGroupData);
+  }
+  return groupId;
+}
+
+/* 
+Salva uma mensagem no histórico.
+*/
+async function saveMessageToDatabase(messageData) {
+  const { messageId, userId, groupId, messageType, messageContent, timestamp } = messageData;
+
+  const query = `
+    INSERT INTO messages (message_id, sender_id, group_id, messageType, messageContent, timestamp)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `;
+  await runQuery(query, [messageId, userId, groupId, messageType, messageContent, timestamp]);
+  logger.info("✅ Mensagem salva para o usuário:", userId);
+}
+
+/* 
+Processa e salva os dados do usuário/mensagem.
 */
 async function saveUserTodatabase(info) {
   try {
     await ensureDatabaseConnection();
 
-    if (!info || !info.key) {
-      logger.error("❌ Erro: Dados da mensagem inválidos ou ausentes. Dados recebidos:", { info });
-      throw new Error("Dados da mensagem inválidos ou ausentes.");
+    if (!info?.key) {
+      logger.error("❌ Dados da mensagem inválidos:", { info });
+      throw new Error("Dados da mensagem inválidos.");
     }
 
     const from = info.key.remoteJid;
@@ -146,54 +192,34 @@ async function saveUserTodatabase(info) {
     const userId = isGroup ? info.key.participant : from;
 
     if (!userId) {
-      logger.error("❌ Erro: 'sender' está nulo. Dados recebidos:", { info });
+      logger.error("❌ Sender está nulo:", { info });
       return null;
     }
 
-    let pushName = info.pushName || "Desconhecido";
-    const timestamp = moment.tz("America/Sao_Paulo").format("YYYY-MM-DD HH:mm:ss");
+    // Salva/atualiza dados do usuário
+    await saveUserToDatabase(userId, info.pushName);
 
-    // Insere ou atualiza o usuário na tabela 'users'
-    const userQuery = `
-      INSERT INTO users (sender, pushName)
-      VALUES (?, ?)
-      ON DUPLICATE KEY UPDATE pushName = VALUES(pushName)
-    `;
-    await runQuery(userQuery, [userId, pushName]);
+    // Verifica/cria grupo se necessário
+    const groupId = isGroup ? await saveGroupIfNotExists(from) : null;
 
-    // Verifica se o grupo existe antes de salvar a mensagem
-    const groupId = isGroup ? from : null;
-    if (groupId) {
-      const groupExistsQuery = `SELECT id FROM \`groups\` WHERE id = ?`;
-      const groupExists = await runQuery(groupExistsQuery, [groupId]);
-
-      if (!groupExists || groupExists.length === 0) {
-        logger.warn(`Grupo '${groupId}' não encontrado. Criando grupo '${groupId}' com valores padrão.`);
-        const defaultGroupData = {
-          id: groupId,
-          subject: "Grupo Desconhecido",
-          owner: "Desconhecido",
-          creation: moment().unix(),
-        };
-        await saveGroupTodatabase(defaultGroupData);
-      }
-    }
-
-    // Insere a mensagem na tabela 'messages'
+    // Prepara e salva a mensagem
     const messageType = Object.keys(info.message || {})[0] || "tipo desconhecido";
     const messageContent = info.message?.[messageType] ? JSON.stringify(info.message[messageType]) : null;
-    const messageId = info.key.id || crypto.randomUUID();
+    const timestamp = moment.tz("America/Sao_Paulo").format("YYYY-MM-DD HH:mm:ss");
 
-    const messageQuery = `
-      INSERT INTO messages (message_id, sender_id, group_id, messageType, messageContent, timestamp)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `;
-    const result = await runQuery(messageQuery, [messageId, userId, groupId, messageType, messageContent, timestamp]);
-    logger.info("✅ Mensagem salva no histórico do usuário:", userId);
-    return result;
+    await saveMessageToDatabase({
+      messageId: info.key.id || crypto.randomUUID(),
+      userId,
+      groupId,
+      messageType,
+      messageContent,
+      timestamp,
+    });
+
+    return true;
   } catch (error) {
-    logger.error("❌ Erro ao salvar usuário/mensagem no banco:", error);
-    throw new Error("Erro ao salvar usuário/mensagem no banco.");
+    logger.error("❌ Erro ao processar dados:", error);
+    throw new Error("Erro ao processar dados.");
   }
 }
 
