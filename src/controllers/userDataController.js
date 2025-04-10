@@ -1,122 +1,9 @@
-/**
- * Inicializa e cria as tabelas necessárias no banco de dados (ou seja, groups, users, group_participants).
- *
- * @async
- * @function createTables
- * @throws {Error} Se a conexão com o banco de dados falhar ou ocorrer um erro na criação das tabelas.
- */
-
-/**
- * Garante que a conexão com o banco de dados está ativa. Se não estiver, inicializa uma nova conexão.
- *
- * @async
- * @function ensureDatabaseConnection
- * @throws {Error} Se a inicialização da conexão falhar.
- */
-
-/**
- * Executa uma consulta SQL com os parâmetros fornecidos usando prepared statements para evitar SQL injection.
- *
- * @async
- * @function runQuery
- * @param {string} query - A string da consulta SQL contendo placeholders.
- * @param {Array<*>} params - Array com os valores dos parâmetros a serem substituídos na consulta.
- * @returns {(number|Object)} O resultado da execução da consulta, geralmente um insertId ou um objeto de resultado.
- * @throws {Error} Se a execução da consulta falhar.
- */
-
-/**
- * Verifica se um usuário é premium com base no campo 'isPremium' e na validade do campo 'premiumTemp'.
- *
- * @async
- * @function isUserPremium
- * @param {string} userId - O identificador único (sender) do usuário.
- * @returns {Promise<boolean>} Retorna true se o usuário for premium e o período premium ainda estiver válido, senão false.
- * @throws {Error} Se a consulta para verificar o status premium do usuário falhar.
- */
-
-/**
- * Verifica se um grupo é premium com base no campo 'isPremium' e na validade do campo 'premiumTemp'.
- *
- * @async
- * @function isGroupPremium
- * @param {string} groupId - O identificador único do grupo.
- * @returns {Promise<boolean>} Retorna true se o grupo for premium e o período premium ainda estiver válido, senão false.
- * @throws {Error} Se a consulta para verificar o status premium do grupo falhar.
- */
-
-/**
- * Salva a mensagem do usuário e as informações relacionadas no banco de dados. Também garante que o grupo exista;
- * caso contrário, cria um novo registro de grupo.
- *
- * @async
- * @function saveUserTodatabase
- * @param {Object} info - O objeto com informações da mensagem.
- * @param {Object} info.key - Contém chaves relacionadas à mensagem (ex: remoteJid, participant).
- * @param {string} [info.pushName] - O nome de exibição do usuário.
- * @param {Object} [info.message] - O objeto da mensagem propriamente dita.
- * @returns {Promise<(number|Object)>} O resultado da operação de inserção no banco de dados.
- * @throws {Error} Se as informações obrigatórias do remetente estiverem ausentes ou se a execução da consulta falhar.
- */
-
-/**
- * Insere ou atualiza os metadados do grupo no banco de dados usando "ON DUPLICATE KEY UPDATE" para manter a consistência dos dados.
- *
- * @async
- * @function saveGroupTodatabase
- * @param {Object} groupMeta - Um objeto contendo os metadados do grupo.
- * @param {string} groupMeta.id - O identificador único do grupo.
- * @param {string} [groupMeta.subject] - O nome ou assunto do grupo.
- * @param {string} [groupMeta.owner] - O identificador do dono do grupo.
- * @param {number} [groupMeta.creation] - Timestamp Unix da criação do grupo.
- * @param {string} [groupMeta.desc] - A descrição do grupo.
- * @param {string} [groupMeta.descId] - Um identificador para a descrição.
- * @param {string} [groupMeta.subjectOwner] - Indica quem alterou o assunto do grupo.
- * @param {number} [groupMeta.subjectTime] - Timestamp Unix de quando o assunto foi definido.
- * @param {number} [groupMeta.size] - O tamanho (quantidade de membros) do grupo.
- * @param {*} [groupMeta.restrict] - Flag indicando se há restrições aplicadas ao grupo.
- * @param {*} [groupMeta.announce] - Flag indicando se os anúncios estão ativados no grupo.
- * @param {*} [groupMeta.isCommunity] - Flag indicando se o grupo é uma comunidade.
- * @param {*} [groupMeta.isCommunityAnnounce] - Flag indicando se anúncios da comunidade estão ativados.
- * @param {*} [groupMeta.joinApprovalMode] - Modo de aprovação para entrada no grupo.
- * @param {*} [groupMeta.memberAddMode] - Modo de adição de membros no grupo.
- * @param {*} [groupMeta.isPremium] - Flag indicando se o grupo é premium.
- * @param {number} [groupMeta.premiumTemp] - Timestamp Unix indicando quando expira o acesso premium.
- * @returns {Promise<(number|Object)>} O resultado da operação de inserção ou atualização no banco.
- * @throws {Error} Se o ID do grupo estiver ausente ou se a execução da consulta falhar.
- */
-
-/**
- * Salva os participantes de um grupo no banco de dados usando INSERT IGNORE para evitar duplicações.
- *
- * @async
- * @function saveGroupParticipantsTodatabase
- * @param {Object} groupMeta - Um objeto contendo os metadados do grupo.
- * @param {string} groupMeta.id - O identificador único do grupo.
- * @param {Array<Object>} groupMeta.participants - Um array com objetos dos participantes.
- * @param {string} groupMeta.participants[].id - O identificador único de um participante.
- * @param {string} [groupMeta.participants[].admin] - Indica se o participante é admin ("admin", se verdadeiro).
- * @returns {Promise<void>}
- * @throws {Error} Se a consulta para inserir os participantes falhar.
- */
-
-/**
- * Processa os dados do usuário recebidos. Salva mensagens de usuários e, no caso de mensagens em grupo,
- * busca e atualiza os metadados e participantes do grupo.
- *
- * @async
- * @function processUserData
- * @param {Object} data - O payload de dados recebidos contendo mensagens.
- * @param {Array<Object>} data.messages - Array de objetos de mensagens.
- * @param {Object} client - A instância do cliente usada para buscar metadados adicionais do grupo.
- * @returns {Promise<void>}
- * @throws {Error} Se o processamento dos dados do usuário ou a atualização dos dados do grupo falhar.
- */
-
 const logger = require("../utils/logger");
 const { initDatabase, connection } = require("../utils/processDatabase");
 const moment = require("moment-timezone");
+const crypto = require("crypto");
 let database = connection;
+let databaseInitialized = false;
 
 const sanitizeData = (value, defaultValue = "") => (value == null ? defaultValue : value);
 
@@ -161,8 +48,7 @@ async function createTables() {
     /* Cria a tabela 'users' */
     await database.execute(`
       CREATE TABLE IF NOT EXISTS users (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        sender VARCHAR(255) NOT NULL UNIQUE,
+        sender VARCHAR(255) PRIMARY KEY,
         pushName VARCHAR(255),
         isPremium TINYINT DEFAULT 0,
         premiumTemp DATETIME DEFAULT NULL
@@ -173,12 +59,13 @@ async function createTables() {
     /* Cria a tabela 'messages' */
     await database.execute(`
       CREATE TABLE IF NOT EXISTS messages (
-        id INT AUTO_INCREMENT PRIMARY KEY,
+        message_id VARCHAR(255),
         sender_id VARCHAR(255) NOT NULL,
         group_id VARCHAR(255),
         messageType VARCHAR(255),
         messageContent TEXT,
         timestamp DATETIME,
+        PRIMARY KEY (sender_id, timestamp, message_id),
         CONSTRAINT fk_sender_id FOREIGN KEY (sender_id) REFERENCES users(sender) ON DELETE CASCADE,
         CONSTRAINT fk_group_id FOREIGN KEY (group_id) REFERENCES \`groups\`(id) ON DELETE SET NULL
       ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
@@ -203,32 +90,19 @@ async function createTables() {
 }
 
 /* 
-Inicializa a conexão com o banco de dados e cria as tabelas necessárias.
-*/
-initDatabase()
-  .then(async connection => {
-    database = connection;
-    await createTables();
-    logger.info("✅ Banco de dados inicializado e tabelas verificadas/criadas com sucesso.");
-  })
-  .catch(err => {
-    logger.error(`❌ Erro crítico ao inicializar o MySQL.`, err);
-    throw new Error(err);
-  });
-
-/* 
-Garante que a conexão com o banco de dados esteja ativa.
-Caso não esteja, inicializa a conexão.
+Garante que a conexão com o banco de dados esteja ativa e as tabelas criadas.
 */
 async function ensureDatabaseConnection() {
-  if (!database) {
+  if (!database || !databaseInitialized) {
     logger.warn("⚠️ Conexão com o banco de dados não detectada. Tentando inicializar...");
     try {
       database = await initDatabase();
       if (!database) {
         throw new Error("Conexão retornou valor indefinido.");
       }
-      logger.info("✅ Conexão com o banco de dados estabelecida com sucesso.");
+      await createTables();
+      databaseInitialized = true;
+      logger.info("✅ Conexão com o banco de dados estabelecida e tabelas verificadas com sucesso.");
     } catch (error) {
       logger.error("❌ Erro crítico: não foi possível estabelecer a conexão com o banco de dados.", error);
       throw new Error("Error ao conectar ao banco de dados.");
@@ -245,60 +119,12 @@ async function runQuery(query, params = []) {
     const [result] = await database.execute(query, params);
 
     const retorno = result?.insertId ? result.insertId : result;
-    //logger.debug(`🔄 Executando a query:\n${query}\n→ Parâmetros: ${JSON.stringify(params)}\n\n✅ Resultado da query:\n${JSON.stringify(retorno, null, 2)}`);
+    logger.debug(`🔄 Executando a query:\n${query}\n→ Parâmetros: ${JSON.stringify(params)}\n\n✅ Resultado da query:\n${JSON.stringify(retorno, null, 2)}`);
 
     return retorno;
   } catch (err) {
     logger.error(`❌ Erro ao executar a query:\n→ Query: ${query}\n→ Parâmetros: ${JSON.stringify(params)}\n→ Detalhes: ${err.message}`);
     throw new Error("Erro na execução da consulta ao banco de dados.");
-  }
-}
-
-/* 
-Valida se o usuário é premium com base em 'premiumTemp'.
-*/
-async function isUserPremium(userId) {
-  try {
-    const query = `
-      SELECT isPremium, premiumTemp
-      FROM users
-      WHERE sender = ?
-    `;
-    const [result] = await runQuery(query, [userId]);
-
-    if (result.length > 0) {
-      const { isPremium, premiumTemp } = result[0];
-      const now = moment().format("YYYY-MM-DD HH:mm:ss");
-      return isPremium === 1 && premiumTemp && premiumTemp > now;
-    }
-    return false;
-  } catch (error) {
-    logger.error("❌ Erro ao verificar status premium do usuário:", error);
-    throw error;
-  }
-}
-
-/* 
-Valida se o grupo é premium com base em 'premiumTemp'.
-*/
-async function isGroupPremium(groupId) {
-  try {
-    const query = `
-      SELECT isPremium, premiumTemp
-      FROM \`groups\`
-      WHERE id = ?
-    `;
-    const [result] = await runQuery(query, [groupId]);
-
-    if (result.length > 0) {
-      const { isPremium, premiumTemp } = result[0];
-      const now = moment().format("YYYY-MM-DD HH:mm:ss");
-      return isPremium === 1 && premiumTemp && premiumTemp > now;
-    }
-    return false;
-  } catch (error) {
-    logger.error("❌ Erro ao verificar status premium do grupo:", error);
-    throw error;
   }
 }
 
@@ -321,7 +147,7 @@ async function saveUserTodatabase(info) {
 
     if (!userId) {
       logger.error("❌ Erro: 'sender' está nulo. Dados recebidos:", { info });
-      throw new Error("Sender está nulo.");
+      return null;
     }
 
     let pushName = info.pushName || "Desconhecido";
@@ -356,12 +182,13 @@ async function saveUserTodatabase(info) {
     // Insere a mensagem na tabela 'messages'
     const messageType = Object.keys(info.message || {})[0] || "tipo desconhecido";
     const messageContent = info.message?.[messageType] ? JSON.stringify(info.message[messageType]) : null;
+    const messageId = info.key.id || crypto.randomUUID();
 
     const messageQuery = `
-      INSERT INTO messages (sender_id, group_id, messageType, messageContent, timestamp)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO messages (message_id, sender_id, group_id, messageType, messageContent, timestamp)
+      VALUES (?, ?, ?, ?, ?, ?)
     `;
-    const result = await runQuery(messageQuery, [userId, groupId, messageType, messageContent, timestamp]);
+    const result = await runQuery(messageQuery, [messageId, userId, groupId, messageType, messageContent, timestamp]);
     logger.info("✅ Mensagem salva no histórico do usuário:", userId);
     return result;
   } catch (error) {
