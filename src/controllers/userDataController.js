@@ -118,13 +118,43 @@ async function runQuery(query, params = []) {
     await ensureDatabaseConnection();
     const [result] = await database.execute(query, params);
 
-    const retorno = result?.insertId ? result.insertId : result;
-    logger.debug(`🔄 Executando a query:\n${query}\n→ Parâmetros: ${JSON.stringify(params)}\n\n✅ Resultado da query:\n${JSON.stringify(retorno, null, 2)}`);
+    // Identifica o tipo de query pelo primeiro comando
+    const queryType = query.trim().split(" ")[0].toUpperCase();
 
-    return retorno;
+    // Validações e retornos específicos por tipo de operação
+    switch (queryType) {
+      case "SELECT":
+        if (!result || result.length === 0) {
+          logger.debug(`⚠️ Nenhum resultado encontrado para a consulta`);
+          return [];
+        }
+        return result;
+
+      case "INSERT":
+        if (!result.affectedRows) {
+          throw new Error("Nenhuma linha foi inserida");
+        }
+        return {
+          insertId: result.insertId,
+          affectedRows: result.affectedRows,
+        };
+
+      case "UPDATE":
+      case "DELETE":
+        if (!result.affectedRows) {
+          logger.warn(`⚠️ Nenhuma linha foi afetada pela operação ${queryType}`);
+        }
+        return {
+          affectedRows: result.affectedRows,
+          changedRows: result.changedRows,
+        };
+
+      default:
+        return result;
+    }
   } catch (err) {
     logger.error(`❌ Erro ao executar a query:\n→ Query: ${query}\n→ Parâmetros: ${JSON.stringify(params)}\n→ Detalhes: ${err.message}`);
-    throw new Error("Erro na execução da consulta ao banco de dados.");
+    throw new Error(`Erro na execução da consulta: ${err.message}`);
   }
 }
 
