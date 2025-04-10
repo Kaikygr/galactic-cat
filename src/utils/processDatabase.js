@@ -79,8 +79,23 @@ async function initDatabase() {
   return connection;
 }
 
+/* Executa uma query no banco de dados */
+async function executeQuery(query, params) {
+  try {
+    if (!connection) {
+      throw new Error("Conexão com o banco de dados não inicializada.");
+    }
+    const [results] = await connection.execute(query, params);
+    return results;
+  } catch (error) {
+    logger.error(`Erro ao executar query: ${error.stack}`);
+    throw error;
+  }
+}
+
 module.exports = {
   databaseConfig,
   initDatabase,
   connection, // Exporta a conexão compartilhada
+  executeQuery, // Exporta a função para executar queries
 };
