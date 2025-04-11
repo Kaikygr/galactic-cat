@@ -57,11 +57,17 @@ async function runQuery(query, params = []) {
       throw new Error("Conexão com o banco de dados não inicializada.");
     }
 
+    const startTime = process.hrtime();
     const [result] = await connection.execute(query, params);
+    const [seconds, nanoseconds] = process.hrtime(startTime);
+    const durationMs = (seconds * 1000 + nanoseconds / 1e6).toFixed(2);
 
     // Identifica o tipo de query
     const queryType = query.trim().split(" ")[0].toUpperCase();
     const isIgnoreQuery = query.toUpperCase().includes("INSERT IGNORE");
+
+    // Log de sucesso
+    logger.debug(`✓ Query ${queryType} executada em ${durationMs}ms:\n→ Query: ${query}\n→ Parâmetros: ${JSON.stringify(params)}`);
 
     // Validações e retornos específicos por tipo
     switch (queryType) {
@@ -101,5 +107,5 @@ module.exports = {
   databaseConfig,
   initDatabase,
   connection,
-  runQuery, // Adicionando runQuery às exportações
+  runQuery,
 };
