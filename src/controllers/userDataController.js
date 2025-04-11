@@ -308,7 +308,7 @@ async function saveGroupTodatabase(groupMeta) {
         announce = VALUES(announce),
         is_community = VALUES(is_community),
         is_community_announce = VALUES(is_community_announce),
-        join_approval_mode = VALUES(joinApprovalMode),
+        join_approval_mode = VALUES(join_approval_mode),
         member_add_mode = VALUES(member_add_mode),
         isPremium = VALUES(isPremium),
         premiumTemp = VALUES(premiumTemp)

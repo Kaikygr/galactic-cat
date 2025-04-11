@@ -23,12 +23,18 @@ const databaseConfig = {
   charset: "utf8mb4",
 };
 
+<<<<<<< HEAD
 /**
  * Inicializa a conexão com o banco de dados e cria o banco se não existir
  * @async
  * @returns {Promise<import('mysql2/promise').Connection>} Conexão com o banco de dados
  * @throws {Error} Se houver erro na inicialização do banco
  */
+=======
+let connection;
+
+/* Inicializa o banco de dados */
+>>>>>>> 456f7e6 (refatorar createTables e ensureDatabaseConnection: melhorar logs e tratamento de erros)
 async function initDatabase() {
   try {
     const databaseName = process.env.MYSQL_DATABASE || "catGalactic";
