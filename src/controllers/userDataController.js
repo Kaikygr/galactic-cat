@@ -11,15 +11,21 @@ async function createTables() {
   try {
     /* Verifica se a conexão com o banco de dados está estabelecida */
     if (!database) {
-      logger.info("🔄 Inicializando conexão com o banco de dados...");
-      database = await initDatabase();
-      if (!database) {
-        logger.error("❌ Erro: Conexão com o banco de dados falhou.");
-        throw new Error("Conexão com o banco de dados falhou.");
+      logger.info("[ createTables ] 🔄 Inicializando conexão com o banco de dados...");
+
+      try {
+        database = await initDatabase();
+
+        if (!database) {
+          throw new Error("[ createTables ] ❌ A função 'initDatabase' vinda de 'processDatabase' retornou nulo ou indefinido.");
+        }
+      } catch (error) {
+        logger.error(`[ createTables ] ❌ Erro ao conectar ao banco de dados segue abaixo o motivo do error:\n → Error:${error}`);
+        throw error;
       }
     }
 
-    logger.info("🔄 Criando/verificando tabelas no banco de dados...");
+    logger.info("[ createTables ] 📦 Verificando e criando tabelas necessárias no banco de dados...");
 
     /* Cria a tabela 'groups' */
     await database.execute(`
@@ -43,7 +49,7 @@ async function createTables() {
         premiumTemp DATETIME DEFAULT NULL
       ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
-    logger.info("✅ Tabela 'groups' criada/verificada com sucesso.");
+    logger.info("[ createTables ] ✅ Tabela 'groups' foi verificada a sua exitencia ou criada com sucesso.");
 
     /* Cria a tabela 'users' */
     await database.execute(`
@@ -54,7 +60,7 @@ async function createTables() {
         premiumTemp DATETIME DEFAULT NULL
       ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
-    logger.info("✅ Tabela 'users' criada/verificada com sucesso.");
+    logger.info("[ createTables ] ✅ Tabela 'users' foi verificada a sua exitencia ou criada com sucesso.");
 
     /* Cria a tabela 'messages' */
     await database.execute(`
@@ -70,7 +76,7 @@ async function createTables() {
         CONSTRAINT fk_group_id FOREIGN KEY (group_id) REFERENCES \`groups\`(id) ON DELETE SET NULL
       ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
-    logger.info("✅ Tabela 'messages' criada/verificada com sucesso.");
+    logger.info("[ createTables ] ✅ Tabela 'messages foi verificada a sua exitencia ou criada com sucesso.");
 
     /* Cria a tabela 'group_participants' */
     await database.execute(`
@@ -82,9 +88,9 @@ async function createTables() {
         CONSTRAINT fk_group_participants FOREIGN KEY (group_id) REFERENCES \`groups\`(id) ON DELETE CASCADE
       ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
-    logger.info("✅ Tabela 'group_participants' criada/verificada com sucesso.");
+    logger.info("[ createTables ] ✅ Tabela 'group_participants' foi verificada a sua exitencia ou criada com sucesso.");
   } catch (error) {
-    logger.error("❌ Erro crítico ao criar ou verificar as tabelas no banco de dados.", error);
+    logger.error(`[ createTables ] ❌ Erro crítico ao criar ou verificar as tabelas no banco de dados.\n → Error:${error}`);
     throw new Error(error);
   }
 }
@@ -94,18 +100,18 @@ Garante que a conexão com o banco de dados esteja ativa e as tabelas criadas.
 */
 async function ensureDatabaseConnection() {
   if (!database || !databaseInitialized) {
-    logger.warn("⚠️ Conexão com o banco de dados não detectada. Tentando inicializar...");
+    logger.warn("[ ensureDatabaseConnection ] ⚠️ Conexão com o banco de dados não detectada. Tentando inicializar...");
     try {
       database = await initDatabase();
       if (!database) {
-        throw new Error("Conexão retornou valor indefinido.");
+        throw new Error("[ ensureDatabaseConnection ] Conexão retornou valor indefinido.");
       }
       await createTables();
       databaseInitialized = true;
-      logger.info("✅ Conexão com o banco de dados estabelecida e tabelas verificadas com sucesso.");
+      logger.info("[ ensureDatabaseConnection ] ✅ Conexão com o banco de dados estabelecida e tabelas verificadas com sucesso.");
     } catch (error) {
-      logger.error("❌ Erro crítico: não foi possível estabelecer a conexão com o banco de dados.", error);
-      throw new Error("Error ao conectar ao banco de dados.");
+      logger.error(`[ ensureDatabaseConnection ] ❌ Erro crítico: não foi possível estabelecer a conexão com o banco de dados.\n → Error:${error}`);
+      throw new Error(error);
     }
   }
 }
@@ -120,41 +126,51 @@ async function saveUserToDatabase(userId, pushName = "Desconhecido") {
     ON DUPLICATE KEY UPDATE pushName = VALUES(pushName)
   `;
   await runQuery(query, [userId, pushName]);
-  logger.info("✅ Usuário salvo/atualizado:", userId);
+  logger.info(`[ saveUserToDatabase ] ✅ Usuário atualizado: ${userId}`);
 }
 
 /* 
 Verifica se grupo existe e cria com valores padrão se necessário.
 */
 async function saveGroupIfNotExists(groupId) {
-  const groupExistsQuery = `SELECT id FROM \`groups\` WHERE id = ?`;
-  const groupExists = await runQuery(groupExistsQuery, [groupId]);
+  try {
+    const groupExistsQuery = `SELECT id FROM \`groups\` WHERE id = ?`;
+    const groupExists = await runQuery(groupExistsQuery, [groupId]);
 
-  if (!groupExists || groupExists.length === 0) {
-    logger.warn(`Grupo '${groupId}' não encontrado. Criando com valores padrão.`);
-    const defaultGroupData = {
-      id: groupId,
-      subject: "Grupo Desconhecido",
-      owner: "Desconhecido",
-      creation: moment().unix(),
-    };
-    await saveGroupTodatabase(defaultGroupData);
+    if (!groupExists || groupExists.length === 0) {
+      logger.warn(`[ saveGroupIfNotExists ] Grupo '${groupId}' não encontrado. Criando com valores padrão.`);
+      const defaultGroupData = {
+        id: groupId,
+        subject: "Grupo Desconhecido",
+        owner: "Desconhecido",
+        creation: moment().unix(),
+      };
+      await saveGroupTodatabase(defaultGroupData);
+    }
+    return groupId;
+  } catch (error) {
+    logger.error(`[ saveGroupIfNotExists ] ❌ Error ao criar grupo: ${error}`);
+    throw error;
   }
-  return groupId;
 }
 
 /* 
 Salva uma mensagem no histórico.
 */
 async function saveMessageToDatabase(messageData) {
-  const { messageId, userId, groupId, messageType, messageContent, timestamp } = messageData;
+  try {
+    const { messageId, userId, groupId, messageType, messageContent, timestamp } = messageData;
 
-  const query = `
-    INSERT INTO messages (message_id, sender_id, group_id, messageType, messageContent, timestamp)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `;
-  await runQuery(query, [messageId, userId, groupId, messageType, messageContent, timestamp]);
-  logger.info("✅ Mensagem salva para o usuário:", userId);
+    const query = `
+      INSERT INTO messages (message_id, sender_id, group_id, messageType, messageContent, timestamp)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `;
+    await runQuery(query, [messageId, userId, groupId, messageType, messageContent, timestamp]);
+    logger.info(`[ saveMessageToDatabase ] ✅ Mensagem salva para o usuário: ${userId}`);
+  } catch (error) {
+    logger.error(`[ saveMessageToDatabase ] ❌ Erro ao salvar mensagem: ${error}`);
+    throw error;
+  }
 }
 
 /* 
@@ -165,17 +181,22 @@ async function saveUserTodatabase(info) {
     await ensureDatabaseConnection();
 
     if (!info?.key) {
-      logger.error("❌ Dados da mensagem inválidos:", { info });
+      logger.error("[ saveUserTodatabase ] ❌ Dados da mensagem inválidos:", { info });
       throw new Error("Dados da mensagem inválidos.");
     }
 
     const from = info.key.remoteJid;
-    const isGroup = from?.endsWith("@g.us") ? 1 : 0;
+    if (!from || (!from.endsWith("@g.us") && !from.endsWith(".net"))) {
+      logger.error("[ saveUserTodatabase ] ❌ RemoteJid inválido:", { from });
+      return;
+    }
+
+    const isGroup = from.endsWith("@g.us") ? 1 : 0;
     const userId = isGroup ? info.key.participant : from;
 
     if (!userId) {
-      logger.error("❌ Sender está nulo:", { info });
-      return null;
+      logger.error("[ saveUserTodatabase ] ❌ Sender está nulo:", { info });
+      return;
     }
 
     // Salva/atualiza dados do usuário
@@ -200,7 +221,7 @@ async function saveUserTodatabase(info) {
 
     return true;
   } catch (error) {
-    logger.error("❌ Erro ao processar dados:", error);
+    logger.error("[ saveUserTodatabase ] ❌ Erro ao processar dados:", error);
     throw new Error("Erro ao processar dados.");
   }
 }

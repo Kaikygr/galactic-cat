@@ -16,11 +16,11 @@ const databaseConfig = {
   user: process.env.MYSQL_LOGIN_USER,
   password: process.env.MYSQL_LOGIN_PASSWORD,
   waitForConnections: true,
-  connectionLimit: 10,
+  connectionLimit: 20,
   charset: "utf8mb4",
 };
 
-let connection; // Variável para armazenar a conexão compartilhada
+let connection;
 
 /* Inicializa o banco de dados */
 async function initDatabase() {
