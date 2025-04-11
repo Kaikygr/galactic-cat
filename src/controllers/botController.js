@@ -5,8 +5,8 @@ const ConfigfilePath = path.join(__dirname, "../config/options.json");
 const config = require(ConfigfilePath);
 const logger = require("../utils/logger");
 
-const { processAIContent } = require("../modules/geminiModule/gemini");
-const { processSticker, processConverterSticker } = require(path.join(__dirname, "../modules/stickerModule/processStickers"));
+const { processAIContent } = require("../modules/geminiModule/processGemini");
+const { processSticker } = require(path.join(__dirname, "../modules/stickerModule/processStickers"));
 const { getFileBuffer } = require(path.join(__dirname, "../utils/functions"));
 const { preProcessMessage, processPrefix, processQuotedChecks, getExpiration } = require(path.join(__dirname, "./messageTypeController"));
 
@@ -14,8 +14,6 @@ async function handleWhatsAppUpdate(upsert, client) {
   for (const info of upsert?.messages || []) {
     if (!info.key || !info.message) return;
     if (info?.key?.fromMe) return;
-
-    console.log("info", JSON.stringify(info, null, 2));
 
     const from = info?.key?.remoteJid;
     const isGroup = from?.endsWith("@g.us");
@@ -47,7 +45,6 @@ async function handleWhatsAppUpdate(upsert, client) {
       return admins;
     }
     const groupMeta = isGroup ? await client.groupMetadata(from) : null;
-    const groupFormattedData = groupMeta ? JSON.stringify(groupMeta, null, 2) : null;
     const isGroupAdmin = isGroup ? getGroupAdmins(groupMeta.participants).includes(sender) : false;
 
     const isQuotedUser = Object.entries(info.message || {}).reduce((acc, [_, value]) => {

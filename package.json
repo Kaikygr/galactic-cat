@@ -1,6 +1,6 @@
 {
   "name": "cat-galactic",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Chatbot avançado com inteligência artificial para automação no WhatsApp, integração via API e suporte a múltiplas funcionalidades.",
   "main": "src",
   "scripts": {
