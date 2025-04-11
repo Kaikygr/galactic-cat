@@ -1,5 +1,5 @@
 const logger = require("../utils/logger");
-const { initDatabase, connection } = require("../utils/processDatabase");
+const { initDatabase, connection, runQuery } = require("../utils/processDatabase");
 const moment = require("moment-timezone");
 const crypto = require("crypto");
 let database = connection;
@@ -107,56 +107,6 @@ async function ensureDatabaseConnection() {
       logger.error("❌ Erro crítico: não foi possível estabelecer a conexão com o banco de dados.", error);
       throw new Error("Error ao conectar ao banco de dados.");
     }
-  }
-}
-
-/* 
-Executa uma query com tratamento de erros e prevenção de SQL Injection usando placeholders.
-*/
-async function runQuery(query, params = []) {
-  try {
-    await ensureDatabaseConnection();
-    const [result] = await database.execute(query, params);
-
-    // Identifica o tipo de query pelo primeiro comando
-    const queryType = query.trim().split(" ")[0].toUpperCase();
-    const isIgnoreQuery = query.toUpperCase().includes("INSERT IGNORE");
-
-    // Validações e retornos específicos por tipo de operação
-    switch (queryType) {
-      case "SELECT":
-        if (!result || result.length === 0) {
-          logger.debug(`⚠️ Nenhum resultado encontrado para a consulta`);
-          return [];
-        }
-        return result;
-
-      case "INSERT":
-        // Se for INSERT IGNORE, não lança erro quando nenhuma linha é inserida
-        if (!result.affectedRows && !isIgnoreQuery) {
-          throw new Error("Nenhuma linha foi inserida");
-        }
-        return {
-          insertId: result.insertId,
-          affectedRows: result.affectedRows,
-        };
-
-      case "UPDATE":
-      case "DELETE":
-        if (!result.affectedRows) {
-          logger.warn(`⚠️ Nenhuma linha foi afetada pela operação ${queryType}`);
-        }
-        return {
-          affectedRows: result.affectedRows,
-          changedRows: result.changedRows,
-        };
-
-      default:
-        return result;
-    }
-  } catch (err) {
-    logger.error(`❌ Erro ao executar a query:\n→ Query: ${query}\n→ Parâmetros: ${JSON.stringify(params)}\n→ Detalhes: ${err.message}`);
-    throw new Error(`Erro na execução da consulta: ${err.message}`);
   }
 }
 
@@ -366,20 +316,17 @@ async function processUserData(data, client) {
     await saveUserTodatabase(info);
     const from = info.key.remoteJid;
 
-    // Se for uma mensagem de grupo
     if (from?.endsWith("@g.us")) {
       logger.info(`🔄 Processando metadados do grupo: ${from}`);
 
       try {
-        // Verifica se o client está disponível
         if (!client || typeof client.groupMetadata !== "function") {
           logger.error("❌ Cliente WhatsApp inválido ou método groupMetadata não disponível");
           throw new Error("Cliente WhatsApp inválido");
         }
 
-        // Sistema de cache com tempo de expiração
         const cacheKey = from;
-        const cacheExpiry = 5 * 60 * 1000; // 5 minutos
+        const cacheExpiry = 5 * 60 * 1000;
 
         let groupMeta;
         const cachedData = global.groupMetadataCache?.[cacheKey];
@@ -397,7 +344,6 @@ async function processUserData(data, client) {
               throw new Error("Metadados do grupo retornados são inválidos");
             }
 
-            // Atualiza o cache
             if (!global.groupMetadataCache) global.groupMetadataCache = {};
             global.groupMetadataCache[cacheKey] = {
               data: groupMeta,
@@ -419,7 +365,6 @@ async function processUserData(data, client) {
         }
       } catch (gError) {
         logger.error(`❌ Erro ao processar grupo ${from}:`, gError);
-        // Não lança o erro para permitir que o processamento continue para outras mensagens
       }
     }
   } catch (error) {
