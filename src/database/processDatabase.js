@@ -1,11 +1,9 @@
 const mysql = require("mysql2/promise");
-const logger = require("./logger");
+const logger = require("../utils/logger");
 require("dotenv").config();
 
-/** @type {import('mysql2/promise').Connection} */
 let connection;
 
-/** @type {string[]} Lista de variáveis de ambiente obrigatórias */
 const requiredEnvVars = ["MYSQL_LOGIN_USER", "MYSQL_LOGIN_PASSWORD"];
 requiredEnvVars.forEach(envVar => {
   if (!process.env[envVar]) {
@@ -13,7 +11,6 @@ requiredEnvVars.forEach(envVar => {
   }
 });
 
-/** @type {import('mysql2/promise').ConnectionOptions} Configuração da conexão com o banco de dados */
 const databaseConfig = {
   host: process.env.MYSQL_HOST || "localhost",
   user: process.env.MYSQL_LOGIN_USER,
@@ -44,14 +41,6 @@ async function initDatabase() {
   return connection;
 }
 
-/**
- * Executa uma query no banco de dados
- * @async
- * @param {string} query - Query SQL a ser executada
- * @param {Array<any>} [params=[]] - Parâmetros para a query
- * @returns {Promise<Array<any>|Object>} Resultado da query
- * @throws {Error} Se houver erro na execução da query
- */
 async function runQuery(query, params = []) {
   try {
     if (!connection) {
@@ -99,14 +88,6 @@ async function runQuery(query, params = []) {
   }
 }
 
-/**
- * @type {{
- *   databaseConfig: import('mysql2/promise').ConnectionOptions,
- *   initDatabase: () => Promise<import('mysql2/promise').Connection>,
- *   connection: import('mysql2/promise').Connection,
- *   runQuery: (query: string, params?: Array<any>) => Promise<Array<any>|Object>
- * }}
- */
 module.exports = {
   databaseConfig,
   initDatabase,

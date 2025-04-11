@@ -1,6 +1,6 @@
 // Importação de dependências necessárias
 const logger = require("../utils/logger");
-const { initDatabase, connection, runQuery } = require("../utils/processDatabase");
+const { initDatabase, connection, runQuery } = require("../database/processDatabase");
 const moment = require("moment-timezone");
 const crypto = require("crypto");
 
