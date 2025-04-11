@@ -2,15 +2,18 @@ const mysql = require("mysql2/promise");
 const logger = require("./logger");
 require("dotenv").config();
 
-/* Verifica se as variáveis de ambiente necessárias estão definidas */
+/** @type {import('mysql2/promise').Connection} */
+let connection;
+
+/** @type {string[]} Lista de variáveis de ambiente obrigatórias */
 const requiredEnvVars = ["MYSQL_LOGIN_USER", "MYSQL_LOGIN_PASSWORD"];
 requiredEnvVars.forEach(envVar => {
   if (!process.env[envVar]) {
-    throw new Error(`Variável de ambiente ${envVar} é necessária.`);
+    throw new Error(`[ requiredEnvVars ] ❌ Variável de ambiente ${envVar} é necessária.`);
   }
 });
 
-/* Configuração do banco de dados */
+/** @type {import('mysql2/promise').ConnectionOptions} Configuração da conexão com o banco de dados */
 const databaseConfig = {
   host: process.env.MYSQL_HOST || "localhost",
   user: process.env.MYSQL_LOGIN_USER,
@@ -20,41 +23,45 @@ const databaseConfig = {
   charset: "utf8mb4",
 };
 
-let connection;
-
-/* Inicializa o banco de dados */
+/**
+ * Inicializa a conexão com o banco de dados e cria o banco se não existir
+ * @async
+ * @returns {Promise<import('mysql2/promise').Connection>} Conexão com o banco de dados
+ * @throws {Error} Se houver erro na inicialização do banco
+ */
 async function initDatabase() {
   try {
-    const databaseName = process.env.MYSQL_DATABASE || "cat";
+    const databaseName = process.env.MYSQL_DATABASE || "catGalactic";
 
     if (!connection) {
-      /* Cria conexão inicial */
       connection = await mysql.createConnection(databaseConfig);
 
-      /* Cria o banco de dados, se necessário */
       await connection.execute(`CREATE DATABASE IF NOT EXISTS \`${databaseName}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
-      logger.info(`Banco '${databaseName}' criado ou já existente.`);
+      logger.info(`[ initDatabase ] 🗂️ Banco '${databaseName}' criado ou já existente.`);
 
-      /* Reconfigura a conexão para usar o banco criado */
       await connection.changeUser({ database: databaseName });
-      logger.info(`Conectado ao banco '${databaseName}'.`);
+      logger.info(`[ initDatabase ] 🗂️ Conectado ao banco '${databaseName}'.`);
     }
   } catch (error) {
-    /* Loga e propaga erros */
-    logger.error(`Erro ao inicializar banco: ${error.stack}`);
+    logger.error(`[ initDatabase ] ❌ Erro ao inicializar banco: ${error}`);
     throw error;
   }
 
   return connection;
 }
 
-/* 
-Executa uma query com tratamento de erros e validações específicas por tipo de operação.
-*/
+/**
+ * Executa uma query no banco de dados
+ * @async
+ * @param {string} query - Query SQL a ser executada
+ * @param {Array<any>} [params=[]] - Parâmetros para a query
+ * @returns {Promise<Array<any>|Object>} Resultado da query
+ * @throws {Error} Se houver erro na execução da query
+ */
 async function runQuery(query, params = []) {
   try {
     if (!connection) {
-      throw new Error("Conexão com o banco de dados não inicializada.");
+      connection = await initDatabase();
     }
 
     const startTime = process.hrtime();
@@ -62,25 +69,20 @@ async function runQuery(query, params = []) {
     const [seconds, nanoseconds] = process.hrtime(startTime);
     const durationMs = (seconds * 1000 + nanoseconds / 1e6).toFixed(2);
 
-    // Identifica o tipo de query
     const queryType = query.trim().split(" ")[0].toUpperCase();
     const isIgnoreQuery = query.toUpperCase().includes("INSERT IGNORE");
 
-    // Log de sucesso
-    logger.debug(`✓ Query ${queryType} executada em ${durationMs}ms:\n→ Query: ${query}\n→ Parâmetros: ${JSON.stringify(params)}`);
-
-    // Validações e retornos específicos por tipo
     switch (queryType) {
       case "SELECT":
         if (!result || result.length === 0) {
-          logger.debug(`⚠️ Nenhum resultado encontrado para a consulta`);
+          logger.warn(`[ runQuery ] ❌ Nenhum resultado encontrado para a consulta`);
           return [];
         }
         return result;
 
       case "INSERT":
         if (!result.affectedRows && !isIgnoreQuery) {
-          throw new Error("Nenhuma linha foi inserida");
+          throw new Error("[ runQuery ] ❌ Nenhuma linha foi inserida");
         }
         return {
           insertId: result.insertId,
@@ -98,11 +100,19 @@ async function runQuery(query, params = []) {
         return result;
     }
   } catch (err) {
-    logger.error(`❌ Erro ao executar query:\n→ Query: ${query}\n→ Parâmetros: ${JSON.stringify(params)}\n→ Detalhes: ${err.message}`);
-    throw new Error(`Erro na execução da consulta: ${err.message}`);
+    logger.error(`[ runQuery ] ❌ Erro ao executar query:\n→ Query: ${query}\n→ Parâmetros: ${JSON.stringify(params)}\n→ Detalhes: ${err}`);
+    throw err;
   }
 }
 
+/**
+ * @type {{
+ *   databaseConfig: import('mysql2/promise').ConnectionOptions,
+ *   initDatabase: () => Promise<import('mysql2/promise').Connection>,
+ *   connection: import('mysql2/promise').Connection,
+ *   runQuery: (query: string, params?: Array<any>) => Promise<Array<any>|Object>
+ * }}
+ */
 module.exports = {
   databaseConfig,
   initDatabase,
