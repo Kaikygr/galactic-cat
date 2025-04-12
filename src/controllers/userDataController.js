@@ -1,26 +1,14 @@
 // Importação de dependências necessárias
 const logger = require("../utils/logger");
-const { initDatabase, connection, runQuery } = require("../utils/processDatabase");
+const { initDatabase, connection, runQuery } = require("../database/processDatabase");
 const moment = require("moment-timezone");
 const crypto = require("crypto");
 
-// Variáveis globais para controle de conexão
 let database = connection;
 let databaseInitialized = false;
 
-/**
- * Sanitiza dados de entrada, substituindo valores nulos por um valor padrão
- * @param {*} value - Valor a ser sanitizado
- * @param {string} defaultValue - Valor padrão caso o input seja nulo
- * @returns {*} Valor sanitizado
- */
 const sanitizeData = (value, defaultValue = "") => (value == null ? defaultValue : value);
 
-/**
- * Cria as tabelas necessárias no banco de dados se não existirem
- * @async
- * @throws {Error} Se houver erro na criação das tabelas
- */
 async function createTables() {
   try {
     if (!database) {
@@ -104,11 +92,6 @@ async function createTables() {
   }
 }
 
-/**
- * Garante que existe uma conexão ativa com o banco de dados
- * @async
- * @throws {Error} Se não for possível estabelecer conexão
- */
 async function ensureDatabaseConnection() {
   if (!database || !databaseInitialized) {
     logger.warn("[ ensureDatabaseConnection ] ⚠️ Conexão com o banco de dados não detectada. Tentando inicializar...");
@@ -127,12 +110,6 @@ async function ensureDatabaseConnection() {
   }
 }
 
-/**
- * Salva ou atualiza informações do usuário no banco de dados
- * @async
- * @param {string} userId - ID do usuário
- * @param {string} pushName - Nome do usuário
- */
 async function saveUserToDatabase(userId, pushName = "Desconhecido") {
   const query = `
     INSERT INTO users (sender, pushName)
@@ -143,13 +120,6 @@ async function saveUserToDatabase(userId, pushName = "Desconhecido") {
   logger.info(`[ saveUserToDatabase ] ✅ Usuário atualizado: ${userId}`);
 }
 
-/**
- * Verifica e salva um grupo se ele não existir no banco de dados
- * @async
- * @param {string} groupId - ID do grupo
- * @returns {string} ID do grupo
- * @throws {Error} Se houver erro ao criar o grupo
- */
 async function saveGroupIfNotExists(groupId) {
   try {
     const groupExistsQuery = `SELECT id FROM \`groups\` WHERE id = ?`;
@@ -172,18 +142,6 @@ async function saveGroupIfNotExists(groupId) {
   }
 }
 
-/**
- * Salva uma mensagem no banco de dados
- * @async
- * @param {Object} messageData - Dados da mensagem
- * @param {string} messageData.messageId - ID da mensagem
- * @param {string} messageData.userId - ID do usuário
- * @param {string} messageData.groupId - ID do grupo
- * @param {string} messageData.messageType - Tipo da mensagem
- * @param {string} messageData.messageContent - Conteúdo da mensagem
- * @param {string} messageData.timestamp - Timestamp da mensagem
- * @throws {Error} Se houver erro ao salvar a mensagem
- */
 async function saveMessageToDatabase(messageData) {
   try {
     const { messageId, userId, groupId, messageType, messageContent, timestamp } = messageData;
@@ -200,13 +158,6 @@ async function saveMessageToDatabase(messageData) {
   }
 }
 
-/**
- * Processa e salva dados do usuário a partir de uma mensagem
- * @async
- * @param {Object} info - Informações da mensagem
- * @returns {boolean} True se processado com sucesso
- * @throws {Error} Se houver erro no processamento
- */
 async function saveUserTodatabase(info) {
   try {
     await ensureDatabaseConnection();
@@ -254,13 +205,6 @@ async function saveUserTodatabase(info) {
   }
 }
 
-/**
- * Salva ou atualiza metadados de um grupo no banco de dados
- * @async
- * @param {Object} groupMeta - Metadados do grupo
- * @returns {Object} Resultado da operação
- * @throws {Error} Se houver erro ao salvar os dados
- */
 async function saveGroupTodatabase(groupMeta) {
   try {
     await ensureDatabaseConnection();
@@ -322,12 +266,6 @@ async function saveGroupTodatabase(groupMeta) {
   }
 }
 
-/**
- * Salva os participantes de um grupo no banco de dados
- * @async
- * @param {Object} groupMeta - Metadados do grupo contendo participantes
- * @throws {Error} Se houver erro ao salvar os participantes
- */
 async function saveGroupParticipantsTodatabase(groupMeta) {
   try {
     for (const participant of groupMeta.participants) {
@@ -345,13 +283,6 @@ async function saveGroupParticipantsTodatabase(groupMeta) {
   }
 }
 
-/**
- * Função principal que processa dados do usuário e do grupo
- * @async
- * @param {Object} data - Dados a serem processados
- * @param {Object} client - Cliente WhatsApp
- * @throws {Error} Se houver erro no processamento dos dados
- */
 async function processUserData(data, client) {
   try {
     if (!data || !Array.isArray(data.messages) || data.messages.length === 0) {
@@ -387,7 +318,7 @@ async function processUserData(data, client) {
         const now = Date.now();
 
         if (cachedData && now - cachedData.timestamp < cacheExpiry) {
-          logger.info(`[processUserData ] 📦 Usando metadados em cache para o grupo: ${from}`);
+          logger.info(`[ processUserData ] 📦 Usando metadados em cache para o grupo: ${from}`);
           groupMeta = cachedData.data;
         } else {
           logger.info(`[ processUserData ] 🔄 Buscando novos metadados para o grupo: ${from}`);
