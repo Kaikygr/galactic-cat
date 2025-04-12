@@ -3,6 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const logger = require("../../utils/logger");
 const config = require(path.join(__dirname, "../../config/options.json"));
+const { runQuery } = require("../../database/processDatabase");
 
 require("dotenv").config();
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_APIKEY);
@@ -41,7 +42,6 @@ async function processAIContent(client, from, info, expirationMessage, sender, u
     return;
   }
 
-  // Verificação de limite diário para usuários comuns (10 comandos / 24h)
   let globalData = {};
   try {
     if (fs.existsSync(historyFilePath)) {
@@ -52,12 +52,33 @@ async function processAIContent(client, from, info, expirationMessage, sender, u
     logger.error("[ GEMINI MODEL ] Falha ao ler o histórico para verificação de limite:", err);
   }
   if (!globalData[sender]) {
-    globalData[sender] = { systemInstruction: null, history: [], totalChamados: 0, datasChamados: [], tipo: "comum" };
-  } else if (!globalData[sender].tipo) {
-    globalData[sender].tipo = "comum";
+    globalData[sender] = { systemInstruction: null, history: [], totalChamados: 0, datasChamados: [] };
   }
+
   const currentProfile = globalData[sender];
-  if (currentProfile.tipo === "comum") {
+
+  let isPremium = false;
+  try {
+    const result = await runQuery("SELECT isPremium FROM users WHERE sender = ?", [sender]);
+    if (result.length > 0) {
+      isPremium = result[0].isPremium;
+    } else {
+      await client.sendMessage(from, { react: { text: "⏳", key: info.key } });
+
+      await client.sendMessage(
+        from,
+        {
+          text: `*⚠️ Limite diário atingido: 10 comandos em 24h!*\n\n` + `🕒 Aguarde *${hrs}h ${min}m ${sec}s* para usar novamente.\n\n` + `✨ *Assine o plano Premium* e aproveite:\n` + `• Comandos ilimitados\n` + `• Recursos e funções exclusivas\n` + `• Acesso antecipado a atualizações\n` + `• Suporte prioritário\n\n` + `🚀 Esta é uma forma de melhorar cada vez mais a experiência dos usuários e garantir um serviço mais estável e completo.\n\n` + `📩 *Fale com o proprietário para assinar seu plano Premium!*`,
+        },
+        { quoted: info, ephemeralExpiration: expirationMessage }
+      );
+      return;
+    }
+  } catch (err) {
+    logger.error("[ GEMINI MODEL ] Erro ao verificar status premium:", err);
+  }
+
+  if (!isPremium) {
     const cutoff = Date.now() - 24 * 3600 * 1000;
     const recentCalls = currentProfile.datasChamados.filter(date => new Date(date).getTime() > cutoff);
     if (recentCalls.length >= 10) {
@@ -95,7 +116,6 @@ async function processAIContent(client, from, info, expirationMessage, sender, u
       }
 
       if (data[sender]) {
-        data[sender].tipo = data[sender].tipo || "comum"; // Garante que o tipo seja salvo
         data[sender].history = [];
         data[sender].totalChamados = (data[sender].totalChamados || 0) + 1;
         data[sender].datasChamados = data[sender].datasChamados || [];
@@ -107,7 +127,6 @@ async function processAIContent(client, from, info, expirationMessage, sender, u
           history: [],
           totalChamados: 1,
           datasChamados: [new Date().toISOString()],
-          tipo: "comum", // Define o tipo padrão
         };
         logger.info("[ GEMINI MODEL ] Perfil do usuário criado com histórico vazio.");
       }
@@ -164,7 +183,6 @@ async function processAIContent(client, from, info, expirationMessage, sender, u
       }
 
       if (data[sender]) {
-        data[sender].tipo = data[sender].tipo || "comum"; // Garante que o tipo seja salvo
         data[sender].systemInstruction = instructionText;
         data[sender].totalChamados = (data[sender].totalChamados || 0) + 1;
         data[sender].datasChamados = data[sender].datasChamados || [];
@@ -175,7 +193,6 @@ async function processAIContent(client, from, info, expirationMessage, sender, u
           history: [],
           totalChamados: 1,
           datasChamados: [new Date().toISOString()],
-          tipo: "comum", // Define o tipo padrão
         };
       }
 
@@ -222,15 +239,14 @@ async function processAIContent(client, from, info, expirationMessage, sender, u
 
     logger.info("[ GEMINI MODEL ] Carregando perfil do usuário...");
 
-    userRecord = historyData[sender] || { systemInstruction: null, history: [], totalChamados: 0, datasChamados: [], tipo: "comum" };
-    userRecord.tipo = userRecord.tipo || "comum"; // Garante que o tipo seja salvo
+    userRecord = historyData[sender] || { systemInstruction: null, history: [], totalChamados: 0, datasChamados: [] };
     history = userRecord.history;
     systemInstruction = userRecord.systemInstruction;
     userRecord.totalChamados = (userRecord.totalChamados || 0) + 1;
     userRecord.datasChamados = userRecord.datasChamados || [];
     userRecord.datasChamados.push(new Date().toISOString());
   } else {
-    userRecord = { systemInstruction: null, history: [], totalChamados: 1, datasChamados: [new Date().toISOString()], tipo: "comum" };
+    userRecord = { systemInstruction: null, history: [], totalChamados: 1, datasChamados: [new Date().toISOString()] };
     history = userRecord.history;
     systemInstruction = null;
   }
@@ -279,7 +295,7 @@ async function processAIContent(client, from, info, expirationMessage, sender, u
       dataToSave = JSON.parse(fs.readFileSync(historyFilePath, "utf8"));
     }
 
-    dataToSave[sender] = userRecord; // Salva o tipo no JSON
+    dataToSave[sender] = userRecord;
     logger.info("[ GEMINI MODEL ] Salvando perfil do usuário...");
     fs.writeFileSync(historyFilePath, JSON.stringify(dataToSave, null, 2));
   } catch (err) {
