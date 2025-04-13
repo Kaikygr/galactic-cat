@@ -58,11 +58,14 @@ async function handleWhatsAppUpdate(upsert, client) {
 
     switch (command) {
       case "cat":
+      case "gemini":
+        await client.sendMessage(from, { react: { text: "⏳", key: info.key } }); // Reação imediata
         await processGeminiCommand(client, info, sender, from, text, expirationMessage);
         break;
 
       case "setprompt":
-      case "instrucao":
+      case "setIA":
+        await client.sendMessage(from, { react: { text: "⏳", key: info.key } }); // Reação imediata
         await processSetPromptCommand(client, info, sender, from, args);
         break;
 
