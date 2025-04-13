@@ -9,8 +9,7 @@ const { processSticker } = require(path.join(__dirname, "../modules/stickerModul
 const { getFileBuffer } = require(path.join(__dirname, "../utils/functions"));
 const { preProcessMessage, isCommand, processQuotedChecks, getExpiration } = require(path.join(__dirname, "./messageTypeController"));
 const { processPremiumStatus } = require("../database/processUserPremium");
-const { processGeminiCommand } = require("../modules/geminiModule/geminiCommand");
-
+const { processGeminiCommand, processSetPromptCommand } = require("../modules/geminiModule/geminiCommand");
 async function handleWhatsAppUpdate(upsert, client) {
   for (const info of upsert?.messages || []) {
     if (!info.key || !info.message) return;
@@ -60,6 +59,11 @@ async function handleWhatsAppUpdate(upsert, client) {
     switch (command) {
       case "cat":
         await processGeminiCommand(client, info, sender, from, text, expirationMessage);
+        break;
+
+      case "setprompt":
+      case "instrucao":
+        await processSetPromptCommand(client, info, sender, from, args);
         break;
 
       case "sticker":

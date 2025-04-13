@@ -1,8 +1,9 @@
 const logger = require("../../utils/logger");
 const { getFileBuffer } = require("../../utils/functions");
-const { processAIResponse } = require("./processGeminiModule");
+const { processAIResponse, updateUserSystemInstruction } = require("./processGeminiModule");
 const config = require("./../../config/options.json");
 let response = null;
+
 /**
  * Processa um comando enviado ao Gemini, interpretando texto e imagem (se houver),
  * e envia a resposta gerada pela IA de volta ao remetente.
@@ -24,29 +25,42 @@ async function processGeminiCommand(client, info, sender, from, text, expiration
   }
 
   try {
-    // Define os caminhos possíveis para imagens na mensagem (direta ou citada)
     const mediaTypes = {
       image: [info.message?.imageMessage, info.message?.extendedTextMessage?.contextInfo?.quotedMessage?.imageMessage, info.message?.extendedTextMessage?.contextInfo?.quotedMessage?.viewOnceMessage?.message?.imageMessage],
     };
 
-    // Busca a primeira mídia de imagem válida (se houver)
     const encmedia = findFirstValidMedia(mediaTypes);
 
-    // Monta o prompt para envio à IA, podendo incluir imagem
     const prompt = await buildPrompt(encmedia, text);
 
-    // Busca o buffer da imagem, se houver uma
     const imageBuffer = encmedia ? await getFileBuffer(encmedia, "image") : null;
 
-    // Processa a resposta da IA com base no prompt e imagem
-    response = await processAIResponse(prompt, imageBuffer, {}, sender);
-    console.log(response);
+    const aiResponse = await processAIResponse(prompt, imageBuffer, {}, sender);
 
-    // Envia reação e resposta da IA ao chat de origem
+    if (!aiResponse.success) {
+      logger.error("[ processGeminiCommand ] ❌ Erro retornado por processAIResponse:", aiResponse.error);
+      await client.sendMessage(from, { react: { text: "❌", key: info.key } });
+      await client.sendMessage(
+        config.owner.number,
+        {
+          text: `*❌ Ocorreu um erro ao processar o comando Gemini (AI Error):*\n\n*ID do remetente:* ${sender}\n*Texto enviado:* ${text}\n*Erro:* \n${JSON.stringify(aiResponse.error)}`,
+        },
+        { quoted: info, ephemeralExpiration: expirationMessage }
+      );
+      await client.sendMessage(
+        from,
+        {
+          text: `*❌ Ocorreu um erro ao processar sua solicitação com a IA. Tente novamente mais tarde.*\n\n*📨 O desenvolvedor já foi notificado sobre o erro.*\n*📨Se desejar entrar em contato, use o link abaixo:*\n${config.owner.whatsapp}`,
+        },
+        { quoted: info, ephemeralExpiration: expirationMessage }
+      );
+      return;
+    }
+
     await client.sendMessage(from, { react: { text: "🐈‍⬛", key: info.key } });
     await client.sendMessage(
       from,
-      { text: response.data, mentions: [sender] },
+      { text: aiResponse.data, mentions: [sender] },
       {
         quoted: info,
         ephemeralExpiration: expirationMessage,
@@ -55,33 +69,79 @@ async function processGeminiCommand(client, info, sender, from, text, expiration
 
     logger.info(`[ processGeminiCommand ] ✅ Resposta da IA enviada com sucesso para ${from}`);
   } catch (error) {
-    logger.error("[ processGeminiCommand ] ❌ Erro ao processar o comando Gemini:", error);
+    logger.error("[ processGeminiCommand ] ❌ Erro GERAL ao processar o comando Gemini:", error);
 
-    await client.sendMessage(from, {
-      react: { text: "❌", key: info.key },
-    });
+    try {
+      await client.sendMessage(from, { react: { text: "❌", key: info.key } });
+      await client.sendMessage(
+        config.owner.number,
+        {
+          text: `*❌ Ocorreu um erro GERAL ao processar o comando Gemini:*\n\n*ID do remetente:* ${sender}\n*Texto enviado:* ${text}\n*Erro:* \n${error.message}\n${error.stack}`,
+        },
+        { quoted: info, ephemeralExpiration: expirationMessage }
+      );
+      await client.sendMessage(
+        from,
+        {
+          text: `*❌ Ocorreu um erro inesperado ao processar sua solicitação. Tente novamente mais tarde.*\n\n*📨 O desenvolvedor já foi notificado sobre o erro.*\n*📨Se desejar entrar em contato, use o link abaixo:*\n${config.owner.whatsapp}`,
+        },
+        { quoted: info, ephemeralExpiration: expirationMessage }
+      );
+    } catch (notifyError) {
+      logger.error("[ processGeminiCommand ] ❌ Falha ao enviar notificação de erro:", notifyError);
+    }
+  }
+}
 
-    await client.sendMessage(
-      config.owner.number,
-      {
-        text: `*❌ Ocorreu um erro ao processar o comando Gemini:*\n\n*ID do remetente:* ${sender}\n*Texto enviado:* ${text}\n*Erro:* \n${JSON.stringify(response.error)}`,
-      },
-      {
-        quoted: info,
-        ephemeralExpiration: expirationMessage,
-      }
-    );
+/**
+ * Processa o comando para definir a instrução do sistema do Gemini para um usuário.
+ *
+ * @async
+ * @function processSetPromptCommand
+ * @param {object} client - Instância do cliente (ex: Baileys).
+ * @param {object} info - Informações da mensagem recebida.
+ * @param {string} sender - Identificador do remetente da mensagem.
+ * @param {string} from - ID da origem da mensagem (grupo ou privado).
+ * @param {string[]} args - Argumentos passados para o comando.
+ * @returns {Promise<void>}
+ */
+async function processSetPromptCommand(client, info, sender, from, args) {
+  const newInstruction = args.join(" ");
 
-    await client.sendMessage(
-      from,
-      {
-        text: `*❌ Ocorreu um erro ao processar sua solicitação. Tente novamente mais tarde.*\n\n*📨 O desenvolvedor já foi notificado sobre o erro.*\n*📨Se desejar entrar em contato, use o link abaixo:*\n${config.owner.whatsapp}`,
-      },
-      {
-        quoted: info,
-        ephemeralExpiration: expirationMessage,
-      }
-    );
+  if (!newInstruction) {
+    logger.warn(`[ processSetPromptCommand ] ⚠️ Tentativa de definir instrução vazia por ${sender}`);
+    await client.sendMessage(from, { text: "⚠️ Você precisa fornecer o texto da nova instrução após o comando.\n\n*Exemplo:* `!setprompt Seja um assistente pirata divertido`" }, { quoted: info });
+    return;
+  }
+
+  if (newInstruction.length > 500) {
+    logger.warn(`[ processSetPromptCommand ] ⚠️ Tentativa de definir instrução muito longa por ${sender}`);
+    await client.sendMessage(from, { text: "*⚠️ A instrução é muito longa. O limite é de 500 caracteres.*" }, { quoted: info });
+    return;
+  }
+
+  try {
+    const updateResult = await updateUserSystemInstruction(sender, newInstruction);
+
+    if (updateResult.success) {
+      logger.info(`[ processSetPromptCommand ] ⚠️ Instrução do sistema atualizada para ${sender}`);
+      await client.sendMessage(from, { react: { text: "✅", key: info.key } });
+      await client.sendMessage(from, { text: updateResult.message || "✅ Sua instrução de sistema foi atualizada com sucesso! Seu histórico de chat anterior foi limpo para aplicar a nova instrução." }, { quoted: info });
+    } else {
+      logger.error(`[ processSetPromptCommand ] ⚠️ Falha ao atualizar instrução para ${sender}: ${updateResult.error}`);
+      await client.sendMessage(from, { react: { text: "❌", key: info.key } });
+      await client.sendMessage(from, { text: "❌ Ocorreu um erro ao tentar atualizar sua instrução. O desenvolvedor foi notificado." }, { quoted: info });
+      await client.sendMessage(config.owner.number, { text: `*❌ Erro ao atualizar instrução (SetPrompt):*\n\n*Usuário:* ${sender}\n*Instrução:* ${newInstruction}\n*Erro:* ${updateResult.error}` });
+    }
+  } catch (error) {
+    logger.error(`[ processSetPromptCommand ] ⚠️ Erro inesperado ao processar !setprompt para ${sender}:`, error);
+    try {
+      await client.sendMessage(from, { react: { text: "❌", key: info.key } });
+      await client.sendMessage(from, { text: "❌ Ocorreu um erro inesperado ao processar sua solicitação. O desenvolvedor foi notificado." }, { quoted: info });
+      await client.sendMessage(config.owner.number, { text: `*❌ Erro INESPERADO ao atualizar instrução (SetPrompt):*\n\n*Usuário:* ${sender}\n*Instrução:* ${newInstruction}\n*Erro:* ${error.message}\n${error.stack}` }); // Include stack trace for unexpected errors
+    } catch (notifyError) {
+      logger.error("[ processSetPromptCommand ] ⚠️ Falha ao enviar notificação de erro inesperado:", notifyError);
+    }
   }
 }
 
@@ -113,19 +173,30 @@ async function buildPrompt(media, text) {
   const basePart = { text };
   if (!media) return { parts: [basePart] };
 
-  return {
-    parts: [
-      basePart,
-      {
-        inlineData: {
-          mimeType: "image/jpeg",
-          data: (await getFileBuffer(media, "image")).toString("base64"),
+  try {
+    const buffer = await getFileBuffer(media, "image");
+    if (!buffer) {
+      logger.warn("[ buildPrompt ] ⚠️ Não foi possível obter o buffer da imagem.");
+      return { parts: [basePart] }; // Proceed without image if buffer fails
+    }
+    return {
+      parts: [
+        basePart,
+        {
+          inlineData: {
+            mimeType: "image/jpeg", // Assuming jpeg, might need refinement if other types are common
+            data: buffer.toString("base64"),
+          },
         },
-      },
-    ],
-  };
+      ],
+    };
+  } catch (error) {
+    logger.error("[ buildPrompt ] ❌ Erro ao processar imagem para o prompt:", error);
+    return { parts: [basePart] }; // Fallback to text-only on error
+  }
 }
 
 module.exports = {
   processGeminiCommand,
+  processSetPromptCommand, // Export the new function
 };
