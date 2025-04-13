@@ -9,7 +9,7 @@ const { processSticker } = require(path.join(__dirname, "../modules/stickerModul
 const { getFileBuffer } = require(path.join(__dirname, "../utils/functions"));
 const { preProcessMessage, isCommand, processQuotedChecks, getExpiration } = require(path.join(__dirname, "./messageTypeController"));
 const { processPremiumStatus } = require("../database/processUserPremium");
-const processAIResponse = require("../modules/geminiModule/processIA");
+const { processGeminiCommand } = require("../modules/geminiModule/geminiCommand");
 
 async function handleWhatsAppUpdate(upsert, client) {
   for (const info of upsert?.messages || []) {
@@ -59,67 +59,7 @@ async function handleWhatsAppUpdate(upsert, client) {
 
     switch (command) {
       case "cat":
-        {
-          if (!isOwner) {
-            return client.sendMessage(from, {
-              text: "❌ Apenas o dono pode usar este comando de teste",
-            });
-          }
-
-          const caminhosPossiveis = {
-            image: [info.message?.imageMessage, info.message?.extendedTextMessage?.contextInfo?.quotedMessage?.imageMessage, info.message?.extendedTextMessage?.contextInfo?.quotedMessage?.viewOnceMessage?.message?.imageMessage],
-          };
-
-          let encmedia = null;
-          for (const caminhos of Object.values(caminhosPossiveis)) {
-            for (const caminho of caminhos) {
-              if (caminho) {
-                encmedia = caminho;
-                break;
-              }
-            }
-            if (encmedia) break;
-          }
-
-          if (encmedia) {
-            const buffer = await getFileBuffer(encmedia, "image");
-            const imagePrompt = {
-              parts: [
-                { text: text },
-                {
-                  inlineData: {
-                    mimeType: "image/jpeg",
-                    data: buffer.toString("base64"),
-                  },
-                },
-              ],
-            };
-
-            const imageResponse = await processAIResponse(imagePrompt, buffer, {}, sender);
-            console.log(JSON.stringify(imageResponse, null, 2));
-            await client.sendMessage(
-              from,
-              {
-                text: `${imageResponse.data}`,
-              },
-              { quoted: info, ephemeralExpiration: expirationMessage }
-            );
-          } else {
-            const textPrompt = {
-              parts: [{ text: text }],
-            };
-
-            const textResponse = await processAIResponse(textPrompt, null, {}, sender);
-            console.log(JSON.stringify(textResponse, null, 2));
-            await client.sendMessage(
-              from,
-              {
-                text: `${textResponse.data}`,
-              },
-              { quoted: info, ephemeralExpiration: expirationMessage }
-            );
-          }
-        }
+        await processGeminiCommand(client, info, sender, from, text, expirationMessage);
         break;
 
       case "sticker":
