@@ -5,11 +5,12 @@ const ConfigfilePath = path.join(__dirname, "../config/options.json");
 const config = require(ConfigfilePath);
 const logger = require("../utils/logger");
 
-const { processAIContent } = require("../modules/geminiModule/processGemini");
 const { processSticker } = require(path.join(__dirname, "../modules/stickerModule/processStickers"));
 const { getFileBuffer } = require(path.join(__dirname, "../utils/functions"));
-const { preProcessMessage, processPrefix, processQuotedChecks, getExpiration } = require(path.join(__dirname, "./messageTypeController"));
+const { preProcessMessage, isCommand, processQuotedChecks, getExpiration } = require(path.join(__dirname, "./messageTypeController"));
 const { processPremiumStatus } = require("../database/processUserPremium");
+const processAIResponse = require("../modules/geminiModule/processIA");
+
 async function handleWhatsAppUpdate(upsert, client) {
   for (const info of upsert?.messages || []) {
     if (!info.key || !info.message) return;
@@ -22,11 +23,11 @@ async function handleWhatsAppUpdate(upsert, client) {
     const expirationMessage = getExpiration(info);
 
     const { type, body, isMedia } = preProcessMessage(info);
-    const prefixResult = processPrefix(body, config.bot.globalSettings.prefix);
-    if (!prefixResult) return;
+    const processCommand = isCommand(body, config.bot.globalSettings.prefix);
+    if (!processCommand) return;
 
-    const { comando, args } = prefixResult;
-    const text = args.join(" ");
+    const { command, args } = processCommand;
+    const text = args ? args.join(" ") : body;
     const content = JSON.stringify(info.message);
 
     const isOwner = sender === config.owner.number;
@@ -56,12 +57,68 @@ async function handleWhatsAppUpdate(upsert, client) {
       return acc;
     }, []);
 
-    switch (comando) {
+    switch (command) {
       case "cat":
-      case "gemini": {
-        await processAIContent(client, from, info, expirationMessage, sender, userName, text);
+        {
+          if (!isOwner) {
+            return client.sendMessage(from, {
+              text: "❌ Apenas o dono pode usar este comando de teste",
+            });
+          }
+
+          const caminhosPossiveis = {
+            image: [info.message?.imageMessage, info.message?.extendedTextMessage?.contextInfo?.quotedMessage?.imageMessage, info.message?.extendedTextMessage?.contextInfo?.quotedMessage?.viewOnceMessage?.message?.imageMessage],
+          };
+
+          let encmedia = null;
+          for (const caminhos of Object.values(caminhosPossiveis)) {
+            for (const caminho of caminhos) {
+              if (caminho) {
+                encmedia = caminho;
+                break;
+              }
+            }
+            if (encmedia) break;
+          }
+
+          if (encmedia) {
+            const buffer = await getFileBuffer(encmedia, "image");
+            const imagePrompt = {
+              parts: [
+                { text: text },
+                {
+                  inlineData: {
+                    mimeType: "image/jpeg",
+                    data: buffer.toString("base64"),
+                  },
+                },
+              ],
+            };
+
+            const imageResponse = await processAIResponse(imagePrompt, buffer, {}, sender);
+            await client.sendMessage(
+              from,
+              {
+                text: `${imageResponse.data}`,
+              },
+              { quoted: info, ephemeralExpiration: expirationMessage }
+            );
+          } else {
+            const textPrompt = {
+              parts: [{ text: text }],
+            };
+
+            const textResponse = await processAIResponse(textPrompt, null, {}, sender);
+            await client.sendMessage(
+              from,
+              {
+                text: `${textResponse.data}`,
+              },
+              { quoted: info, ephemeralExpiration: expirationMessage }
+            );
+          }
+        }
         break;
-      }
 
       case "sticker":
       case "s": {
@@ -77,9 +134,7 @@ async function handleWhatsAppUpdate(upsert, client) {
         }
 
         const parts = text.trim().split(/\s+/);
-        // Os três primeiros elementos formam o número de telefone
         const phoneNumber = parts.slice(0, 3).join(" ");
-        // O resto é a duração
         const duration = parts.slice(3).join(" ");
 
         if (!phoneNumber || !duration) {
