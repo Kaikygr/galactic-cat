@@ -12,20 +12,16 @@ function preProcessMessage(info) {
   return { type, body: finalBody, isMedia };
 }
 
-function processPrefix(body, prefixes) {
-  if (!body) return null;
+function isCommand(body, prefixes) {
+  if (!body) return false;
   if (!Array.isArray(prefixes)) prefixes = [prefixes];
   const prefix = prefixes.find(p => body.startsWith(p));
-  if (!prefix) return null;
-  let withoutPrefix = body.slice(prefix.length).trim();
-  if (withoutPrefix.startsWith(".")) {
-    withoutPrefix = withoutPrefix.slice(1).trim();
-  }
-  if (!withoutPrefix) return null;
+  if (!prefix) return { isCommand: false };
+  const withoutPrefix = body.slice(prefix.length);
   const parts = withoutPrefix.split(/ +/);
-  const comando = parts.shift().toLowerCase();
-  if (!comando) return null;
-  return { comando, args: parts };
+  const command = parts.shift().toLowerCase();
+  if (!command) return null;
+  return { isCommand: true, command, args: parts };
 }
 
 function processQuotedChecks(type, content) {
@@ -72,4 +68,4 @@ function getExpiration(info) {
   return null;
 }
 
-module.exports = { preProcessMessage, processPrefix, processQuotedChecks, getExpiration };
+module.exports = { preProcessMessage, isCommand, processQuotedChecks, getExpiration };

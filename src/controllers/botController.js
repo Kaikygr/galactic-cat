@@ -5,11 +5,12 @@ const ConfigfilePath = path.join(__dirname, "../config/options.json");
 const config = require(ConfigfilePath);
 const logger = require("../utils/logger");
 
-const { processAIContent } = require("../modules/geminiModule/processGemini");
 const { processSticker } = require(path.join(__dirname, "../modules/stickerModule/processStickers"));
 const { getFileBuffer } = require(path.join(__dirname, "../utils/functions"));
-const { preProcessMessage, processPrefix, processQuotedChecks, getExpiration } = require(path.join(__dirname, "./messageTypeController"));
+const { preProcessMessage, isCommand, processQuotedChecks, getExpiration } = require(path.join(__dirname, "./messageTypeController"));
 const { processPremiumStatus } = require("../database/processUserPremium");
+const { processGeminiCommand } = require("../modules/geminiModule/geminiCommand");
+
 async function handleWhatsAppUpdate(upsert, client) {
   for (const info of upsert?.messages || []) {
     if (!info.key || !info.message) return;
@@ -22,11 +23,11 @@ async function handleWhatsAppUpdate(upsert, client) {
     const expirationMessage = getExpiration(info);
 
     const { type, body, isMedia } = preProcessMessage(info);
-    const prefixResult = processPrefix(body, config.bot.globalSettings.prefix);
-    if (!prefixResult) return;
+    const processCommand = isCommand(body, config.bot.globalSettings.prefix);
+    if (!processCommand) return;
 
-    const { comando, args } = prefixResult;
-    const text = args.join(" ");
+    const { command, args } = processCommand;
+    const text = args ? args.join(" ") : body;
     const content = JSON.stringify(info.message);
 
     const isOwner = sender === config.owner.number;
@@ -56,12 +57,10 @@ async function handleWhatsAppUpdate(upsert, client) {
       return acc;
     }, []);
 
-    switch (comando) {
+    switch (command) {
       case "cat":
-      case "gemini": {
-        await processAIContent(client, from, info, expirationMessage, sender, userName, text);
+        await processGeminiCommand(client, info, sender, from, text, expirationMessage);
         break;
-      }
 
       case "sticker":
       case "s": {
@@ -77,9 +76,7 @@ async function handleWhatsAppUpdate(upsert, client) {
         }
 
         const parts = text.trim().split(/\s+/);
-        // Os três primeiros elementos formam o número de telefone
         const phoneNumber = parts.slice(0, 3).join(" ");
-        // O resto é a duração
         const duration = parts.slice(3).join(" ");
 
         if (!phoneNumber || !duration) {

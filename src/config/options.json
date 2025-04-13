@@ -8,7 +8,8 @@
         "email": "kaikygomesribeiroof@gmail.com",
         "phone": "+55 95 9126-4582",
         "instagram": "https://instagram.com/kaikygr",
-        "github": "https://github.com/Kaikygr/kaikygr"
+        "github": "https://github.com/Kaikygr/kaikygr",
+        "whatsapp": "https://wa.me/message/C4CZHIMQU66PD1"
     },
     "bot": {
         "name": "Galactic Cat Bot",
@@ -25,8 +26,7 @@
             "prefix": [
                 "!",
                 "#",
-                "?",
-                "/"
+                "?"
             ]
         }
     }
