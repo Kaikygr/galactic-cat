@@ -1,7 +1,8 @@
 const logger = require("../../utils/logger");
 const { getFileBuffer } = require("../../utils/functions");
 const { processAIResponse } = require("./processGeminiModule");
-
+const config = require("./../../config/options.json");
+let response = null;
 /**
  * Processa um comando enviado ao Gemini, interpretando texto e imagem (se houver),
  * e envia a resposta gerada pela IA de volta ao remetente.
@@ -18,7 +19,7 @@ const { processAIResponse } = require("./processGeminiModule");
  */
 async function processGeminiCommand(client, info, sender, from, text, expirationMessage) {
   if (!client || !info || !text) {
-    logger.error("Parâmetros obrigatórios ausentes (client, info ou text)");
+    logger.error("[ processGeminiCommand ] ❌ Parâmetros obrigatórios ausentes (client, info ou text)");
     return;
   }
 
@@ -38,26 +39,49 @@ async function processGeminiCommand(client, info, sender, from, text, expiration
     const imageBuffer = encmedia ? await getFileBuffer(encmedia, "image") : null;
 
     // Processa a resposta da IA com base no prompt e imagem
-    const response = await processAIResponse(prompt, imageBuffer, {}, sender);
+    response = await processAIResponse(prompt, imageBuffer, {}, sender);
+    console.log(response);
 
     // Envia reação e resposta da IA ao chat de origem
     await client.sendMessage(from, { react: { text: "🐈‍⬛", key: info.key } });
     await client.sendMessage(
       from,
-      { text: response.data },
+      { text: response.data, mentions: [sender] },
       {
         quoted: info,
         ephemeralExpiration: expirationMessage,
       }
     );
 
-    logger.info(`Resposta da IA enviada com sucesso para ${from}`);
+    logger.info(`[ processGeminiCommand ] ✅ Resposta da IA enviada com sucesso para ${from}`);
   } catch (error) {
-    logger.error("Erro ao processar o comando Gemini:", error);
+    logger.error("[ processGeminiCommand ] ❌ Erro ao processar o comando Gemini:", error);
+
     await client.sendMessage(from, {
-      text: "*❌ Ocorreu um erro ao processar sua solicitação. Tente novamente mais tarde.*",
-      quoted: info,
+      react: { text: "❌", key: info.key },
     });
+
+    await client.sendMessage(
+      config.owner.number,
+      {
+        text: `*❌ Ocorreu um erro ao processar o comando Gemini:*\n\n*ID do remetente:* ${sender}\n*Texto enviado:* ${text}\n*Erro:* \n${JSON.stringify(response.error)}`,
+      },
+      {
+        quoted: info,
+        ephemeralExpiration: expirationMessage,
+      }
+    );
+
+    await client.sendMessage(
+      from,
+      {
+        text: `*❌ Ocorreu um erro ao processar sua solicitação. Tente novamente mais tarde.*\n\n*📨 O desenvolvedor já foi notificado sobre o erro.*\n*📨Se desejar entrar em contato, use o link abaixo:*\n${config.owner.whatsapp}`,
+      },
+      {
+        quoted: info,
+        ephemeralExpiration: expirationMessage,
+      }
+    );
   }
 }
 
