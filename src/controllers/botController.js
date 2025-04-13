@@ -96,6 +96,7 @@ async function handleWhatsAppUpdate(upsert, client) {
             };
 
             const imageResponse = await processAIResponse(imagePrompt, buffer, {}, sender);
+            console.log(JSON.stringify(imageResponse, null, 2));
             await client.sendMessage(
               from,
               {
@@ -109,6 +110,7 @@ async function handleWhatsAppUpdate(upsert, client) {
             };
 
             const textResponse = await processAIResponse(textPrompt, null, {}, sender);
+            console.log(JSON.stringify(textResponse, null, 2));
             await client.sendMessage(
               from,
               {
