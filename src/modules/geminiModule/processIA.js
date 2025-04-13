@@ -149,9 +149,9 @@ async function processAIResponse(prompt, imageFile = null, config = {}, sender) 
     userData.history.push({ role: "user", content: prompt.parts[0].text }, { role: "model", content: responseText });
 
     // Mantém histórico limitado a 50 interações
-    if (userData.history.length > 50) {
+    /*if (userData.history.length > 50) {
       userData.history = userData.history.slice(-50);
-    }
+    }*/
 
     await fs.writeFile(userFilePath, JSON.stringify(userData, null, 2), { mode: FILE_PERMISSIONS });
 
