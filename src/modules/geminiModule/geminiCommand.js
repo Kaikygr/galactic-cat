@@ -26,21 +26,21 @@ async function processGeminiCommand(client, info, sender, from, text, expiration
 
   const trimmedText = text ? text.trim() : "";
   if (!trimmedText) {
-    logger.warn(`[ processGeminiCommand ] ⚠️ Comando Gemini/Cat recebido sem texto do usuário ${sender} em ${from}`);
+    logger.warn(`[ processGeminiCommand ] ⚠️ Comando Cat recebido sem texto do usuário ${sender} em ${from}`);
     try {
       // Improved message explaining usage, image support, and setprompt
-      const helpMessage = `🤔 Opa! Parece que faltou o texto para o comando \`!gemini\` (ou \`!cat\`).
+      const helpMessage = `🤔 Opa! Parece que faltou o texto para o comando \`!cat\`.
 
 Você precisa me dizer o que fazer! Envie sua pergunta ou instrução *junto* com o comando.
 
 *Exemplos de Uso:*
-*   📝 *Texto:* \`!gemini Qual a capital do Brasil?\`
-*   🖼️ *Imagem:* Responda a uma foto de um cachorro com a mensagem: \`!gemini Que raça é essa?\` (Sim, ele analisa imagens!)
+*   📝 *Texto:* \`!cat Qual a capital do Brasil?\`
+*   🖼️ *Imagem:* Responda a uma foto de um cachorro com a mensagem: \`!cat Que raça é essa?\` (Sim, ele analisa imagens!)
 
 ✨ *Dica: Personalize a IA!* ✨
-Use o comando \`!setprompt\` (ou \`!setIA\`) para definir como a IA deve se comportar *nas suas conversas*.
-*   🧠 *Exemplo:* \`!setprompt Aja como um chef de cozinha italiano e me dê receitas simples\`
-*   🧹 _Importante:_ Usar o \`!setprompt\` limpa seu histórico de conversa anterior com a IA para aplicar a nova instrução.`;
+Use o comando \`!setIA\` para definir como a IA deve se comportar *nas suas conversas*.
+*   🧠 *Exemplo:* \`!setIA\` Aja como um chef de cozinha italiano e me dê receitas simples\`
+*   🧹 _Importante:_ Usar o \`!setIA\` limpa seu histórico de conversa anterior com a IA para aplicar a nova instrução.`;
 
       await client.sendMessage(from, { text: helpMessage }, { quoted: info, ephemeralExpiration: expirationMessage });
     } catch (sendError) {
