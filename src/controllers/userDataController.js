@@ -85,6 +85,21 @@ async function createTables() {
         CONSTRAINT fk_group_participants FOREIGN KEY (group_id) REFERENCES \`groups\`(id) ON DELETE CASCADE
       ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
+
+    // --- ADD THIS ---
+    await database.execute(`
+      CREATE TABLE IF NOT EXISTS command_usage (
+        user_id VARCHAR(255) NOT NULL,
+        command_name VARCHAR(50) NOT NULL,
+        usage_count_window INT DEFAULT 0,
+        window_start_timestamp DATETIME,
+        last_used_timestamp DATETIME,
+        PRIMARY KEY (user_id, command_name),
+        CONSTRAINT fk_user_usage FOREIGN KEY (user_id) REFERENCES users(sender) ON DELETE CASCADE
+      ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    logger.info("[ createTables ] ✅ Tabela 'command_usage' foi verificada a sua existencia ou criada com sucesso.");
+    // --- END ADD ---
     logger.info("[ createTables ] ✅ Tabela 'group_participants' foi verificada a sua exitencia ou criada com sucesso.");
   } catch (error) {
     logger.error(`[ createTables ] ❌ Erro crítico ao criar ou verificar as tabelas no banco de dados.\n → Error:${error}`);
