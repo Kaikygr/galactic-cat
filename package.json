@@ -1,6 +1,6 @@
 {
   "name": "cat-galactic",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Chatbot avançado com inteligência artificial para automação no WhatsApp, integração via API e suporte a múltiplas funcionalidades.",
   "main": "src",
   "scripts": {
@@ -15,14 +15,13 @@
   "license": "MIT",
   "dependencies": {
     "@adiwajshing/keyed-db": "latest",
-    "@google/generative-ai": "0.23.0",
+    "@google/generative-ai": "0.24.0",
     "@hapi/boom": "10.0.1",
     "axios": "^1.8.4",
     "baileys": "latest",
     "cheerio": "1.0.0",
     "dotenv": "16.4.7",
     "fluent-ffmpeg": "^2.1.3",
-    "jimp": "^0.16.13",
     "moment-timezone": "0.5.48",
     "mysql": "^2.18.1",
     "mysql2": "^3.14.0",

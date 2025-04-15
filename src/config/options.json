@@ -1,33 +1,59 @@
 {
-    "owner": {
-        "number": "559591264582@s.whatsapp.net",
-        "name": "Kaiky Gomes",
-        "city": "Boa Vista",
-        "state": "Roraima",
-        "country": "Brasil",
-        "email": "kaikygomesribeiroof@gmail.com",
-        "phone": "+55 95 9126-4582",
-        "instagram": "https://instagram.com/kaikygr",
-        "github": "https://github.com/Kaikygr/kaikygr"
-    },
     "bot": {
-        "name": "Galactic Cat Bot",
-        "version": "0.1.1",
-        "description": "Chatbot avançado com inteligência artificial para automação no WhatsApp, integração via API e suporte a múltiplas funcionalidades.",
-        "author": "Kaiky Gomes",
-        "repository": "https://github.com/Kaikygr/galactic-cat",
-        "license": "MIT",
-        "language": "pt-BR",
-        "timezone": "America/Boa_Vista",
-        "dateFormat": "DD/MM/YYYY",
-        "timeFormat": "HH:mm:ss",
         "globalSettings": {
             "prefix": [
                 "!",
-                "#",
-                "?",
-                "/"
+                "/",
+                "."
             ]
+        }
+    },
+    "owner": {
+        "name": "Kaiky",
+        "number": "559591264582@s.whatsapp.net",
+        "whatsapp": "https://wa.me/message/C4CZHIMQU66PD1"
+    },
+    "apiKeys": {},
+    "commandLimits": {
+        "s": {
+            "nonPremium": {
+                "limit": 10,
+                "windowMinutes": 60
+            },
+            "premium": {
+                "limit": 50,
+                "windowMinutes": 60
+            }
+        },
+        "cat": {
+            "nonPremium": {
+                "limit": 5,
+                "windowMinutes": 60
+            },
+            "premium": {
+                "limit": 100,
+                "windowMinutes": 60
+            }
+        },
+        "setia": {
+            "nonPremium": {
+                "limit": 2,
+                "windowMinutes": 1440
+            },
+            "premium": {
+                "limit": 10,
+                "windowMinutes": 1440
+            }
+        },
+        "p": {
+            "nonPremium": {
+                "limit": 0,
+                "windowMinutes": 60
+            },
+            "premium": {
+                "limit": -1,
+                "windowMinutes": 60
+            }
         }
     }
 }
