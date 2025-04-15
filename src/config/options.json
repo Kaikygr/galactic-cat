@@ -2,7 +2,9 @@
     "bot": {
         "globalSettings": {
             "prefix": [
-                "!"
+                "!",
+                "/",
+                "."
             ]
         }
     },
