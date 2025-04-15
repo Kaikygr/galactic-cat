@@ -15,7 +15,7 @@
     "commandLimits": {
         "s": {
             "nonPremium": {
-                "limit": 5,
+                "limit": 10,
                 "windowMinutes": 60
             },
             "premium": {
@@ -26,7 +26,7 @@
         "cat": {
             "nonPremium": {
                 "limit": 5,
-                "windowMinutes": 5
+                "windowMinutes": 60
             },
             "premium": {
                 "limit": 100,
