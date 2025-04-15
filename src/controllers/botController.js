@@ -150,7 +150,7 @@ async function handleWhatsAppUpdate(upsert, client) {
         }
         default:
           logger.info(`[handleWhatsAppUpdate] Comando desconhecido '${command}' recebido de ${sender}.`);
-          await client.sendMessage(from, { text: `❓ Comando \`!${command}\` não reconhecido.` }, { quoted: info, ephemeralExpiration: expirationMessage });
+          //  await client.sendMessage(from, { text: `❓ Comando \`!${command}\` não reconhecido.` }, { quoted: info, ephemeralExpiration: expirationMessage });
           break;
       }
     }
