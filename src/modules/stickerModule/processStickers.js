@@ -5,7 +5,7 @@ const { exec } = require("child_process");
 const execProm = util.promisify(exec);
 const config = require("../../config/options.json");
 
-const { getFileBuffer } = require("../../utils/functions");
+const { getFileBuffer } = require("../../utils/getFileBuffer");
 const logger = require("../../utils/logger");
 
 const tempDir = path.join(__dirname, "temp");
