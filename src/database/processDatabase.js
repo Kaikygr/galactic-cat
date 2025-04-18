@@ -1,91 +1,117 @@
-// /home/kaiky/Área de trabalho/dev/src/database/processDatabase.js
 const mysql = require("mysql2/promise");
 const logger = require("../utils/logger");
 require("dotenv").config();
 
-// --- Configuration and Validation ---
+// --- Configuração e Validação ---
 
-// Define required and optional environment variables with defaults
+// Define variáveis de ambiente obrigatórias e opcionais com valores padrão
 const ENV_VARS = {
   MYSQL_HOST: process.env.MYSQL_HOST || "localhost",
   MYSQL_LOGIN_USER: process.env.MYSQL_LOGIN_USER,
   MYSQL_LOGIN_PASSWORD: process.env.MYSQL_LOGIN_PASSWORD,
-  MYSQL_DATABASE: process.env.MYSQL_DATABASE || "catGalactic", // Default database name
-  MYSQL_CONNECTION_LIMIT: parseInt(process.env.MYSQL_CONNECTION_LIMIT || "20", 10), // Default pool size
+  MYSQL_DATABASE: process.env.MYSQL_DATABASE || "catGalactic",
+  MYSQL_CONNECTION_LIMIT: parseInt(process.env.MYSQL_CONNECTION_LIMIT || "20", 10),
+  VERIFY_POOL_ON_INIT: process.env.VERIFY_POOL_ON_INIT === "true",
+  MYSQL_CONNECT_TIMEOUT: parseInt(process.env.MYSQL_CONNECT_TIMEOUT || "10000", 10),
 };
 
-// Validate required environment variables
+// Valida variáveis de ambiente obrigatórias
 const requiredEnvVars = ["MYSQL_LOGIN_USER", "MYSQL_LOGIN_PASSWORD"];
 requiredEnvVars.forEach(envVar => {
   if (!ENV_VARS[envVar]) {
-    // Use logger for consistency
     logger.error(`[ ENV_VARS ] ❌ Variável de ambiente obrigatória ${envVar} não definida.`);
-    // Throwing an error here is appropriate as the application cannot function without credentials.
     throw new Error(`Variável de ambiente obrigatória ${envVar} não definida.`);
   }
 });
 
-// Log the configuration being used (excluding password for security)
-logger.info(`[ DB Config ] Usando configuração: Host=${ENV_VARS.MYSQL_HOST}, User=${ENV_VARS.MYSQL_LOGIN_USER}, DB=${ENV_VARS.MYSQL_DATABASE}, PoolLimit=${ENV_VARS.MYSQL_CONNECTION_LIMIT}`);
+// Log da configuração sendo usada (excluindo senha por segurança)
+logger.info(`[ DB Config ] Usando configuração: Host=${ENV_VARS.MYSQL_HOST}, User=${ENV_VARS.MYSQL_LOGIN_USER}, DB=${ENV_VARS.MYSQL_DATABASE}, PoolLimit=${ENV_VARS.MYSQL_CONNECTION_LIMIT}, VerifyPoolOnInit=${ENV_VARS.VERIFY_POOL_ON_INIT}, ConnectTimeout=${ENV_VARS.MYSQL_CONNECT_TIMEOUT}ms`);
 
-// Database configuration object for the pool
+// Objeto de configuração do banco de dados para o pool
 const databasePoolConfig = {
   host: ENV_VARS.MYSQL_HOST,
   user: ENV_VARS.MYSQL_LOGIN_USER,
   password: ENV_VARS.MYSQL_LOGIN_PASSWORD,
-  database: ENV_VARS.MYSQL_DATABASE, // Connect directly to the database
+  database: ENV_VARS.MYSQL_DATABASE,
   waitForConnections: true,
   connectionLimit: ENV_VARS.MYSQL_CONNECTION_LIMIT,
-  queueLimit: 0, // Unlimited queue
-  charset: "utf8mb4", // Good for supporting various characters including emojis
-  supportBigNumbers: true, // Recommended for potentially large IDs
-  bigNumberStrings: true, // Return big numbers as strings
+  queueLimit: 0,
+  charset: "utf8mb4",
+  supportBigNumbers: true,
+  bigNumberStrings: true,
+  connectTimeout: ENV_VARS.MYSQL_CONNECT_TIMEOUT,
 };
 
-// --- Connection Pool Management ---
+// --- Gerenciamento do Pool de Conexões ---
 
-// Module-level variable to hold the pool instance (initialized as null)
 let pool = null;
 
 /**
- * Initializes the database connection pool.
- * Creates the database if it doesn't exist using a temporary connection.
- * @returns {Promise<mysql.Pool>} The initialized connection pool.
- * @throws {Error} If initialization fails.
+ * Garante que o banco de dados especificado existe, criando-o se necessário.
+ * Usa uma conexão temporária e verifica com um ping.
+ * @param {object} baseConfig - Configuração de conexão do banco *sem* o nome do banco.
+ * @param {string} dbName - O nome do banco de dados a ser verificado.
+ * @throws {Error} Se a verificação/criação do banco falhar.
+ */
+async function ensureDatabaseExists(baseConfig, dbName) {
+  let tempConnection = null;
+  const startTime = process.hrtime();
+  try {
+    tempConnection = await mysql.createConnection(baseConfig);
+
+    await tempConnection.ping();
+    const [pingSeconds, pingNanoseconds] = process.hrtime(startTime);
+    const pingMs = (pingSeconds * 1000 + pingNanoseconds / 1e6).toFixed(2);
+    logger.debug(`[ ensureDatabaseExists ] Ping da conexão temporária bem-sucedido (${pingMs}ms).`);
+
+    await tempConnection.execute(`CREATE DATABASE IF NOT EXISTS \`${dbName}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
+    logger.info(`[ ensureDatabaseExists ] ✅ Banco de dados '${dbName}' verificado/criado com sucesso.`);
+  } catch (dbCreateError) {
+    logger.error(`[ ensureDatabaseExists ] ❌ Falha ao conectar/verificar/criar o banco de dados '${dbName}': ${dbCreateError.message}`, { code: dbCreateError.code, sqlState: dbCreateError.sqlState, stack: dbCreateError.stack });
+    throw dbCreateError;
+  } finally {
+    if (tempConnection) {
+      await tempConnection.end();
+    }
+  }
+}
+
+/**
+ * Inicializa o pool de conexões do banco de dados.
+ * Cria o banco de dados se não existir usando uma conexão temporária.
+ * Opcionalmente pinga um pool existente para verificar sua saúde antes de retorná-lo.
+ * @returns {Promise<mysql.Pool>} O pool de conexões inicializado.
+ * @throws {Error} Se a inicialização falhar.
  */
 async function initDatabase() {
-  // Avoid re-initializing if already done
-  if (pool) {
-    logger.debug("[ initDatabase ] Pool já inicializado.");
+  if (pool && ENV_VARS.VERIFY_POOL_ON_INIT) {
+    logger.info("[ initDatabase ] 🩺 Verificando saúde do pool existente (VERIFY_POOL_ON_INIT=true)...");
+    try {
+      const conn = await pool.getConnection();
+      await conn.ping();
+      conn.release();
+      logger.info("[ initDatabase ] ✅ Pool existente está ativo.");
+      return pool;
+    } catch (pingError) {
+      logger.warn(`[ initDatabase ] ⚠️ Pool existente parece inativo (Erro: ${pingError.message}). Recriando...`);
+      await closePool().catch(endError => {
+        logger.warn(`[ initDatabase ] Aviso ao fechar pool inativo durante recriação: ${endError.message}`);
+      });
+    }
+  } else if (pool) {
     return pool;
   }
 
+  // --- Lógica de Criação do Pool ---
   try {
     logger.info("[ initDatabase ] 🔄 Tentando inicializar o pool de conexões...");
 
-    // 1. Create database if it doesn't exist (using a temporary connection without specifying a database)
     const tempConfig = { ...databasePoolConfig };
-    delete tempConfig.database; // Remove database name for initial connection
-    let tempConnection = null;
-    try {
-      tempConnection = await mysql.createConnection(tempConfig);
-      const dbName = ENV_VARS.MYSQL_DATABASE;
-      await tempConnection.execute(`CREATE DATABASE IF NOT EXISTS \`${dbName}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
-      logger.info(`[ initDatabase ] ✅ Banco de dados '${dbName}' verificado/criado com sucesso.`);
-    } catch (dbCreateError) {
-      logger.error(`[ initDatabase ] ❌ Falha ao verificar/criar o banco de dados '${ENV_VARS.MYSQL_DATABASE}':`, dbCreateError);
-      throw dbCreateError; // Re-throw critical error
-    } finally {
-      if (tempConnection) {
-        await tempConnection.end(); // Close the temporary connection
-        logger.debug("[ initDatabase ] Conexão temporária fechada.");
-      }
-    }
+    delete tempConfig.database;
+    await ensureDatabaseExists(tempConfig, ENV_VARS.MYSQL_DATABASE);
 
-    // 2. Create the actual connection pool targeting the specific database
     pool = mysql.createPool(databasePoolConfig);
 
-    // Optional: Test the pool with a simple query
     const connection = await pool.getConnection();
     await connection.ping();
     connection.release();
@@ -93,69 +119,62 @@ async function initDatabase() {
     logger.info(`[ initDatabase ] ✅ Pool de conexões para o banco '${ENV_VARS.MYSQL_DATABASE}' inicializado com sucesso.`);
     return pool;
   } catch (error) {
-    logger.error(`[ initDatabase ] ❌ Erro crítico ao inicializar o pool de conexões:`, error);
-    pool = null; // Reset pool variable on failure
-    throw error; // Re-throw the error to indicate failure
+    logger.error(`[ initDatabase ] ❌ Erro crítico ao inicializar o pool de conexões: ${error.message}`, { code: error.code, sqlState: error.sqlState, stack: error.stack });
+    pool = null;
+    throw error;
   }
 }
 
+// --- Definições de Tipos JSDoc ---
+/** @typedef {Array<object>} SelectResult */
+/** @typedef {object} InsertResult @property {number|string} insertId @property {number} affectedRows */
+/** @typedef {object} UpdateOrDeleteResult @property {number} affectedRows @property {number|null} changedRows */
+/** @typedef {object} DDLResult */
+
 /**
- * Executes a SQL query using a connection from the pool.
- * Handles connection acquisition and release automatically.
- * Uses prepared statements to prevent SQL injection.
+ * Executa uma consulta SQL usando uma conexão do pool.
+ * Gerencia automaticamente a aquisição e liberação da conexão.
+ * Usa declarações preparadas para prevenir injeção SQL.
  *
- * @param {string} query - The SQL query string (with placeholders '?').
- * @param {Array} [params=[]] - An array of parameters to bind to the query placeholders.
- * @returns {Promise<Array|object>} - Returns an array of results for SELECT, or an object with affectedRows/insertId for INSERT/UPDATE/DELETE.
- * @throws {Error} If the query execution fails or the pool is not initialized.
+ * @param {string} query - A string de consulta SQL (com placeholders '?').
+ * @param {Array} [params=[]] - Um array de parâmetros para vincular aos placeholders da query.
+ * @returns {Promise<SelectResult|InsertResult|UpdateOrDeleteResult|DDLResult>} - Retorna resultados baseados no tipo da query.
+ * @throws {Error} Se a execução da query falhar ou o pool não estiver inicializado.
  */
 async function runQuery(query, params = []) {
   if (!pool) {
     logger.warn("[ runQuery ] ⚠️ Pool não inicializado. Tentando inicializar...");
     try {
-      await initDatabase(); // Attempt to initialize
+      await initDatabase();
       if (!pool) {
-        // If still no pool after init attempt, something is wrong
         throw new Error("Falha ao inicializar o pool de conexões antes da consulta.");
       }
     } catch (initError) {
-      logger.error("[ runQuery ] ❌ Falha crítica ao inicializar o pool durante a execução da query:", initError);
-      throw initError; // Propagate the initialization error
+      logger.error(`[ runQuery ] ❌ Falha crítica ao inicializar o pool durante a execução da query: ${initError.message}`, { code: initError.code, sqlState: initError.sqlState, stack: initError.stack });
+      throw initError;
     }
   }
 
-  let connection = null; // Keep connection reference to ensure release
+  let connection = null;
   try {
-    // Get a connection from the pool
     connection = await pool.getConnection();
-    logger.debug(`[ runQuery ] Conexão ${connection.threadId} obtida do pool.`);
 
     const startTime = process.hrtime();
-
-    // Execute the query using prepared statements (safer against SQL injection)
-    // `execute` automatically prepares and caches the statement
     const [result] = await connection.execute(query, params);
 
     const [seconds, nanoseconds] = process.hrtime(startTime);
     const durationMs = (seconds * 1000 + nanoseconds / 1e6).toFixed(2);
 
     const queryType = query.trim().split(" ")[0].toUpperCase();
-    logger.debug(`[ runQuery ] [${queryType}] [${durationMs}ms] Query executada com sucesso. Query: ${query.substring(0, 100)}... Params: ${JSON.stringify(params)}`);
 
-    // Handle results based on query type
     switch (queryType) {
       case "SELECT":
-        // No need to log warning for empty results here, let the caller decide if it's an issue.
-        // logger.debug(`[ runQuery ] SELECT retornou ${result.length} linha(s).`);
-        return result; // Return the array of rows
+        return result;
 
       case "INSERT":
-        // Check affectedRows, useful for standard inserts and ON DUPLICATE KEY UPDATE
-        if (result.affectedRows === 0 && !query.toUpperCase().includes("IGNORE")) {
-          // Log as warning, might not always be an error (e.g., ON DUPLICATE KEY UPDATE didn't change anything)
-          logger.warn(`[ runQuery ] INSERT/UPDATE (ON DUPLICATE) não afetou linhas. Query: ${query}`);
+        if (result.affectedRows === 0 && !query.toUpperCase().includes("IGNORE") && !query.toUpperCase().includes("ON DUPLICATE KEY UPDATE")) {
+          logger.warn(`[ runQuery ] INSERT não afetou linhas (affectedRows: 0). Query: ${query}`);
         }
-        // logger.debug(`[ runQuery ] INSERT result: insertId=${result.insertId}, affectedRows=${result.affectedRows}`);
         return {
           insertId: result.insertId,
           affectedRows: result.affectedRows,
@@ -163,46 +182,80 @@ async function runQuery(query, params = []) {
 
       case "UPDATE":
       case "DELETE":
-        // logger.debug(`[ runQuery ] ${queryType} result: affectedRows=${result.affectedRows}, changedRows=${result.changedRows || 'N/A'}`);
+        if (result.affectedRows === 0) {
+          if (query.toUpperCase().includes("WHERE")) {
+            logger.warn(`[ runQuery ] ${queryType} não afetou linhas (affectedRows: 0), provável que a condição WHERE não correspondeu. Query: ${query}`);
+          } else {
+            logger.warn(`[ runQuery ] ${queryType} não afetou linhas (affectedRows: 0). Query: ${query}`);
+          }
+        }
         return {
           affectedRows: result.affectedRows,
-          // changedRows is specific to UPDATE, might not be present in DELETE results object
           changedRows: result.changedRows !== undefined ? result.changedRows : null,
         };
 
+      case "CREATE":
+      case "ALTER":
+      case "DROP":
+      case "TRUNCATE":
+        logger.info(`[ runQuery ] Executada query DDL (${queryType}). Query: ${query.substring(0, 150)}...`);
+        return result;
+
       default:
-        // For other query types like CREATE, ALTER, etc.
-        logger.debug(`[ runQuery ] Query (${queryType}) executada, retornando resultado bruto.`);
+        logger.info(`[ runQuery ] Executada query do tipo '${queryType}'. Query: ${query.substring(0, 150)}...`);
         return result;
     }
   } catch (err) {
-    // Log detailed error information
+    if (err.code === "ER_DUP_ENTRY") {
+      logger.warn(`[ runQuery ] Violação de chave única/duplicada detectada (ER_DUP_ENTRY). Query: ${query}`, { params });
+    } else if (err.code === "ER_NO_SUCH_TABLE") {
+      logger.error(`[ runQuery ] Tabela não encontrada (ER_NO_SUCH_TABLE). Query: ${query}`);
+    } else if (err.code === "ECONNREFUSED" || err.code === "ENOTFOUND") {
+      logger.error(`[ runQuery ] Erro de conexão com o banco de dados (${err.code}). Verifique host/porta/disponibilidade.`);
+    }
     logger.error(
       `[ runQuery ] ❌ Erro ao executar query:
-    → Query: ${query}
-    → Parâmetros: ${JSON.stringify(params)}
-    → Erro: ${err.message} (Code: ${err.code})`,
-      { stack: err.stack }
-    ); // Include stack trace for better debugging
-    throw err; // Re-throw the error so the calling function knows it failed
+      → Query: ${query}
+      → Parâmetros: ${JSON.stringify(params)}
+      → Erro: ${err.message}`,
+      { code: err.code, sqlState: err.sqlState, stack: err.stack }
+    );
+    throw err;
   } finally {
-    // **Crucial:** Always release the connection back to the pool
     if (connection) {
       try {
         connection.release();
-        logger.debug(`[ runQuery ] Conexão ${connection.threadId} liberada de volta para o pool.`);
       } catch (releaseError) {
-        logger.error(`[ runQuery ] ❌ Erro ao liberar a conexão ${connection.threadId}:`, releaseError);
+        logger.error(`[ runQuery ] ❌ Erro ao liberar a conexão ${connection.threadId}: ${releaseError.message}`, { stack: releaseError.stack });
       }
     }
   }
 }
 
-// --- Exports ---
+/**
+ * Fecha graciosamente o pool de conexões do banco de dados.
+ * @returns {Promise<void>}
+ */
+async function closePool() {
+  if (pool) {
+    logger.info("[ closePool ] ⏳ Encerrando pool de conexões...");
+    try {
+      await pool.end();
+      pool = null;
+      logger.info("[ closePool ] ✅ Pool de conexões encerrado com sucesso.");
+    } catch (err) {
+      logger.error(`[ closePool ] ❌ Erro ao encerrar o pool de conexões: ${err.message}`, { code: err.code, sqlState: err.sqlState, stack: err.stack });
+      pool = null;
+      throw err;
+    }
+  } else {
+    logger.info("[ closePool ] 🤷 Pool já estava fechado ou não inicializado.");
+  }
+}
 
 module.exports = {
-  // databasePoolConfig, // Usually not needed externally, but can be exported if required
-  initDatabase, // Function to initialize the pool (can be called at app startup)
-  runQuery, // The primary function to interact with the database
-  // 'pool' is not exported directly to encourage using runQuery which handles connection management
+  initDatabase,
+  runQuery,
+  closePool,
+  getPool: () => pool,
 };
