@@ -1,5 +1,5 @@
 const logger = require("../../utils/logger");
-const { getFileBuffer } = require("../../utils/functions");
+const { getFileBuffer } = require("../../utils/getFileBuffer");
 const { processAIResponse, updateUserSystemInstruction } = require("./processGeminiModule");
 const config = require("./../../config/options.json");
 /**

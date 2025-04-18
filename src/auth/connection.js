@@ -1,15 +1,27 @@
-const { default: makeWASocket, Browsers, makeInMemoryStore } = require("baileys");
+const {
+  default: makeWASocket,
+  Browsers,
+  useMultiFileAuthState,
+  DisconnectReason,
+} = require("baileys");
 const pino = require("pino");
 const path = require("path");
 const NodeCache = require("node-cache");
-const { useMultiFileAuthState } = require("baileys");
-const groupCache = new NodeCache({ stdTTL: 5 * 60, useClones: false });
-const RECONNECT_INITIAL_DELAY = 2000;
-const RECONNECT_MAX_DELAY = 60000;
-let reconnectAttempts = 0;
-let metricsIntervalId = null;
+require("dotenv").config();
 
 const logger = require("../utils/logger");
+const { initDatabase } = require("./../database/processDatabase");
+const { createTables, processUserData } = require("./../controllers/userDataController");
+const botController = require("../controllers/botController");
+
+const AUTH_STATE_PATH = path.join(__dirname, "temp", "auth_state");
+const GROUP_CACHE_TTL_SECONDS = 5 * 60;
+const RECONNECT_INITIAL_DELAY_MS = 2 * 1000;
+const RECONNECT_MAX_DELAY_MS = 60 * 1000;
+
+const groupMetadataCache = new NodeCache({ stdTTL: GROUP_CACHE_TTL_SECONDS, useClones: false });
+let reconnectAttempts = 0;
+let clientInstance = null;
 
 const patchInteractiveMessage = message => {
   return message?.interactiveMessage
@@ -29,108 +41,205 @@ const patchInteractiveMessage = message => {
 
 const scheduleReconnect = () => {
   reconnectAttempts++;
-  const delay = Math.min(RECONNECT_INITIAL_DELAY * 2 ** reconnectAttempts, RECONNECT_MAX_DELAY);
-  setTimeout(() => connectToWhatsApp(), delay);
+  const delay = Math.min(
+    RECONNECT_INITIAL_DELAY_MS * 2 ** reconnectAttempts,
+    RECONNECT_MAX_DELAY_MS
+  );
+  logger.warn(
+    `🔌 Conexão perdida. Tentando reconectar em ${
+      delay / 1000
+    } segundos... (Tentativa ${reconnectAttempts})`
+  );
+  setTimeout(connectToWhatsApp, delay);
 };
 
-const botController = require(path.join(__dirname, "..", "controllers", "botController.js"));
-const processUserData = require(path.join(__dirname, "..", "controllers", "userDataController.js"));
+const handleConnectionUpdate = async update => {
+  const { connection, lastDisconnect, qr } = update;
 
-const registerAllEventHandlers = (client, saveCreds) => {
-  const simpleEvents = {
-    "chats.upsert": () => {},
-    "contacts.upsert": () => {},
-  };
+  if (qr) {
+    logger.info("📱 QR Code recebido, escaneie por favor.");
+  }
 
-  Object.entries(simpleEvents).forEach(([event, handler]) => client.ev.on(event, handler));
+  if (connection === "connecting") {
+    logger.info("⏳ Conectando ao WhatsApp...");
+  } else if (connection === "open") {
+    logger.info("✅ Conexão aberta com sucesso. Bot disponível.");
+    reconnectAttempts = 0;
+  } else if (connection === "close") {
+    const statusCode = lastDisconnect?.error?.output?.statusCode;
+    const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
 
-  const groupEvents = {
-    "groups.update": async ([event]) => {
-      const metadata = await client.groupMetadata(event.id);
-      groupCache.set(event.id, metadata);
-    },
+    logger.error(
+      `❌ Conexão fechada. Razão: ${
+        DisconnectReason[statusCode] || "Desconhecida"
+      } (Código: ${statusCode})`
+    );
 
-    "group-participants.update": async event => {
-      logger.info(`Evento de atualização de participantes de grupo`);
-    },
-  };
+    if (shouldReconnect) {
+      logger.info("🔄 Tentando reconectar...");
+      scheduleReconnect();
+    } else {
+      logger.error(
+        "🚫 Não foi possível reconectar: Deslogado. Exclua a pasta 'temp/auth_state' e reinicie para gerar um novo QR Code."
+      );
+    }
+  }
+};
 
-  Object.entries(groupEvents).forEach(([event, handler]) => client.ev.on(event, handler));
+const handleCredsUpdate = async saveCreds => {
+  try {
+    await saveCreds();
+    ////logger.debug("🔒 Credenciais salvas com sucesso.");
+  } catch (error) {
+    logger.error("❌ Erro ao salvar credenciais:", error);
+  }
+};
 
-  client.ev.process(async events => {
-    const eventHandlers = {
-      "connection.update": async data => await handleConnectionUpdate(data, client),
+const handleMessagesUpsert = async (data, client) => {
+  if (!client) {
+    logger.error(
+      "[ handleMessagesUpsert ] ❌ Erro interno: Instância do cliente inválida em handleMessagesUpsert."
+    );
+    return;
+  }
+  try {
+    await processUserData(data, client);
+  } catch (error) {
+    logger.error(
+      `[ handleMessagesUpsert ] ❌ Erro ao processar dados do usuário/mensagem (processUserData): ${error.message}`,
+      { stack: error.stack }
+    );
+  }
 
-      "creds.update": async data => {
-        await saveCreds();
-      },
+  try {
+    await botController(data, client);
+  } catch (error) {
+    logger.error(
+      `[ handleMessagesUpsert ] ❌ Erro no controlador do bot (botController): ${error.message}`,
+      {
+        stack: error.stack,
+      }
+    );
+  }
+};
 
-      "messages.upsert": async data => {
-        botController(data, client);
-        processUserData(data, client);
-      },
-    };
-
-    for (const [event, data] of Object.entries(events)) {
+const handleGroupsUpdate = async (updates, client) => {
+  if (!client) {
+    logger.error(
+      "[ handleGroupsUpdate ] ❌ Erro interno: Instância do cliente inválida em handleGroupsUpdate."
+    );
+    return;
+  }
+  for (const event of updates) {
+    if (event.id) {
       try {
-        if (eventHandlers[event]) {
-          await eventHandlers[event](data);
+        const metadata = await client.groupMetadata(event.id);
+        if (metadata) {
+          groupMetadataCache.set(event.id, metadata);
+        } else {
+          logger.warn(
+            `[ handleGroupsUpdate ] ⚠️ Não foi possível obter metadados para o grupo ${event.id} após atualização.`
+          );
         }
       } catch (error) {
-        logger.error(`Erro ao processar o evento ${event}: ${error.message}`);
+        logger.error(
+          `[ handleGroupsUpdate ] ❌ Erro ao buscar/cachear metadados do grupo ${event.id} em 'groups.update': ${error.message}`
+        );
       }
     }
-  });
+  }
 };
 
-const handleConnectionUpdate = async (update, client) => {
+const handleGroupParticipantsUpdate = async (event, client) => {
+  logger.info(
+    `[ handleGroupParticipantsUpdate ] 👥 Evento 'group-participants.update' no grupo ${
+      event.id
+    }. Ação: ${event.action}. Participantes: ${event.participants.join(", ")}`
+  );
   try {
-    const { connection } = update;
-    if (connection === "open") {
-      logger.info("✅ Conexão aberta com sucesso. Bot disponível.");
-      reconnectAttempts = 0;
-    }
-    if (connection === "close") {
-      if (metricsIntervalId) {
-        clearInterval(metricsIntervalId);
-        metricsIntervalId = null;
-      }
-      scheduleReconnect();
+    const metadata = await client.groupMetadata(event.id);
+    if (metadata) {
+      groupMetadataCache.set(event.id, metadata);
     }
   } catch (error) {
-    scheduleReconnect();
+    logger.error(
+      `[ handleGroupParticipantsUpdate ] ❌ Erro ao atualizar metadados/participantes após 'group-participants.update' para ${event.id}: ${error.message}`
+    );
   }
+};
+
+const registerAllEventHandlers = (client, saveCreds) => {
+  client.ev.on("connection.update", update => handleConnectionUpdate(update));
+  client.ev.on("creds.update", () => handleCredsUpdate(saveCreds));
+  client.ev.on("messages.upsert", data => handleMessagesUpsert(data, client));
+  client.ev.on("groups.update", updates => handleGroupsUpdate(updates, client));
+  client.ev.on("group-participants.update", event => handleGroupParticipantsUpdate(event, client));
+  client.ev.on("contacts.upsert", contacts => {
+    // //logger.debug(`📞 Evento 'contacts.upsert': ${contacts.length} contato(s) atualizado(s).`);
+  });
+  client.ev.on("chats.upsert", chats => {
+    ////logger.debug(`💬 Evento 'chats.upsert': ${chats.length} chat(s) atualizado(s).`);
+  });
 };
 
 const connectToWhatsApp = async () => {
   try {
-    const connectionLogs = path.join(__dirname, "temp");
-    const { state, saveCreds } = await useMultiFileAuthState(connectionLogs);
-    logger.info("🌐 Iniciando a conexão com o WhatsApp...");
+    logger.info(
+      `[ connectToWhatsApp ]🔒 Usando diretório de estado de autenticação: ${AUTH_STATE_PATH}`
+    );
+    const { state, saveCreds } = await useMultiFileAuthState(AUTH_STATE_PATH);
 
-    const client = makeWASocket({
+    logger.info("[ connectToWhatsApp ] 🌐 Iniciando a conexão com o WhatsApp...");
+
+    clientInstance = makeWASocket({
       auth: state,
       logger: pino({ level: "silent" }),
       printQRInTerminal: true,
       mobile: false,
       browser: Browsers.macOS("Desktop"),
-      syncFullHistory: true,
-      cachedGroupMetadata: async jid => groupCache.get(jid),
+      syncFullHistory: false,
+      msgRetryCounterMap: {},
+      cachedGroupMetadata: async jid => {
+        const cached = groupMetadataCache.get(jid);
+        return cached;
+      },
       patchMessageBeforeSending: patchInteractiveMessage,
     });
 
-    const store = makeInMemoryStore({});
-    store.bind(client.ev);
-    registerAllEventHandlers(client, saveCreds);
+    registerAllEventHandlers(clientInstance, saveCreds);
+
+    return clientInstance;
   } catch (error) {
+    logger.error(
+      `[ connectToWhatsApp ] 🔴 Erro crítico ao iniciar a conexão com o WhatsApp: ${error.message}`,
+      {
+        stack: error.stack,
+      }
+    );
     scheduleReconnect();
-    logger.error(`🔴 Erro ao iniciar a conexão: ${error.message}`);
-    throw new Error("Erro ao iniciar a conexão com o WhatsApp:", error);
+    return null;
   }
 };
 
-connectToWhatsApp().catch(async error => {
-  scheduleReconnect();
-  logger.error(`🔴 Erro ao iniciar a conexão: ${error.message}`);
-  throw new Error("Error ao inciar a conexão com o WhatsApp:", error);
-});
+const initializeApp = async () => {
+  try {
+    logger.info("[ initializeApp ] 🚀 Iniciando a aplicação...");
+
+    await initDatabase();
+    logger.info("[ initializeApp ] 💾 Pool de conexões do banco de dados inicializado.");
+
+    await createTables();
+    logger.info("[ initializeApp ] 📊 Tabelas do banco de dados verificadas.");
+
+    await connectToWhatsApp();
+  } catch (error) {
+    logger.error(
+      `[ initializeApp ]💥 Falha crítica durante a inicialização da aplicação: ${error.message}`,
+      {
+        stack: error.stack,
+      }
+    );
+  }
+};
+
+initializeApp();

@@ -17,7 +17,9 @@ async function isUserPremium(userId) {
       FROM users
       WHERE sender = ?
     `;
+    //logger.debug(`[isUserPremium] Executing query: ${query} with params:`, [userId]);
     const results = await runQuery(query, [userId]);
+    //logger.debug(`[isUserPremium] Query results:`, results);
 
     if (results.length === 0) {
       return false;
@@ -31,9 +33,13 @@ async function isUserPremium(userId) {
       logger.info(`[isUserPremium] Premium status expired for user ${userId}. Updating database.`);
       try {
         const updateQuery = `UPDATE users SET isPremium = 0, premiumTemp = NULL WHERE sender = ?`;
+        //logger.debug(`[isUserPremium] Executing update query: ${updateQuery} with params:`, [userId]);
         await runQuery(updateQuery, [userId]);
       } catch (updateError) {
-        logger.error(`[isUserPremium] Failed to update expired premium status for ${userId}:`, updateError);
+        logger.error(
+          `[isUserPremium] Failed to update expired premium status for ${userId}:`,
+          updateError
+        );
       }
       return false;
     }
@@ -59,7 +65,9 @@ async function checkRateLimit(userId, commandName) {
     const commandLimits = config.commandLimits?.[commandName] || config.commandLimits?.default;
 
     if (!commandLimits) {
-      logger.warn(`[checkRateLimit] No rate limit configuration found for command '${commandName}' or default. Allowing.`);
+      logger.warn(
+        `[checkRateLimit] No rate limit configuration found for command '${commandName}' or default. Allowing.`
+      );
       return { allow: true };
     }
 
@@ -69,7 +77,10 @@ async function checkRateLimit(userId, commandName) {
       return { allow: true };
     }
     if (limits.limit === 0) {
-      return { allow: false, message: `❌ Desculpe, o comando \`${commandName}\` está temporariamente desativado.` }; // Explicitly disabled
+      return {
+        allow: false,
+        message: `❌ Desculpe, o comando \`${commandName}\` está temporariamente desativado.`,
+      }; // Explicitly disabled
     }
 
     const { limit, windowMinutes } = limits;
@@ -81,7 +92,9 @@ async function checkRateLimit(userId, commandName) {
       FROM command_usage
       WHERE user_id = ? AND command_name = ?
     `;
+    //logger.debug(`[checkRateLimit] Executing select query: ${selectQuery} with params:`, [userId, commandName]);
     const usageData = await runQuery(selectQuery, [userId, commandName]);
+    //logger.debug(`[checkRateLimit] Select query results:`, usageData);
 
     let currentCount = 0;
     let windowStart = null;
@@ -100,8 +113,11 @@ async function checkRateLimit(userId, commandName) {
           window_start_timestamp = VALUES(window_start_timestamp),
           last_used_timestamp = VALUES(last_used_timestamp)
       `;
+      //logger.debug(`[checkRateLimit] Executing upsert query: ${upsertQuery} with params:`, [userId, commandName, now.toDate(), now.toDate()]);
       await runQuery(upsertQuery, [userId, commandName, now.toDate(), now.toDate()]);
-      logger.info(`[checkRateLimit] User ${userId} used command ${commandName}. Count reset/started. (Limit: ${limit}/${windowMinutes}m)`);
+      logger.info(
+        `[checkRateLimit] User ${userId} used command ${commandName}. Count reset/started. (Limit: ${limit}/${windowMinutes}m)`
+      );
       return { allow: true };
     } else {
       if (currentCount >= limit) {
@@ -109,7 +125,9 @@ async function checkRateLimit(userId, commandName) {
         const remainingMinutes = Math.ceil(remainingMillis / (60 * 1000));
         const message = `⚠️ *Limite de Uso Atingido* ⚠️
 
-Olá! Detectamos que você utilizou o comando \`!${commandName}\` ${currentCount} vezes ${isPremium ? "(Usuário Premium)" : ""}, atingindo assim o limite permitido de *${limit} uso(s)* dentro do período de *${windowMinutes} minuto(s)*.
+Olá! Detectamos que você utilizou o comando \`!${commandName}\` ${currentCount} vezes ${
+          isPremium ? "(Usuário Premium)" : ""
+        }, atingindo assim o limite permitido de *${limit} uso(s)* dentro do período de *${windowMinutes} minuto(s)*.
 
 ⏳ Para garantir estabilidade, segurança e uma boa experiência para todos os usuários, impomos essa limitação temporária. Você poderá utilizar este comando novamente em aproximadamente *${remainingMinutes} minuto(s)*.
 
@@ -120,7 +138,9 @@ Olá! Detectamos que você utilizou o comando \`!${commandName}\` ${currentCount
 
 Agradecemos pela compreensão e pelo uso do nosso serviço. 🚀`;
 
-        logger.warn(`[checkRateLimit] User ${userId} rate limited for command ${commandName}. Count: ${currentCount}/${limit}`);
+        logger.warn(
+          `[checkRateLimit] User ${userId} rate limited for command ${commandName}. Count: ${currentCount}/${limit}`
+        );
         return { allow: false, message: message };
       } else {
         const updateQuery = `
@@ -128,14 +148,26 @@ Agradecemos pela compreensão e pelo uso do nosso serviço. 🚀`;
           SET usage_count_window = usage_count_window + 1, last_used_timestamp = ?
           WHERE user_id = ? AND command_name = ?
         `;
+        //logger.debug(`[checkRateLimit] Executing update query: ${updateQuery} with params:`, [now.toDate(), userId, commandName]);
         await runQuery(updateQuery, [now.toDate(), userId, commandName]);
-        logger.info(`[checkRateLimit] User ${userId} used command ${commandName}. Count: ${currentCount + 1}/${limit} (Limit: ${limit}/${windowMinutes}m)`);
+        logger.info(
+          `[checkRateLimit] User ${userId} used command ${commandName}. Count: ${
+            currentCount + 1
+          }/${limit} (Limit: ${limit}/${windowMinutes}m)`
+        );
         return { allow: true };
       }
     }
   } catch (error) {
-    logger.error(`[checkRateLimit] Error checking rate limit for user ${userId}, command ${commandName}:`, error);
-    return { allow: false, message: "❌ Ocorreu um erro interno ao verificar seus limites de uso. Tente novamente mais tarde." };
+    logger.error(
+      `[checkRateLimit] Error checking rate limit for user ${userId}, command ${commandName}:`,
+      error
+    );
+    return {
+      allow: false,
+      message:
+        "❌ Ocorreu um erro interno ao verificar seus limites de uso. Tente novamente mais tarde.",
+    };
   }
 }
 
