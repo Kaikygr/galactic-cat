@@ -46,7 +46,7 @@ class GroupMetadataCache {
       data,
       timestamp: Date.now(),
     });
-    logger.debug(`[GroupMetadataCache] Cache definido para a chave: ${key}`);
+    //logger.debug(`[GroupMetadataCache] Cache definido para a chave: ${key}`);
   }
 
   /**
@@ -58,17 +58,17 @@ class GroupMetadataCache {
   get(key) {
     const entry = this.cache.get(key);
     if (!entry) {
-      logger.debug(`[GroupMetadataCache] Falha no cache para a chave: ${key}`);
+      //logger.debug(`[GroupMetadataCache] Falha no cache para a chave: ${key}`);
       return null;
     }
 
     if (Date.now() - entry.timestamp > this.expiryMs) {
-      logger.debug(`[GroupMetadataCache] Cache expirado para a chave: ${key}. Excluindo.`);
+      //logger.debug(`[GroupMetadataCache] Cache expirado para a chave: ${key}. Excluindo.`);
       this.cache.delete(key);
       return null;
     }
 
-    logger.debug(`[GroupMetadataCache] Cache encontrado para a chave: ${key}`);
+    //logger.debug(`[GroupMetadataCache] Cache encontrado para a chave: ${key}`);
     return entry.data;
   }
 
@@ -79,7 +79,7 @@ class GroupMetadataCache {
   delete(key) {
     const deleted = this.cache.delete(key);
     if (deleted) {
-      logger.debug(`[GroupMetadataCache] Cache excluído para a chave: ${key}`);
+      //logger.debug(`[GroupMetadataCache] Cache excluído para a chave: ${key}`);
     }
   }
 
@@ -147,7 +147,9 @@ const validateIncomingInfo = info => {
 
   const messageId = info.key.id || crypto.randomUUID();
   if (!info.key.id) {
-    logger.warn(`[validateIncomingInfo] Mensagem sem ID original (key.id). Gerado UUID: ${messageId}`);
+    logger.warn(
+      `[validateIncomingInfo] Mensagem sem ID original (key.id). Gerado UUID: ${messageId}`
+    );
   }
 
   return { from, userId, isGroup, messageId };
@@ -240,7 +242,9 @@ async function createTables() {
 
     logger.info("[ createTables ] ✅ Verificação/criação de todas as tabelas concluída.");
   } catch (error) {
-    logger.error(`[ createTables ] ❌ Erro crítico ao criar/verificar tabelas: ${error.message}`, { stack: error.stack });
+    logger.error(`[ createTables ] ❌ Erro crítico ao criar/verificar tabelas: ${error.message}`, {
+      stack: error.stack,
+    });
     throw new Error(`Falha ao inicializar tabelas do banco de dados: ${error.message}`);
   }
 }
@@ -260,9 +264,11 @@ async function saveUserToDatabase(userId, pushName) {
   `;
   try {
     await runQuery(query, [userId, finalPushName]);
-    logger.debug(`[ saveUserToDatabase ] Usuário salvo/atualizado: ${userId}`);
+    //logger.debug(`[ saveUserToDatabase ] Usuário salvo/atualizado: ${userId}`);
   } catch (error) {
-    logger.error(`[ saveUserToDatabase ] ❌ Erro ao salvar usuário ${userId}: ${error.message}`, { stack: error.stack });
+    logger.error(`[ saveUserToDatabase ] ❌ Erro ao salvar usuário ${userId}: ${error.message}`, {
+      stack: error.stack,
+    });
     throw error;
   }
 }
@@ -296,10 +302,28 @@ async function saveGroupToDatabase(groupMeta) {
     throw new Error("ID do grupo ausente nos metadados fornecidos.");
   }
 
-  logger.debug(`[ saveGroupToDatabase ] Processando metadados do grupo: ${groupId}`);
+  //logger.debug(`[ saveGroupToDatabase ] Processando metadados do grupo: ${groupId}`);
 
   try {
-    const values = [groupId, sanitizeData(groupMeta.subject, config.defaults.groupSubject), sanitizeData(groupMeta.owner, config.defaults.groupOwner), formatTimestampForDB(groupMeta.creation), sanitizeData(groupMeta.desc, config.defaults.groupDesc), sanitizeData(groupMeta.descId, config.defaults.descId), sanitizeData(groupMeta.subjectOwner, config.defaults.subjectOwner), formatTimestampForDB(groupMeta.subjectTime), groupMeta.size || 0, groupMeta.restrict ? 1 : 0, groupMeta.announce ? 1 : 0, groupMeta.isCommunity ? 1 : 0, groupMeta.isCommunityAnnounce ? 1 : 0, groupMeta.joinApprovalMode ? 1 : 0, groupMeta.memberAddMode ? 1 : 0, groupMeta.isPremium ? 1 : 0, formatTimestampForDB(groupMeta.premiumTemp)];
+    const values = [
+      groupId,
+      sanitizeData(groupMeta.subject, config.defaults.groupSubject),
+      sanitizeData(groupMeta.owner, config.defaults.groupOwner),
+      formatTimestampForDB(groupMeta.creation),
+      sanitizeData(groupMeta.desc, config.defaults.groupDesc),
+      sanitizeData(groupMeta.descId, config.defaults.descId),
+      sanitizeData(groupMeta.subjectOwner, config.defaults.subjectOwner),
+      formatTimestampForDB(groupMeta.subjectTime),
+      groupMeta.size || 0,
+      groupMeta.restrict ? 1 : 0,
+      groupMeta.announce ? 1 : 0,
+      groupMeta.isCommunity ? 1 : 0,
+      groupMeta.isCommunityAnnounce ? 1 : 0,
+      groupMeta.joinApprovalMode ? 1 : 0,
+      groupMeta.memberAddMode ? 1 : 0,
+      groupMeta.isPremium ? 1 : 0,
+      formatTimestampForDB(groupMeta.premiumTemp),
+    ];
 
     const query = `
       INSERT INTO \`${config.database.tables.groups}\` (
@@ -316,9 +340,11 @@ async function saveGroupToDatabase(groupMeta) {
     `;
 
     await runQuery(query, values);
-    logger.debug(`[ saveGroupToDatabase ] ✅ Grupo salvo/atualizado: ${groupId}`);
+    //logger.debug(`[ saveGroupToDatabase ] ✅ Grupo salvo/atualizado: ${groupId}`);
   } catch (error) {
-    logger.error(`[ saveGroupToDatabase ] ❌ Erro ao salvar grupo ${groupId}: ${error.message}`, { stack: error.stack });
+    logger.error(`[ saveGroupToDatabase ] ❌ Erro ao salvar grupo ${groupId}: ${error.message}`, {
+      stack: error.stack,
+    });
     throw error;
   }
 }
@@ -332,11 +358,14 @@ async function saveGroupToDatabase(groupMeta) {
  */
 async function saveGroupParticipantsToDatabase(groupId, participants) {
   if (!Array.isArray(participants) || participants.length === 0) {
-    logger.debug(`[ saveGroupParticipantsToDatabase ] Sem participantes para salvar no grupo ${groupId}.`);
     return;
   }
 
-  const values = participants.map(p => [groupId, p.id, p.admin === "admin" || p.admin === "superadmin" ? 1 : 0]);
+  const values = participants.map(p => [
+    groupId,
+    p.id,
+    p.admin === "admin" || p.admin === "superadmin" ? 1 : 0,
+  ]);
 
   if (values.length === 0) {
     return;
@@ -353,9 +382,10 @@ async function saveGroupParticipantsToDatabase(groupId, participants) {
 
   try {
     await runQuery(bulkQuery, flatValues);
-    logger.debug(`[ saveGroupParticipantsToDatabase ] ✅ Tentativa de inserção em massa para ${values.length} participantes do grupo ${groupId} concluída (inseridos/ignorados).`);
   } catch (error) {
-    logger.warn(`[ saveGroupParticipantsToDatabase ] Inserção em massa falhou para ${groupId}, tentando individualmente: ${error.message}`);
+    logger.warn(
+      `[ saveGroupParticipantsToDatabase ] Inserção em massa falhou para ${groupId}, tentando individualmente: ${error.message}`
+    );
 
     const individualQuery = `
       INSERT IGNORE INTO ${config.database.tables.participants} (group_id, participant, isAdmin)
@@ -369,11 +399,15 @@ async function saveGroupParticipantsToDatabase(groupId, participants) {
         successCount++;
       } catch (individualError) {
         failCount++;
-        logger.error(`[ saveGroupParticipantsToDatabase ] ❌ Erro ao salvar participante individual ${participantData[1]} para grupo ${groupId}: ${individualError.message}`);
+        logger.error(
+          `[ saveGroupParticipantsToDatabase ] ❌ Erro ao salvar participante individual ${participantData[1]} para grupo ${groupId}: ${individualError.message}`
+        );
       }
     }
     if (failCount > 0 && successCount === 0) {
-      logger.error(`[ saveGroupParticipantsToDatabase ] ❌ Falha crítica: Inserção em massa e todas as inserções individuais falharam para o grupo ${groupId}.`);
+      logger.error(
+        `[ saveGroupParticipantsToDatabase ] ❌ Falha crítica: Inserção em massa e todas as inserções individuais falharam para o grupo ${groupId}.`
+      );
     }
   }
 }
@@ -395,12 +429,20 @@ async function ensureGroupExists(groupId) {
         INSERT IGNORE INTO \`${config.database.tables.groups}\` (id, name, owner, created_at)
         VALUES (?, ?, ?, ?);
       `;
-      await runQuery(insertQuery, [groupId, config.defaults.groupSubject, config.defaults.groupOwner, moment().format("YYYY-MM-DD HH:mm:ss")]);
+      await runQuery(insertQuery, [
+        groupId,
+        config.defaults.groupSubject,
+        config.defaults.groupOwner,
+        moment().format("YYYY-MM-DD HH:mm:ss"),
+      ]);
       logger.info(`[ ensureGroupExists ] ✅ Entrada mínima criada para o grupo ${groupId}.`);
     }
     return groupId;
   } catch (error) {
-    logger.error(`[ ensureGroupExists ] ❌ Erro ao verificar/criar grupo ${groupId}: ${error.message}`, { stack: error.stack });
+    logger.error(
+      `[ ensureGroupExists ] ❌ Erro ao verificar/criar grupo ${groupId}: ${error.message}`,
+      { stack: error.stack }
+    );
     throw error;
   }
 }
@@ -424,7 +466,10 @@ async function saveMessageToDatabase(messageData) {
   const { messageId, userId, groupId, messageType, messageContent, timestamp } = messageData;
 
   if (!messageId || !userId || !messageType || !timestamp) {
-    logger.error("[ saveMessageToDatabase ] ❌ Dados da mensagem incompletos no momento de salvar.", messageData);
+    logger.error(
+      "[ saveMessageToDatabase ] ❌ Dados da mensagem incompletos no momento de salvar.",
+      messageData
+    );
     throw new Error("Dados da mensagem incompletos para salvar no banco de dados.");
   }
 
@@ -437,18 +482,27 @@ async function saveMessageToDatabase(messageData) {
   `;
   try {
     await runQuery(query, [messageId, userId, groupId, messageType, messageContent, timestamp]);
-    logger.debug(`[ saveMessageToDatabase ] ✅ Mensagem ${messageId} salva para usuário ${userId}.`);
   } catch (error) {
     if (error.code === "ER_NO_REFERENCED_ROW_2") {
       if (error.message.includes("fk_sender_id")) {
-        logger.error(`[ saveMessageToDatabase ] ❌ Erro FK: Usuário ${userId} não encontrado em '${config.database.tables.users}'. Mensagem ${messageId} não salva.`);
+        logger.error(
+          `[ saveMessageToDatabase ] ❌ Erro FK: Usuário ${userId} não encontrado em '${config.database.tables.users}'. Mensagem ${messageId} não salva.`
+        );
       } else if (error.message.includes("fk_group_id")) {
-        logger.error(`[ saveMessageToDatabase ] ❌ Erro FK: Grupo ${groupId} não encontrado em '${config.database.tables.groups}'. Mensagem ${messageId} não salva.`);
+        logger.error(
+          `[ saveMessageToDatabase ] ❌ Erro FK: Grupo ${groupId} não encontrado em '${config.database.tables.groups}'. Mensagem ${messageId} não salva.`
+        );
       } else {
-        logger.error(`[ saveMessageToDatabase ] ❌ Erro FK desconhecido ao salvar mensagem ${messageId}: ${error.message}`, { stack: error.stack });
+        logger.error(
+          `[ saveMessageToDatabase ] ❌ Erro FK desconhecido ao salvar mensagem ${messageId}: ${error.message}`,
+          { stack: error.stack }
+        );
       }
     } else {
-      logger.error(`[ saveMessageToDatabase ] ❌ Erro ao salvar mensagem ${messageId}: ${error.message}`, { stack: error.stack });
+      logger.error(
+        `[ saveMessageToDatabase ] ❌ Erro ao salvar mensagem ${messageId}: ${error.message}`,
+        { stack: error.stack }
+      );
     }
     throw error;
   }
@@ -466,7 +520,10 @@ async function processIncomingMessageData(info) {
     validatedData = validateIncomingInfo(info);
   } catch (validationError) {
     if (validationError.message !== "Mensagem própria ignorada.") {
-      logger.warn(`[ processIncomingMessageData ] ⚠️ Validação falhou: ${validationError.message}`, { key: info?.key });
+      logger.warn(
+        `[ processIncomingMessageData ] ⚠️ Validação falhou: ${validationError.message}`,
+        { key: info?.key }
+      );
     }
     throw validationError;
   }
@@ -477,7 +534,9 @@ async function processIncomingMessageData(info) {
   try {
     await saveUserToDatabase(userId, pushName);
   } catch (userSaveError) {
-    logger.error(`[ processIncomingMessageData ] ❌ Falha ao salvar usuário ${userId}, continuando se possível: ${userSaveError.message}`);
+    logger.error(
+      `[ processIncomingMessageData ] ❌ Falha ao salvar usuário ${userId}, continuando se possível: ${userSaveError.message}`
+    );
   }
 
   let groupId = null;
@@ -485,7 +544,9 @@ async function processIncomingMessageData(info) {
     try {
       groupId = await ensureGroupExists(from);
     } catch (groupEnsureError) {
-      logger.error(`[ processIncomingMessageData ] ❌ Falha crítica ao garantir a existência do grupo ${from}. Não é possível salvar a mensagem: ${groupEnsureError.message}`);
+      logger.error(
+        `[ processIncomingMessageData ] ❌ Falha crítica ao garantir a existência do grupo ${from}. Não é possível salvar a mensagem: ${groupEnsureError.message}`
+      );
       throw groupEnsureError;
     }
   }
@@ -497,7 +558,9 @@ async function processIncomingMessageData(info) {
       try {
         messageContent = JSON.stringify(info.message[messageType]);
       } catch (stringifyError) {
-        logger.warn(`[ processIncomingMessageData ] ⚠️ Falha ao stringificar conteúdo da mensagem tipo ${messageType} (ID: ${messageId}). Salvando placeholder: ${stringifyError.message}`);
+        logger.warn(
+          `[ processIncomingMessageData ] ⚠️ Falha ao stringificar conteúdo da mensagem tipo ${messageType} (ID: ${messageId}). Salvando placeholder: ${stringifyError.message}`
+        );
         messageContent = `{"error": "Falha ao stringificar conteúdo: ${stringifyError.message}"}`;
       }
     }
@@ -515,7 +578,9 @@ async function processIncomingMessageData(info) {
 
     return { userId, groupId, messageId };
   } catch (messageSaveError) {
-    logger.error(`[ processIncomingMessageData ] ❌ Erro final ao salvar a mensagem ${messageId} para ${userId}: ${messageSaveError.message}`);
+    logger.error(
+      `[ processIncomingMessageData ] ❌ Erro final ao salvar a mensagem ${messageId} para ${userId}: ${messageSaveError.message}`
+    );
     throw messageSaveError;
   }
 }
@@ -527,10 +592,12 @@ async function processIncomingMessageData(info) {
  * @throws {Error} Se o cliente for inválido ou a busca/salvamento falhar criticamente.
  */
 async function handleGroupMetadataUpdate(groupId, client) {
-  logger.debug(`[ handleGroupMetadataUpdate ] Verificando metadados para o grupo: ${groupId}`);
+  //logger.debug(`[ handleGroupMetadataUpdate ] Verificando metadados para o grupo: ${groupId}`);
 
   if (!client || typeof client.groupMetadata !== "function") {
-    logger.error(`[ handleGroupMetadataUpdate ] ❌ Cliente WhatsApp inválido ou método groupMetadata não disponível para ${groupId}.`);
+    logger.error(
+      `[ handleGroupMetadataUpdate ] ❌ Cliente WhatsApp inválido ou método groupMetadata não disponível para ${groupId}.`
+    );
     return;
   }
 
@@ -539,33 +606,51 @@ async function handleGroupMetadataUpdate(groupId, client) {
     return;
   }
 
-  logger.info(`[ handleGroupMetadataUpdate ] 🔄 Cache expirado ou ausente. Buscando novos metadados para o grupo: ${groupId}`);
+  logger.info(
+    `[ handleGroupMetadataUpdate ] 🔄 Cache expirado ou ausente. Buscando novos metadados para o grupo: ${groupId}`
+  );
   try {
     const groupMeta = await client.groupMetadata(groupId);
 
     if (!groupMeta || !groupMeta.id) {
-      logger.warn(`[ handleGroupMetadataUpdate ] ⚠️ Não foi possível obter metadados válidos para o grupo ${groupId}. O bot ainda está no grupo? Removendo do cache.`);
+      logger.warn(
+        `[ handleGroupMetadataUpdate ] ⚠️ Não foi possível obter metadados válidos para o grupo ${groupId}. O bot ainda está no grupo? Removendo do cache.`
+      );
       groupMetadataCache.delete(groupId);
       return;
     }
 
     groupMetadataCache.set(groupId, groupMeta);
-    logger.info(`[ handleGroupMetadataUpdate ] ✅ Metadados do grupo ${groupId} obtidos e cacheados.`);
+    logger.info(
+      `[ handleGroupMetadataUpdate ] ✅ Metadados do grupo ${groupId} obtidos e cacheados.`
+    );
 
     await saveGroupToDatabase(groupMeta);
     if (Array.isArray(groupMeta.participants)) {
       await saveGroupParticipantsToDatabase(groupId, groupMeta.participants);
     } else {
-      logger.warn(`[ handleGroupMetadataUpdate ] ⚠️ Metadados do grupo ${groupId} não continham um array de participantes válido.`);
+      logger.warn(
+        `[ handleGroupMetadataUpdate ] ⚠️ Metadados do grupo ${groupId} não continham um array de participantes válido.`
+      );
     }
 
-    logger.info(`[ handleGroupMetadataUpdate ] ✅ Metadados e participantes do grupo ${groupId} salvos no banco de dados.`);
+    logger.info(
+      `[ handleGroupMetadataUpdate ] ✅ Metadados e participantes do grupo ${groupId} salvos no banco de dados.`
+    );
   } catch (fetchSaveError) {
-    if (fetchSaveError.message?.includes("group not found") || fetchSaveError.output?.statusCode === 404) {
-      logger.warn(`[ handleGroupMetadataUpdate ] ⚠️ Grupo ${groupId} não encontrado ao buscar metadados (provavelmente o bot saiu). Removendo do cache.`);
+    if (
+      fetchSaveError.message?.includes("group not found") ||
+      fetchSaveError.output?.statusCode === 404
+    ) {
+      logger.warn(
+        `[ handleGroupMetadataUpdate ] ⚠️ Grupo ${groupId} não encontrado ao buscar metadados (provavelmente o bot saiu). Removendo do cache.`
+      );
       groupMetadataCache.delete(groupId);
     } else {
-      logger.error(`[ handleGroupMetadataUpdate ] ❌ Erro ao buscar/salvar metadados do grupo ${groupId}: ${fetchSaveError.message}`, { stack: fetchSaveError.stack });
+      logger.error(
+        `[ handleGroupMetadataUpdate ] ❌ Erro ao buscar/salvar metadados do grupo ${groupId}: ${fetchSaveError.message}`,
+        { stack: fetchSaveError.stack }
+      );
     }
   }
 }
@@ -578,7 +663,7 @@ async function handleGroupMetadataUpdate(groupId, client) {
  */
 async function processUserData(data, client) {
   if (!data?.messages || !Array.isArray(data.messages) || data.messages.length === 0) {
-    logger.debug("[ processUserData ] Payload sem mensagens válidas para processar.", { data });
+    //logger.debug("[ processUserData ] Payload sem mensagens válidas para processar.", { data });
     return;
   }
 
@@ -592,7 +677,10 @@ async function processUserData(data, client) {
       }
     } catch (error) {
       if (error.message !== "Mensagem própria ignorada.") {
-        logger.error(`[ processUserData ] ❌ Erro ao processar dados para a mensagem ${messageId}: ${error.message}`, { stack: error.stack, messageKey: info?.key });
+        logger.error(
+          `[ processUserData ] ❌ Erro ao processar dados para a mensagem ${messageId}: ${error.message}`,
+          { stack: error.stack, messageKey: info?.key }
+        );
       }
     }
   }
