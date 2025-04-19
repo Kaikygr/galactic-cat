@@ -1,4 +1,3 @@
-// /home/kaiky/Área de trabalho/dev/src/database/processUserPremium.js
 const { runQuery } = require("./processDatabase");
 const moment = require("moment-timezone");
 const logger = require("../utils/logger");

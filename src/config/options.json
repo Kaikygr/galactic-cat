@@ -2,7 +2,8 @@
     "bot": {
         "globalSettings": {
             "prefix": [
-                "!"
+                "/",
+                "."
             ]
         }
     },
@@ -11,9 +12,9 @@
         "number": "559591264582@s.whatsapp.net",
         "whatsapp": "https://wa.me/message/C4CZHIMQU66PD1"
     },
-    "apiKeys": {},
     "commandLimits": {
         "s": {
+            "description": "Cria figurinhas a partir de imagens, vídeos ou GIFs.",
             "nonPremium": {
                 "limit": 10,
                 "windowMinutes": 60
@@ -24,6 +25,7 @@
             }
         },
         "cat": {
+            "description": "converse com uma IA.",
             "nonPremium": {
                 "limit": 5,
                 "windowMinutes": 60
@@ -34,6 +36,7 @@
             }
         },
         "setia": {
+            "description": "Configura inteligência artificial",
             "nonPremium": {
                 "limit": 2,
                 "windowMinutes": 1440
@@ -44,6 +47,7 @@
             }
         },
         "p": {
+            "description": "Comando premium.",
             "nonPremium": {
                 "limit": 0,
                 "windowMinutes": 60
@@ -51,6 +55,61 @@
             "premium": {
                 "limit": -1,
                 "windowMinutes": 60
+            }
+        },
+        "welcome": {
+            "description": "Ativa/desativa as mensagens de boas-vindas no grupo.",
+            "nonPremium": {
+                "limit": 5,
+                "windowMinutes": 1440
+            },
+            "premium": {
+                "limit": 5,
+                "windowMinutes": 1440
+            }
+        },
+        "setwelcome": {
+            "description": "Define a mensagem de texto para as boas-vindas.",
+            "nonPremium": {
+                "limit": 5,
+                "windowMinutes": 1440
+            },
+            "premium": {
+                "limit": 5,
+                "windowMinutes": 1440
+            }
+        },
+        "setwelcomemedia": {
+            "description": "Define a mídia (imagem/vídeo) para as boas-vindas.",
+            "nonPremium": {
+                "limit": 5,
+                "windowMinutes": 1440
+            },
+            "premium": {
+                "limit": 5,
+                "windowMinutes": 1440
+            }
+        },
+        "setexit": {
+            "description": "Define a mensagem de texto para despedidas/saídas.",
+            "nonPremium": {
+                "limit": 5,
+                "windowMinutes": 1440
+            },
+            "premium": {
+                "limit": 5,
+                "windowMinutes": 1440
+            }
+        },
+        "setexitmedia": {
+            "description": "Define a mídia (imagem/vídeo) para despedidas/saídas.",
+            "nonPremium": {
+                "limit": 5,
+                "windowMinutes": 1440
+            },
+            "premium": {
+                "limit": 5,
+                "windowMinutes": 1440
             }
         }
     }

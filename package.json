@@ -4,11 +4,10 @@
   "description": "Chatbot avançado com inteligência artificial para automação no WhatsApp, integração via API e suporte a múltiplas funcionalidades.",
   "main": "src",
   "scripts": {
-    "start": "npx pm2 start cosmic.config.js",
-    "start:dev": "node ./src/auth/connection.js",
-    "restart": "npx pm2 restart cosmic.config.js",
-    "stop": "npx pm2 stop cosmic.config.js",
-    "delete": "npx pm2 delete cosmic.config.js",
+    "start": "npx node ./src/auth/connection.js",
+    "start:pm2": "npx pm2 ecosystem.config",
+    "restart": "npx pm2 restart all",
+    "stop": "npx pm2 stop all",
     "logs": "npx pm2 monit"
   },
   "author": "Kaikygr",
@@ -25,6 +24,7 @@
     "moment-timezone": "0.5.48",
     "mysql": "^2.18.1",
     "mysql2": "^3.14.0",
+    "node-abort-controller": "^3.1.1",
     "node-cache": "5.1.2",
     "node-fetch": "3.3.2",
     "node-webpmux": "3.2.0",

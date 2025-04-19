@@ -4,12 +4,9 @@ const { runQuery } = require("../database/processDatabase");
 const config = require("../config/options.json");
 const moment = require("moment-timezone");
 
-/**
- * Checks if a user is currently premium.
- * @param {string} userId - The user's ID (sender).
- * @returns {Promise<boolean>} - True if the user is premium, false otherwise.
- */
+// isUserPremium function remains the same...
 async function isUserPremium(userId) {
+  // ... (keep existing implementation)
   if (!userId) return false;
   try {
     const query = `
@@ -17,9 +14,7 @@ async function isUserPremium(userId) {
       FROM users
       WHERE sender = ?
     `;
-    //logger.debug(`[isUserPremium] Executing query: ${query} with params:`, [userId]);
     const results = await runQuery(query, [userId]);
-    //logger.debug(`[isUserPremium] Query results:`, results);
 
     if (results.length === 0) {
       return false;
@@ -27,63 +22,73 @@ async function isUserPremium(userId) {
 
     const user = results[0];
     const isCurrentlyPremium = user.isPremium === 1;
-    const hasValidExpiry = !user.premiumTemp || moment(user.premiumTemp).isAfter(moment());
 
+    // Check for expired premium status
     if (isCurrentlyPremium && user.premiumTemp && moment(user.premiumTemp).isBefore(moment())) {
       logger.info(`[isUserPremium] Premium status expired for user ${userId}. Updating database.`);
       try {
         const updateQuery = `UPDATE users SET isPremium = 0, premiumTemp = NULL WHERE sender = ?`;
-        //logger.debug(`[isUserPremium] Executing update query: ${updateQuery} with params:`, [userId]);
         await runQuery(updateQuery, [userId]);
       } catch (updateError) {
-        logger.error(
-          `[isUserPremium] Failed to update expired premium status for ${userId}:`,
-          updateError
-        );
+        logger.error(`[isUserPremium] Failed to update expired premium status for ${userId}:`, updateError);
       }
-      return false;
+      return false; // Return false as premium has expired
     }
 
+    // Valid premium if isPremium is 1 AND (premiumTemp is NULL OR premiumTemp is in the future)
+    const hasValidExpiry = !user.premiumTemp || moment(user.premiumTemp).isAfter(moment());
     return isCurrentlyPremium && hasValidExpiry;
   } catch (error) {
     logger.error(`[isUserPremium] Error checking premium status for ${userId}:`, error);
-    return false;
+    return false; // Default to false on error
   }
 }
 
 /**
- * Checks if a user has exceeded the command usage limit within the defined time window.
- * Updates the usage count if the command is allowed.
+ * Checks command rate limits and returns detailed status.
  *
- * @param {string} userId - The user's ID (sender).
- * @param {string} commandName - The name of the command being executed.
- * @returns {Promise<{allow: boolean, message?: string}>} - Object indicating if the command is allowed and an optional message.
+ * @param {string} userId - The user's ID.
+ * @param {string} commandName - The command name.
+ * @returns {Promise<{status: 'allowed' | 'rate_limited' | 'disabled' | 'error', message?: string, isPremium: boolean, currentCount?: number, limit?: number}>}
+ *          - status: The outcome of the check.
+ *          - message: Optional message (e.g., for rate limit).
+ *          - isPremium: Whether the user was premium during the check.
+ *          - currentCount: The usage count *before* this attempt (if applicable).
+ *          - limit: The limit applied during this check (if applicable).
  */
 async function checkRateLimit(userId, commandName) {
+  let isPremium = false; // Initialize isPremium
   try {
-    const isPremium = await isUserPremium(userId);
+    isPremium = await isUserPremium(userId); // Determine premium status first
     const commandLimits = config.commandLimits?.[commandName] || config.commandLimits?.default;
 
     if (!commandLimits) {
-      logger.warn(
-        `[checkRateLimit] No rate limit configuration found for command '${commandName}' or default. Allowing.`
-      );
-      return { allow: true };
+      logger.warn(`[checkRateLimit] No rate limit config for '${commandName}' or default. Allowing.`);
+      // Still return the basic structure even if allowed by default
+      return { status: "allowed", isPremium };
     }
 
     const limits = isPremium ? commandLimits.premium : commandLimits.nonPremium;
+    const applicableLimit = limits?.limit; // Store the specific limit value
+    const windowMinutes = limits?.windowMinutes;
 
-    if (!limits || limits.limit < 0) {
-      return { allow: true };
+    // Case 1: No limits defined or limit is negative (unlimited)
+    if (!limits || applicableLimit < 0) {
+      return { status: "allowed", isPremium, limit: -1 }; // Indicate unlimited
     }
-    if (limits.limit === 0) {
+
+    // Case 2: Command explicitly disabled (limit is 0)
+    if (applicableLimit === 0) {
+      logger.info(`[checkRateLimit] Command '${commandName}' is disabled (limit 0). User: ${userId}`);
       return {
-        allow: false,
+        status: "disabled",
         message: `❌ Desculpe, o comando \`${commandName}\` está temporariamente desativado.`,
-      }; // Explicitly disabled
+        isPremium,
+        limit: 0,
+      };
     }
 
-    const { limit, windowMinutes } = limits;
+    // Case 3: Rate limiting applies (limit > 0)
     const now = moment();
     const windowMillis = windowMinutes * 60 * 1000;
 
@@ -92,19 +97,19 @@ async function checkRateLimit(userId, commandName) {
       FROM command_usage
       WHERE user_id = ? AND command_name = ?
     `;
-    //logger.debug(`[checkRateLimit] Executing select query: ${selectQuery} with params:`, [userId, commandName]);
     const usageData = await runQuery(selectQuery, [userId, commandName]);
-    //logger.debug(`[checkRateLimit] Select query results:`, usageData);
 
     let currentCount = 0;
     let windowStart = null;
 
     if (usageData.length > 0) {
-      currentCount = usageData[0].usage_count_window;
-      windowStart = moment(usageData[0].window_start_timestamp);
+      currentCount = usageData[0].usage_count_window || 0; // Ensure it's a number
+      windowStart = usageData[0].window_start_timestamp ? moment(usageData[0].window_start_timestamp) : null;
     }
 
+    // Check if window expired or doesn't exist
     if (!windowStart || now.diff(windowStart) > windowMillis) {
+      // Start new window
       const upsertQuery = `
         INSERT INTO command_usage (user_id, command_name, usage_count_window, window_start_timestamp, last_used_timestamp)
         VALUES (?, ?, 1, ?, ?)
@@ -113,21 +118,19 @@ async function checkRateLimit(userId, commandName) {
           window_start_timestamp = VALUES(window_start_timestamp),
           last_used_timestamp = VALUES(last_used_timestamp)
       `;
-      //logger.debug(`[checkRateLimit] Executing upsert query: ${upsertQuery} with params:`, [userId, commandName, now.toDate(), now.toDate()]);
       await runQuery(upsertQuery, [userId, commandName, now.toDate(), now.toDate()]);
-      logger.info(
-        `[checkRateLimit] User ${userId} used command ${commandName}. Count reset/started. (Limit: ${limit}/${windowMinutes}m)`
-      );
-      return { allow: true };
+      logger.info(`[checkRateLimit] User ${userId} used ${commandName}. Count reset/started. (Limit: ${applicableLimit}/${windowMinutes}m, Premium: ${isPremium})`);
+      // Return count *before* this execution (which was 0 in the new/reset window)
+      return { status: "allowed", isPremium, currentCount: 0, limit: applicableLimit };
     } else {
-      if (currentCount >= limit) {
+      // Within existing window
+      if (currentCount >= applicableLimit) {
+        // Rate limited
         const remainingMillis = windowMillis - now.diff(windowStart);
         const remainingMinutes = Math.ceil(remainingMillis / (60 * 1000));
         const message = `⚠️ *Limite de Uso Atingido* ⚠️
 
-Olá! Detectamos que você utilizou o comando \`!${commandName}\` ${currentCount} vezes ${
-          isPremium ? "(Usuário Premium)" : ""
-        }, atingindo assim o limite permitido de *${limit} uso(s)* dentro do período de *${windowMinutes} minuto(s)*.
+Olá! Detectamos que você utilizou o comando \`!${commandName}\` ${currentCount} vezes ${isPremium ? "(Usuário Premium)" : ""}, atingindo assim o limite permitido de *${applicableLimit} uso(s)* dentro do período de *${windowMinutes} minuto(s)*.
 
 ⏳ Para garantir estabilidade, segurança e uma boa experiência para todos os usuários, impomos essa limitação temporária. Você poderá utilizar este comando novamente em aproximadamente *${remainingMinutes} minuto(s)*.
 
@@ -138,35 +141,28 @@ Olá! Detectamos que você utilizou o comando \`!${commandName}\` ${currentCount
 
 Agradecemos pela compreensão e pelo uso do nosso serviço. 🚀`;
 
-        logger.warn(
-          `[checkRateLimit] User ${userId} rate limited for command ${commandName}. Count: ${currentCount}/${limit}`
-        );
-        return { allow: false, message: message };
+        logger.warn(`[checkRateLimit] User ${userId} rate limited for ${commandName}. Count: ${currentCount}/${applicableLimit} (Premium: ${isPremium})`);
+        return { status: "rate_limited", message: message, isPremium, currentCount, limit: applicableLimit };
       } else {
+        // Allowed, increment count
         const updateQuery = `
           UPDATE command_usage
           SET usage_count_window = usage_count_window + 1, last_used_timestamp = ?
           WHERE user_id = ? AND command_name = ?
         `;
-        //logger.debug(`[checkRateLimit] Executing update query: ${updateQuery} with params:`, [now.toDate(), userId, commandName]);
         await runQuery(updateQuery, [now.toDate(), userId, commandName]);
-        logger.info(
-          `[checkRateLimit] User ${userId} used command ${commandName}. Count: ${
-            currentCount + 1
-          }/${limit} (Limit: ${limit}/${windowMinutes}m)`
-        );
-        return { allow: true };
+        logger.info(`[checkRateLimit] User ${userId} used ${commandName}. Count: ${currentCount + 1}/${applicableLimit} (Limit: ${applicableLimit}/${windowMinutes}m, Premium: ${isPremium})`);
+        // Return count *before* incrementing
+        return { status: "allowed", isPremium, currentCount, limit: applicableLimit };
       }
     }
   } catch (error) {
-    logger.error(
-      `[checkRateLimit] Error checking rate limit for user ${userId}, command ${commandName}:`,
-      error
-    );
+    logger.error(`[checkRateLimit] Error checking rate limit for user ${userId}, command ${commandName}:`, error);
+    // Return error status, include isPremium if determined before error
     return {
-      allow: false,
-      message:
-        "❌ Ocorreu um erro interno ao verificar seus limites de uso. Tente novamente mais tarde.",
+      status: "error",
+      message: "❌ Ocorreu um erro interno ao verificar seus limites de uso. Tente novamente mais tarde.",
+      isPremium: isPremium, // Include premium status determined before the error
     };
   }
 }
