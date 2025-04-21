@@ -1,10 +1,12 @@
 // /home/kaiky/Área de trabalho/dev/src/controllers/InteractionController.js
 const logger = require("../utils/logger");
 const config = require("../config/options.json");
-// No need for runQuery or ensureHasInteractedColumn here anymore
+// Optional: Load dotenv here if not guaranteed to be loaded before this module runs
+// require('dotenv').config();
 
 /**
- * Sends the configured welcome message to a user.
+ * Sends the configured welcome message to a user, *only if* the
+ * SEND_WELCOME_MESSAGES environment variable is set to 'true'.
  * Called after logInteraction confirms it's the first eligible interaction.
  *
  * @param {string} userId - The user's JID.
@@ -18,7 +20,17 @@ const config = require("../config/options.json");
  * @returns {Promise<void>}
  */
 async function sendWelcomeMessage(userId, userName, client, from, info, expirationMessage, ownerName, ownerNumber) {
-  logger.info(`[sendWelcomeMessage] Solicitado envio de boas-vindas para ${userId} (${userName}).`);
+  // --- Environment Variable Check ---
+  // Check if the environment variable is explicitly set to 'true'
+  const shouldSendWelcome = process.env.SEND_WELCOME_MESSAGES === "true";
+
+  if (!shouldSendWelcome) {
+    logger.info(`[sendWelcomeMessage] Skipping welcome message for ${userId} because SEND_WELCOME_MESSAGES is not 'true'.`);
+    return; // Exit the function if sending is disabled
+  }
+
+  // --- Proceed with sending if enabled ---
+  logger.info(`[sendWelcomeMessage] Sending welcome message enabled. Attempting to send to ${userId} (${userName}).`);
   try {
     // Get the welcome message template from config
     const welcomeMessageTemplate = config?.bot?.onboarding?.firstInteractionMessage || "👋 Bem-vindo(a)! Use `{prefix}menu` para descobrir o que posso fazer."; // Default updated slightly
