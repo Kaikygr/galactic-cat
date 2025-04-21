@@ -2,247 +2,249 @@
  * @fileoverview Funções para gerenciar as configurações de boas-vindas e saída
  *               de grupos no banco de dados. Permite ativar/desativar as mensagens,
  *               definir textos personalizados e URLs de mídia.
- * @requires ../utils/logger - Módulo de logging (ajuste o caminho conforme necessário).
- * @requires ../database/processDatabase - Funções para interagir com o banco de dados (ajuste o caminho conforme necessário).
+ * @requires ../../../utils/logger - Módulo de logging.
+ * @requires ../../../database/processDatabase - Funções para interagir com o banco de dados.
  */
 
-const logger = require("../../../utils/logger"); // Ajuste o caminho se necessário
-const { runQuery } = require("../../../database/processDatabase"); // Ajuste o caminho se necessário
+const logger = require("../../../utils/logger");
+const { runQuery } = require("../../../database/processDatabase");
 
-// Nome da tabela de grupos no banco de dados.
 const GROUPS_TABLE_NAME = "groups";
+const MAX_MESSAGE_LENGTH = 4000; // Limite de caracteres para mensagens (exemplo)
+const MAX_URL_LENGTH = 2048; // Limite de caracteres para URLs (exemplo)
+
+// --- Funções Auxiliares ---
 
 /**
- * Ativa ou desativa as mensagens de boas-vindas e saída para um grupo específico.
- * Atualiza a coluna `is_welcome` no banco de dados.
- *
- * @async
- * @function setWelcomeStatus
- * @param {string} groupId - O JID (ID) do grupo a ser modificado.
- * @param {boolean} enabled - `true` para ativar, `false` para desativar.
- * @returns {Promise<void>} Resolve em caso de sucesso, rejeita em caso de erro no banco de dados.
- * @throws {Error} Se o `groupId` for inválido ou se ocorrer um erro durante a atualização no banco de dados.
+ * Valida se o groupId fornecido é uma string não vazia.
+ * Lança um erro e registra no log se for inválido.
+ * @param {string} groupId - O ID do grupo a ser validado.
+ * @param {string} context - O nome da função chamadora para contexto de log.
+ * @throws {Error} Se o groupId for inválido.
  */
-const setWelcomeStatus = async (groupId, enabled) => {
-  // Validação básica do ID do grupo
+const validateGroupId = (groupId, context) => {
   if (!groupId || typeof groupId !== "string" || groupId.trim() === "") {
-    const errorMsg = "[setWelcomeStatus] ID do grupo inválido fornecido.";
-    logger.error(errorMsg);
-    throw new Error(errorMsg);
+    const msg = `[${context}] ID do grupo inválido fornecido: '${groupId}'`;
+    logger.error(msg);
+    throw new Error(msg);
   }
-  // Validação do tipo do parâmetro 'enabled'
-  if (typeof enabled !== "boolean") {
-    const errorMsg = `[setWelcomeStatus] Parâmetro 'enabled' deve ser booleano, recebido: ${typeof enabled}`;
+};
+
+/**
+ * Executa uma query UPDATE, verifica as linhas afetadas e registra resultados/erros no log.
+ * @param {object} options - Opções para a operação de atualização.
+ * @param {string} options.query - A string da query SQL.
+ * @param {Array<any>} options.params - Parâmetros para a query SQL.
+ * @param {string} options.groupId - O ID do grupo que está sendo atualizado.
+ * @param {string} options.action - Uma string identificando a ação (ex: "setWelcomeStatus") para o log.
+ * @returns {Promise<object>} O objeto de resultado de runQuery.
+ * @throws {Error} Se a consulta ao banco de dados falhar.
+ */
+const executeUpdate = async ({ query, params, groupId, action }) => {
+  logger.info(`[${action}] Tentando atualização para ${groupId}. Parâmetros: ${JSON.stringify(params)}`);
+  try {
+    const result = await runQuery(query, params);
+    if (result && (result.affectedRows === 0 || result.rowCount === 0)) {
+      // Tenta buscar o grupo para saber se ele existe ou se o valor já era o mesmo
+      const checkQuery = `SELECT id FROM \`${GROUPS_TABLE_NAME}\` WHERE id = ? LIMIT 1`;
+      const checkResult = await runQuery(checkQuery, [groupId]);
+      if (checkResult.length === 0) {
+        logger.warn(`[${action}] Grupo ${groupId} não encontrado no banco de dados. Nenhuma linha afetada.`);
+        throw new Error(`[${action}] Grupo ${groupId} não encontrado.`);
+      } else {
+        logger.warn(`[${action}] Grupo ${groupId} encontrado, mas o valor pode já ser o mesmo. Nenhuma linha afetada.`);
+      }
+    } else {
+      logger.info(`[${action}] Atualização para ${groupId} realizada com sucesso.`);
+    }
+    return result;
+  } catch (error) {
+    logger.error(`[${action}] Erro na atualização para ${groupId}: ${error.message}`, {
+      stack: error.stack,
+      query,
+      params,
+    });
+    throw error;
+  }
+};
+
+/**
+ * Função auxiliar genérica para definir um campo específico na tabela de grupos.
+ * @param {string} groupId - O ID do grupo.
+ * @param {string} fieldName - O nome da coluna a ser atualizada.
+ * @param {any} value - O valor a ser definido para o campo.
+ * @param {string} action - String de identificação da ação para logs.
+ * @returns {Promise<void>}
+ * @throws {Error} Se a validação do groupId ou a atualização do banco de dados falhar.
+ */
+const setGroupField = async (groupId, fieldName, value, action) => {
+  validateGroupId(groupId, action); // Garante que o ID do grupo é válido
+
+  // Validação básica do nome do campo (evita SQL injection se fieldName viesse de input externo)
+  // Neste caso, fieldName é definido internamente, então é seguro.
+  if (!fieldName || typeof fieldName !== "string" || !/^[a-zA-Z0-9_]+$/.test(fieldName)) {
+    const errorMsg = `[${action}] Nome de campo inválido fornecido para setGroupField: ${fieldName}`;
     logger.error(errorMsg);
     throw new Error(errorMsg);
   }
 
-  // Converte o booleano para o formato do banco (1 para true, 0 para false)
+  const query = `UPDATE \`${GROUPS_TABLE_NAME}\` SET \`${fieldName}\` = ? WHERE \`id\` = ?`;
+  const params = [value, groupId]; // O valor já deve vir preparado pela função chamadora
+  await executeUpdate({ query, params, groupId, action });
+};
+
+// --- Funções Principais ---
+
+/**
+ * Define o status da mensagem de boas-vindas (ativado/desativado) para um grupo.
+ * (Mantida separada por lidar com booleano -> inteiro)
+ * @param {string} groupId - O ID do grupo.
+ * @param {boolean} enabled - True para ativar, false para desativar.
+ * @returns {Promise<void>}
+ * @throws {Error} Se a validação ou atualização do banco de dados falhar.
+ */
+const setWelcomeStatus = async (groupId, enabled) => {
+  const action = "setWelcomeStatus";
+  validateGroupId(groupId, action);
+
+  if (typeof enabled !== "boolean") {
+    const errorMsg = `[${action}] Parâmetro 'enabled' deve ser booleano para ${groupId}, recebido: ${typeof enabled}`;
+    logger.error(errorMsg);
+    throw new Error(errorMsg);
+  }
+
   const newState = enabled ? 1 : 0;
   const query = `UPDATE \`${GROUPS_TABLE_NAME}\` SET \`is_welcome\` = ? WHERE \`id\` = ?`;
   const params = [newState, groupId];
 
-  logger.info(`[setWelcomeStatus] Tentando atualizar status de boas-vindas para ${groupId}: ${enabled ? "ATIVADO" : "DESATIVADO"}`);
-
-  try {
-    // Executa a query de atualização
-    const result = await runQuery(query, params);
-
-    // Verifica se alguma linha foi realmente afetada (indica que o grupo existe)
-    // A propriedade exata pode variar (affectedRows, rowCount), ajuste se necessário
-    if (result && (result.affectedRows === 0 || result.rowCount === 0)) {
-      logger.warn(`[setWelcomeStatus] Grupo ${groupId} não encontrado ou status já era ${newState}. Nenhuma linha afetada.`);
-      // Você pode optar por lançar um erro aqui se o grupo *deveria* existir
-      // throw new Error(`Grupo ${groupId} não encontrado.`);
-    } else {
-      logger.info(`[setWelcomeStatus] Status de boas-vindas para ${groupId} atualizado com sucesso.`);
-    }
-  } catch (error) {
-    logger.error(`[setWelcomeStatus] Erro ao atualizar status de boas-vindas para ${groupId}: ${error.message}`, { stack: error.stack, query, params });
-    // Relança o erro para que a chamada da função possa tratá-lo
-    throw error;
-  }
+  await executeUpdate({ query, params, groupId, action });
 };
 
 /**
- * Define a mensagem de boas-vindas personalizada para um grupo específico.
- * Atualiza a coluna `welcome_message` no banco de dados.
- *
- * @async
- * @function setWelcomeMessage
- * @param {string} groupId - O JID (ID) do grupo a ser modificado.
- * @param {string | null} message - O novo template da mensagem de boas-vindas. Use placeholders como {user}, {groupName}, etc. Passar `null` ou string vazia pode limpar a mensagem (depende da sua lógica de uso, aqui definimos como string vazia).
- * @returns {Promise<void>} Resolve em caso de sucesso, rejeita em caso de erro no banco de dados.
- * @throws {Error} Se o `groupId` for inválido ou se ocorrer um erro durante a atualização no banco de dados.
+ * Define a mensagem de boas-vindas personalizada para um grupo.
+ * @param {string} groupId - O ID do grupo.
+ * @param {string | null} message - O modelo da mensagem de boas-vindas, ou null para limpar.
+ * @returns {Promise<void>}
+ * @throws {Error} Se a validação ou atualização do banco de dados falhar.
  */
 const setWelcomeMessage = async (groupId, message) => {
-  if (!groupId || typeof groupId !== "string" || groupId.trim() === "") {
-    const errorMsg = "[setWelcomeMessage] ID do grupo inválido fornecido.";
+  const action = "setWelcomeMessage";
+
+  // Validação específica do valor 'message'
+  if (message !== null && typeof message !== "string") {
+    const errorMsg = `[${action}] Mensagem inválida para ${groupId}: deve ser uma string ou null. Recebido: ${typeof message}`;
+    logger.error(errorMsg);
+    throw new Error(errorMsg);
+  }
+  if (message && message.length > MAX_MESSAGE_LENGTH) {
+    const errorMsg = `[${action}] Mensagem muito longa para ${groupId} (${message.length} caracteres). Limite: ${MAX_MESSAGE_LENGTH}.`;
     logger.error(errorMsg);
     throw new Error(errorMsg);
   }
 
-  // Garante que o valor seja uma string (mesmo que vazia se for null/undefined)
-  const messageToSet = message == null ? "" : String(message);
-  const query = `UPDATE \`${GROUPS_TABLE_NAME}\` SET \`welcome_message\` = ? WHERE \`id\` = ?`;
-  const params = [messageToSet, groupId];
+  // Prepara o valor para o banco de dados
+  const messageToSet = message === null ? null : String(message);
 
-  logger.info(`[setWelcomeMessage] Tentando atualizar mensagem de boas-vindas para ${groupId}.`);
-
-  try {
-    const result = await runQuery(query, params);
-    if (result && (result.affectedRows === 0 || result.rowCount === 0)) {
-      logger.warn(`[setWelcomeMessage] Grupo ${groupId} não encontrado ou mensagem já era a mesma. Nenhuma linha afetada.`);
-      // throw new Error(`Grupo ${groupId} não encontrado.`);
-    } else {
-      logger.info(`[setWelcomeMessage] Mensagem de boas-vindas para ${groupId} atualizada com sucesso.`);
-    }
-  } catch (error) {
-    logger.error(`[setWelcomeMessage] Erro ao atualizar mensagem de boas-vindas para ${groupId}: ${error.message}`, { stack: error.stack, query, params });
-    throw error;
-  }
+  // Chama a função genérica
+  await setGroupField(groupId, "welcome_message", messageToSet, action);
 };
 
 /**
- * Define a URL da mídia de boas-vindas para um grupo específico.
- * Atualiza a coluna `welcome_media` no banco de dados.
- * Se a URL for vazia, nula ou indefinida, define a coluna como NULL no banco.
- *
- * @async
- * @function setWelcomeMedia
- * @param {string} groupId - O JID (ID) do grupo a ser modificado.
- * @param {string | null | undefined} mediaUrl - A URL da imagem/vídeo a ser enviada na boas-vindas, ou null/vazio para remover.
- * @returns {Promise<void>} Resolve em caso de sucesso, rejeita em caso de erro no banco de dados.
- * @throws {Error} Se o `groupId` for inválido ou se ocorrer um erro durante a atualização no banco de dados.
+ * Define a URL de mídia de boas-vindas personalizada para um grupo.
+ * @param {string} groupId - O ID do grupo.
+ * @param {string | null} mediaUrl - A URL da mídia, ou null/vazio para limpar.
+ * @returns {Promise<void>}
+ * @throws {Error} Se a validação ou atualização do banco de dados falhar.
  */
 const setWelcomeMedia = async (groupId, mediaUrl) => {
-  if (!groupId || typeof groupId !== "string" || groupId.trim() === "") {
-    const errorMsg = "[setWelcomeMedia] ID do grupo inválido fornecido.";
+  const action = "setWelcomeMedia";
+
+  // Validação específica do valor 'mediaUrl'
+  if (mediaUrl !== null && typeof mediaUrl !== "string") {
+    const errorMsg = `[${action}] URL de mídia inválida para ${groupId}: deve ser uma string ou null. Recebido: ${typeof mediaUrl}`;
     logger.error(errorMsg);
     throw new Error(errorMsg);
   }
-
-  // Define como NULL se a URL for vazia, nula ou indefinida, caso contrário, usa a string.
-  const urlToSet = mediaUrl && String(mediaUrl).trim() !== "" ? String(mediaUrl).trim() : null;
-  const query = `UPDATE \`${GROUPS_TABLE_NAME}\` SET \`welcome_media\` = ? WHERE \`id\` = ?`;
-  const params = [urlToSet, groupId];
-
-  logger.info(`[setWelcomeMedia] Tentando atualizar mídia de boas-vindas para ${groupId}: ${urlToSet ? urlToSet : "NENHUMA"}`);
-
-  try {
-    const result = await runQuery(query, params);
-    if (result && (result.affectedRows === 0 || result.rowCount === 0)) {
-      logger.warn(`[setWelcomeMedia] Grupo ${groupId} não encontrado ou mídia já era a mesma. Nenhuma linha afetada.`);
-      // throw new Error(`Grupo ${groupId} não encontrado.`);
-    } else {
-      logger.info(`[setWelcomeMedia] Mídia de boas-vindas para ${groupId} atualizada com sucesso.`);
-    }
-  } catch (error) {
-    logger.error(`[setWelcomeMedia] Erro ao atualizar mídia de boas-vindas para ${groupId}: ${error.message}`, { stack: error.stack, query, params });
-    throw error;
+  if (mediaUrl && mediaUrl.length > MAX_URL_LENGTH) {
+    const errorMsg = `[${action}] URL de mídia muito longa para ${groupId} (${mediaUrl.length} caracteres). Limite: ${MAX_URL_LENGTH}.`;
+    logger.error(errorMsg);
+    throw new Error(errorMsg);
   }
+  // Nota: A validação de formato de URL (http/https) é feita em welcomeCommands.js
+
+  // Prepara o valor para o banco de dados (define como NULL se vazio/null/undefined)
+  const urlToSet = mediaUrl && String(mediaUrl).trim() !== "" ? String(mediaUrl).trim() : null;
+
+  // Chama a função genérica
+  await setGroupField(groupId, "welcome_media", urlToSet, action);
 };
 
 /**
- * Define a mensagem de saída personalizada para um grupo específico.
- * Atualiza a coluna `exit_message` no banco de dados.
- *
- * @async
- * @function setExitMessage
- * @param {string} groupId - O JID (ID) do grupo a ser modificado.
- * @param {string | null} message - O novo template da mensagem de saída. Use placeholders como {user}, {groupName}, etc. Passar `null` ou string vazia pode limpar a mensagem.
- * @returns {Promise<void>} Resolve em caso de sucesso, rejeita em caso de erro no banco de dados.
- * @throws {Error} Se o `groupId` for inválido ou se ocorrer um erro durante a atualização no banco de dados.
+ * Define a mensagem de saída personalizada para um grupo.
+ * @param {string} groupId - O ID do grupo.
+ * @param {string | null} message - O modelo da mensagem de saída, ou null para limpar.
+ * @returns {Promise<void>}
+ * @throws {Error} Se a validação ou atualização do banco de dados falhar.
  */
 const setExitMessage = async (groupId, message) => {
-  if (!groupId || typeof groupId !== "string" || groupId.trim() === "") {
-    const errorMsg = "[setExitMessage] ID do grupo inválido fornecido.";
+  const action = "setExitMessage";
+
+  // Validação específica do valor 'message'
+  if (message !== null && typeof message !== "string") {
+    const errorMsg = `[${action}] Mensagem inválida para ${groupId}: deve ser uma string ou null. Recebido: ${typeof message}`;
+    logger.error(errorMsg);
+    throw new Error(errorMsg);
+  }
+  if (message && message.length > MAX_MESSAGE_LENGTH) {
+    const errorMsg = `[${action}] Mensagem muito longa para ${groupId} (${message.length} caracteres). Limite: ${MAX_MESSAGE_LENGTH}.`;
     logger.error(errorMsg);
     throw new Error(errorMsg);
   }
 
-  const messageToSet = message == null ? "" : String(message);
-  const query = `UPDATE \`${GROUPS_TABLE_NAME}\` SET \`exit_message\` = ? WHERE \`id\` = ?`;
-  const params = [messageToSet, groupId];
+  // Prepara o valor para o banco de dados
+  const messageToSet = message === null ? null : String(message);
 
-  logger.info(`[setExitMessage] Tentando atualizar mensagem de saída para ${groupId}.`);
-
-  try {
-    const result = await runQuery(query, params);
-    if (result && (result.affectedRows === 0 || result.rowCount === 0)) {
-      logger.warn(`[setExitMessage] Grupo ${groupId} não encontrado ou mensagem já era a mesma. Nenhuma linha afetada.`);
-      // throw new Error(`Grupo ${groupId} não encontrado.`);
-    } else {
-      logger.info(`[setExitMessage] Mensagem de saída para ${groupId} atualizada com sucesso.`);
-    }
-  } catch (error) {
-    logger.error(`[setExitMessage] Erro ao atualizar mensagem de saída para ${groupId}: ${error.message}`, { stack: error.stack, query, params });
-    throw error;
-  }
+  // Chama a função genérica
+  await setGroupField(groupId, "exit_message", messageToSet, action);
 };
 
 /**
- * Define a URL da mídia de saída para um grupo específico.
- * Atualiza a coluna `exit_media` no banco de dados.
- * Se a URL for vazia, nula ou indefinida, define a coluna como NULL no banco.
- *
- * @async
- * @function setExitMedia
- * @param {string} groupId - O JID (ID) do grupo a ser modificado.
- * @param {string | null | undefined} mediaUrl - A URL da imagem/vídeo a ser enviada na saída, ou null/vazio para remover.
- * @returns {Promise<void>} Resolve em caso de sucesso, rejeita em caso de erro no banco de dados.
- * @throws {Error} Se o `groupId` for inválido ou se ocorrer um erro durante a atualização no banco de dados.
+ * Define a URL de mídia de saída personalizada para um grupo.
+ * @param {string} groupId - O ID do grupo.
+ * @param {string | null} mediaUrl - A URL da mídia, ou null/vazio para limpar.
+ * @returns {Promise<void>}
+ * @throws {Error} Se a validação ou atualização do banco de dados falhar.
  */
 const setExitMedia = async (groupId, mediaUrl) => {
-  if (!groupId || typeof groupId !== "string" || groupId.trim() === "") {
-    const errorMsg = "[setExitMedia] ID do grupo inválido fornecido.";
+  const action = "setExitMedia";
+
+  // Validação específica do valor 'mediaUrl'
+  if (mediaUrl !== null && typeof mediaUrl !== "string") {
+    const errorMsg = `[${action}] URL de mídia inválida para ${groupId}: deve ser uma string ou null. Recebido: ${typeof mediaUrl}`;
     logger.error(errorMsg);
     throw new Error(errorMsg);
   }
-
-  const urlToSet = mediaUrl && String(mediaUrl).trim() !== "" ? String(mediaUrl).trim() : null;
-  const query = `UPDATE \`${GROUPS_TABLE_NAME}\` SET \`exit_media\` = ? WHERE \`id\` = ?`;
-  const params = [urlToSet, groupId];
-
-  logger.info(`[setExitMedia] Tentando atualizar mídia de saída para ${groupId}: ${urlToSet ? urlToSet : "NENHUMA"}`);
-
-  try {
-    const result = await runQuery(query, params);
-    if (result && (result.affectedRows === 0 || result.rowCount === 0)) {
-      logger.warn(`[setExitMedia] Grupo ${groupId} não encontrado ou mídia já era a mesma. Nenhuma linha afetada.`);
-      // throw new Error(`Grupo ${groupId} não encontrado.`);
-    } else {
-      logger.info(`[setExitMedia] Mídia de saída para ${groupId} atualizada com sucesso.`);
-    }
-  } catch (error) {
-    logger.error(`[setExitMedia] Erro ao atualizar mídia de saída para ${groupId}: ${error.message}`, { stack: error.stack, query, params });
-    throw error;
+  if (mediaUrl && mediaUrl.length > MAX_URL_LENGTH) {
+    const errorMsg = `[${action}] URL de mídia muito longa para ${groupId} (${mediaUrl.length} caracteres). Limite: ${MAX_URL_LENGTH}.`;
+    logger.error(errorMsg);
+    throw new Error(errorMsg);
   }
+  // Nota: A validação de formato de URL (http/https) é feita em welcomeCommands.js
+
+  // Prepara o valor para o banco de dados (define como NULL se vazio/null/undefined)
+  const urlToSet = mediaUrl && String(mediaUrl).trim() !== "" ? String(mediaUrl).trim() : null;
+
+  // Chama a função genérica
+  await setGroupField(groupId, "exit_media", urlToSet, action);
 };
 
 /**
- * Exporta as funções para serem utilizadas em outros módulos (ex: comandos do bot).
- * @module groupSettingsController
+ * Exporta as funções para serem utilizadas em outros módulos.
  */
 module.exports = {
-  /**
-   * @see setWelcomeStatus
-   */
   setWelcomeStatus,
-  /**
-   * @see setWelcomeMessage
-   */
   setWelcomeMessage,
-  /**
-   * @see setWelcomeMedia
-   */
   setWelcomeMedia,
-  /**
-   * @see setExitMessage
-   */
   setExitMessage,
-  /**
-   * @see setExitMedia
-   */
   setExitMedia,
 };

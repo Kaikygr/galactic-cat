@@ -2,9 +2,6 @@ const mysql = require("mysql2/promise");
 const logger = require("../utils/logger");
 require("dotenv").config();
 
-// --- Configuração e Validação ---
-
-// Define variáveis de ambiente obrigatórias e opcionais com valores padrão
 const ENV_VARS = {
   MYSQL_HOST: process.env.MYSQL_HOST || "localhost",
   MYSQL_LOGIN_USER: process.env.MYSQL_LOGIN_USER,
@@ -15,7 +12,6 @@ const ENV_VARS = {
   MYSQL_CONNECT_TIMEOUT: parseInt(process.env.MYSQL_CONNECT_TIMEOUT || "10000", 10),
 };
 
-// Valida variáveis de ambiente obrigatórias
 const requiredEnvVars = ["MYSQL_LOGIN_USER", "MYSQL_LOGIN_PASSWORD"];
 requiredEnvVars.forEach(envVar => {
   if (!ENV_VARS[envVar]) {
@@ -24,10 +20,8 @@ requiredEnvVars.forEach(envVar => {
   }
 });
 
-// Log da configuração sendo usada (excluindo senha por segurança)
 logger.info(`[ DB Config ] Usando configuração: Host=${ENV_VARS.MYSQL_HOST}, User=${ENV_VARS.MYSQL_LOGIN_USER}, DB=${ENV_VARS.MYSQL_DATABASE}, PoolLimit=${ENV_VARS.MYSQL_CONNECTION_LIMIT}, VerifyPoolOnInit=${ENV_VARS.VERIFY_POOL_ON_INIT}, ConnectTimeout=${ENV_VARS.MYSQL_CONNECT_TIMEOUT}ms`);
 
-// Objeto de configuração do banco de dados para o pool
 const databasePoolConfig = {
   host: ENV_VARS.MYSQL_HOST,
   user: ENV_VARS.MYSQL_LOGIN_USER,
@@ -42,17 +36,8 @@ const databasePoolConfig = {
   connectTimeout: ENV_VARS.MYSQL_CONNECT_TIMEOUT,
 };
 
-// --- Gerenciamento do Pool de Conexões ---
-
 let pool = null;
 
-/**
- * Garante que o banco de dados especificado existe, criando-o se necessário.
- * Usa uma conexão temporária e verifica com um ping.
- * @param {object} baseConfig - Configuração de conexão do banco *sem* o nome do banco.
- * @param {string} dbName - O nome do banco de dados a ser verificado.
- * @throws {Error} Se a verificação/criação do banco falhar.
- */
 async function ensureDatabaseExists(baseConfig, dbName) {
   let tempConnection = null;
   const startTime = process.hrtime();
@@ -62,7 +47,6 @@ async function ensureDatabaseExists(baseConfig, dbName) {
     await tempConnection.ping();
     const [pingSeconds, pingNanoseconds] = process.hrtime(startTime);
     const pingMs = (pingSeconds * 1000 + pingNanoseconds / 1e6).toFixed(2);
-    //logger.debug(`[ ensureDatabaseExists ] Ping da conexão temporária bem-sucedido (${pingMs}ms).`);
 
     await tempConnection.execute(`CREATE DATABASE IF NOT EXISTS \`${dbName}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
     logger.info(`[ ensureDatabaseExists ] ✅ Banco de dados '${dbName}' verificado/criado com sucesso.`);
@@ -76,13 +60,6 @@ async function ensureDatabaseExists(baseConfig, dbName) {
   }
 }
 
-/**
- * Inicializa o pool de conexões do banco de dados.
- * Cria o banco de dados se não existir usando uma conexão temporária.
- * Opcionalmente pinga um pool existente para verificar sua saúde antes de retorná-lo.
- * @returns {Promise<mysql.Pool>} O pool de conexões inicializado.
- * @throws {Error} Se a inicialização falhar.
- */
 async function initDatabase() {
   if (pool && ENV_VARS.VERIFY_POOL_ON_INIT) {
     logger.info("[ initDatabase ] 🩺 Verificando saúde do pool existente (VERIFY_POOL_ON_INIT=true)...");
@@ -102,7 +79,6 @@ async function initDatabase() {
     return pool;
   }
 
-  // --- Lógica de Criação do Pool ---
   try {
     logger.info("[ initDatabase ] 🔄 Tentando inicializar o pool de conexões...");
 
@@ -125,22 +101,6 @@ async function initDatabase() {
   }
 }
 
-// --- Definições de Tipos JSDoc ---
-/** @typedef {Array<object>} SelectResult */
-/** @typedef {object} InsertResult @property {number|string} insertId @property {number} affectedRows */
-/** @typedef {object} UpdateOrDeleteResult @property {number} affectedRows @property {number|null} changedRows */
-/** @typedef {object} DDLResult */
-
-/**
- * Executa uma consulta SQL usando uma conexão do pool.
- * Gerencia automaticamente a aquisição e liberação da conexão.
- * Usa declarações preparadas para prevenir injeção SQL.
- *
- * @param {string} query - A string de consulta SQL (com placeholders '?').
- * @param {Array} [params=[]] - Um array de parâmetros para vincular aos placeholders da query.
- * @returns {Promise<SelectResult|InsertResult|UpdateOrDeleteResult|DDLResult>} - Retorna resultados baseados no tipo da query.
- * @throws {Error} Se a execução da query falhar ou o pool não estiver inicializado.
- */
 async function runQuery(query, params = []) {
   if (!pool) {
     logger.warn("[ runQuery ] ⚠️ Pool não inicializado. Tentando inicializar...");
