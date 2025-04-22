@@ -1,7 +1,9 @@
+require("dotenv").config();
+
 module.exports = {
   apps: [
     {
-      name: "cat-production",
+      name: process.env.ECOSYTEM_NAME,
       script: "./src/auth/connection.js",
       exec_mode: "fork",
       instances: 1,
