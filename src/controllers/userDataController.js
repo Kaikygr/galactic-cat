@@ -1,55 +1,45 @@
-/**
- * @fileoverview Controller for managing user and group data persistence in the database.
- * Handles saving/updating user info, group metadata, participants, and messages.
- * Includes logic for ensuring data integrity (e.g., foreign keys), caching group metadata,
- * and tracking user interactions (first/last timestamps and history).
- */
-
-// --- Dependencies ---
 const { runQuery } = require("../database/processDatabase");
 const logger = require("../utils/logger");
-const moment = require("moment-timezone"); // Use moment-timezone for consistent time handling
+const moment = require("moment-timezone");
 const crypto = require("crypto");
+const path = require("path");
+const baileys = require("baileys");
 
-// --- Configuration (Assuming this structure, ensure interactionHistory is defined) ---
-// It's better to import this from options.json if possible: const config = require('../config/options.json');
-const config = {
-  database: {
-    tables: {
-      groups: "groups",
-      users: "users",
-      messages: "messages",
-      participants: "group_participants",
-      commandUsage: "command_usage",
-      analytics: "command_analytics",
-      interactionHistory: "interaction_history", // Ensure this table name is in your options.json
-    },
-  },
-  defaults: {
-    pushName: "Desconhecido",
-    groupSubject: "Grupo Desconhecido",
-    groupOwner: null,
-    groupDesc: null,
-    descId: null,
-    subjectOwner: null,
-    isWelcome: 0,
-    welcomeMessage: "Bem-vindo(a) ao {groupName}, {user}! 🎉", // Default welcome
-    welcomeMedia: null,
-    exitMessage: "Até mais, {user}! Sentiremos sua falta. 👋", // Default exit
-    exitMedia: null,
-  },
-  cache: {
-    groupMetadataExpiryMs: 5 * 60 * 1000, // 5 minutes cache expiry
-  },
+const sharedConfigPath = path.join(__dirname, "../config/options.json");
+const sharedConfig = require(sharedConfigPath);
+logger.info("[ userDataController ] ⚙️ Configuração carregada.");
+
+if (!sharedConfig?.database?.tables) {
+  throw new Error("Configuração inválida: 'database.tables' não encontrado em options.json");
+}
+if (!sharedConfig?.defaults?.userData) {
+  throw new Error("Configuração inválida: 'defaults.userData' não encontrado em options.json");
+}
+if (!sharedConfig?.defaults?.groupData) {
+  logger.warn("[ userDataController ] ⚠️ Aviso: 'defaults.groupData' não encontrado em options.json. Fallbacks podem usar valores codificados.");
+}
+if (sharedConfig?.cache?.groupMetadataExpiryMs === undefined) {
+  logger.warn("[ userDataController ] ⚠️ Aviso: 'cache.groupMetadataExpiryMs' não encontrado em options.json. Usando fallback de 5 minutos.");
+}
+
+const DB_TABLES = sharedConfig.database.tables;
+const DEFAULT_USER_PUSHNAME = sharedConfig.defaults.userData.pushName || "Desconhecido";
+const DEFAULT_GROUP_DATA = sharedConfig.defaults.groupData || {
+  subject: "Grupo Desconhecido",
+  owner: null,
+  desc: null,
+  descId: null,
+  subjectOwner: null,
+  isWelcome: 0,
+  welcomeMessage: "Bem-vindo(a) ao {groupName}, {user}! 🎉",
+  welcomeMedia: null,
+  exitMessage: "Até mais, {user}! Sentiremos sua falta. 👋",
+  exitMedia: null,
 };
+const GROUP_CACHE_EXPIRY_MS = sharedConfig.cache.groupMetadataExpiryMs ?? 5 * 60 * 1000;
 
-// --- Constants ---
-const DEFAULT_WELCOME_MESSAGE = config.defaults.welcomeMessage;
-const DEFAULT_EXIT_MESSAGE = config.defaults.exitMessage;
-
-// --- Cache ---
 class GroupMetadataCache {
-  constructor(expiryMs = config.cache.groupMetadataExpiryMs) {
+  constructor(expiryMs = GROUP_CACHE_EXPIRY_MS) {
     this.cache = new Map();
     this.expiryMs = expiryMs;
     logger.info(`[ GroupMetadataCache ] 🕒 Inicializado com expiração: ${expiryMs}ms`);
@@ -77,7 +67,6 @@ class GroupMetadataCache {
 }
 const groupMetadataCache = new GroupMetadataCache();
 
-// --- Utility Functions ---
 const sanitizeData = (value, defaultValue = null) => (value == null ? defaultValue : value);
 
 const formatTimestampForDB = timestamp => {
@@ -86,7 +75,7 @@ const formatTimestampForDB = timestamp => {
   if (typeof timestamp === "number" && timestamp > 0) m = moment.unix(timestamp);
   else if (timestamp instanceof Date) m = moment(timestamp);
   else m = moment(timestamp);
-  return m.isValid() ? m.format("YYYY-MM-DD HH:mm:ss") : null;
+  return m.isValid() ? m.utc().format("YYYY-MM-DD HH:mm:ss") : null;
 };
 
 const validateIncomingInfo = info => {
@@ -109,85 +98,83 @@ const validateIncomingInfo = info => {
   return { from, userId, isGroup, messageId };
 };
 
-// --- Database Schema Management ---
+async function createTableIfNotExists(tableName, createStatement, loggerPrefix = "[ createTableIfNotExists ]") {
+  try {
+    await runQuery(createStatement);
+    logger.info(`${loggerPrefix} ✅ Tabela '${tableName}' verificada/criada.`);
+  } catch (error) {
+    logger.error(`${loggerPrefix} ❌ Erro ao criar/verificar tabela '${tableName}': ${error.message}`, { stack: error.stack });
+    throw error;
+  }
+}
 
-/**
- * Creates or verifies necessary database tables including interaction tracking.
- */
 async function createTables() {
   logger.info("[ createTables ] 📦 Verificando e criando tabelas...");
-  // Correctly destructure all needed table names from config
-  const { groups, users, messages, participants, commandUsage, analytics, interactionHistory } = config.database.tables;
-
-  // Check if interactionHistory table name is defined
-  if (!interactionHistory) {
-    logger.error("[ createTables ] ❌ Nome da tabela 'interactionHistory' não definido em config.database.tables!");
-    throw new Error("Tabela 'interactionHistory' não configurada.");
-  }
+  const loggerPrefix = "[ createTables ]";
 
   try {
-    // Groups Table
-    await runQuery(`
-      CREATE TABLE IF NOT EXISTS \`${groups}\` (
+    await createTableIfNotExists(
+      DB_TABLES.groups,
+      `CREATE TABLE IF NOT EXISTS \`${DB_TABLES.groups}\` (
         id VARCHAR(255) PRIMARY KEY, name VARCHAR(255), owner VARCHAR(255), created_at DATETIME,
         description TEXT, description_id VARCHAR(255), subject_owner VARCHAR(255), subject_time DATETIME,
         size INT, \`restrict\` TINYINT(1) DEFAULT 0, announce TINYINT(1) DEFAULT 0, is_community TINYINT(1) DEFAULT 0,
         is_community_announce TINYINT(1) DEFAULT 0, join_approval_mode TINYINT(1) DEFAULT 0, member_add_mode TINYINT(1) DEFAULT 0,
         isPremium TINYINT(1) DEFAULT 0, premiumTemp DATETIME DEFAULT NULL,
-        is_welcome TINYINT(1) DEFAULT ${config.defaults.isWelcome}, welcome_message TEXT, welcome_media TEXT DEFAULT NULL,
+        is_welcome TINYINT(1) DEFAULT ${DEFAULT_GROUP_DATA.isWelcome}, welcome_message TEXT, welcome_media TEXT DEFAULT NULL,
         exit_message TEXT, exit_media TEXT DEFAULT NULL
-      ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-    `);
-    logger.info(`[ createTables ] ✅ Tabela '${groups}' verificada/criada.`);
+      ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
+      loggerPrefix
+    );
 
-    // Users Table (with interaction timestamps)
-    await runQuery(`
-      CREATE TABLE IF NOT EXISTS \`${users}\` (
+    await createTableIfNotExists(
+      DB_TABLES.users,
+      `CREATE TABLE IF NOT EXISTS \`${DB_TABLES.users}\` (
         sender VARCHAR(255) PRIMARY KEY, pushName VARCHAR(255), isPremium TINYINT(1) DEFAULT 0,
         premiumTemp DATETIME DEFAULT NULL, has_interacted TINYINT(1) DEFAULT 0 COMMENT 'Flag set on first eligible interaction',
         first_interaction_at DATETIME NULL DEFAULT NULL COMMENT 'Timestamp of the first eligible interaction',
         last_interaction_at DATETIME NULL DEFAULT NULL COMMENT 'Timestamp of the last interaction of any type'
-      ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-    `);
-    logger.info(`[ createTables ] ✅ Tabela '${users}' verificada/criada (com colunas de interação).`);
+      ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
+      loggerPrefix
+    );
 
-    // Messages Table
-    await runQuery(`
-      CREATE TABLE IF NOT EXISTS \`${messages}\` (
+    await createTableIfNotExists(
+      DB_TABLES.messages,
+      `CREATE TABLE IF NOT EXISTS \`${DB_TABLES.messages}\` (
         message_id VARCHAR(255) NOT NULL, sender_id VARCHAR(255) NOT NULL, group_id VARCHAR(255),
         messageType VARCHAR(255), messageContent MEDIUMTEXT, timestamp DATETIME NOT NULL,
         PRIMARY KEY (sender_id, timestamp, message_id), INDEX idx_message_id (message_id), INDEX idx_group_id (group_id),
-        CONSTRAINT fk_sender_id FOREIGN KEY (sender_id) REFERENCES \`${users}\`(sender) ON DELETE CASCADE ON UPDATE CASCADE,
-        CONSTRAINT fk_group_id FOREIGN KEY (group_id) REFERENCES \`${groups}\`(id) ON DELETE SET NULL ON UPDATE CASCADE
-      ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-    `);
-    logger.info(`[ createTables ] ✅ Tabela '${messages}' verificada/criada.`);
+        CONSTRAINT fk_sender_id FOREIGN KEY (sender_id) REFERENCES \`${DB_TABLES.users}\`(sender) ON DELETE CASCADE ON UPDATE CASCADE,
+        CONSTRAINT fk_group_id FOREIGN KEY (group_id) REFERENCES \`${DB_TABLES.groups}\`(id) ON DELETE SET NULL ON UPDATE CASCADE
+      ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
+      loggerPrefix
+    );
 
-    // Group Participants Table
-    await runQuery(`
-      CREATE TABLE IF NOT EXISTS \`${participants}\` (
+    await createTableIfNotExists(
+      DB_TABLES.participants,
+      `CREATE TABLE IF NOT EXISTS \`${DB_TABLES.participants}\` (
         group_id VARCHAR(255) NOT NULL, participant VARCHAR(255) NOT NULL, isAdmin TINYINT(1) DEFAULT 0,
         PRIMARY KEY (group_id, participant),
-        CONSTRAINT fk_group_participants_group FOREIGN KEY (group_id) REFERENCES \`${groups}\`(id) ON DELETE CASCADE ON UPDATE CASCADE,
+        CONSTRAINT fk_group_participants_group FOREIGN KEY (group_id) REFERENCES \`${DB_TABLES.groups}\`(id) ON DELETE CASCADE ON UPDATE CASCADE,
         INDEX idx_participant (participant)
-      ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-    `);
-    logger.info(`[ createTables ] ✅ Tabela '${participants}' verificada/criada.`);
+      ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
+      loggerPrefix
+    );
 
-    // Command Usage Table
-    await runQuery(`
-      CREATE TABLE IF NOT EXISTS \`${commandUsage}\` (
+    await createTableIfNotExists(
+      DB_TABLES.commandUsage,
+      `CREATE TABLE IF NOT EXISTS \`${DB_TABLES.commandUsage}\` (
         user_id VARCHAR(255) NOT NULL, command_name VARCHAR(50) NOT NULL, usage_count_window INT DEFAULT 0,
         window_start_timestamp DATETIME NULL, last_used_timestamp DATETIME NULL,
         PRIMARY KEY (user_id, command_name),
-        CONSTRAINT fk_user_usage FOREIGN KEY (user_id) REFERENCES \`${users}\`(sender) ON DELETE CASCADE ON UPDATE CASCADE
-      ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-    `);
-    logger.info(`[ createTables ] ✅ Tabela '${commandUsage}' verificada/criada.`);
+        CONSTRAINT fk_user_usage FOREIGN KEY (user_id) REFERENCES \`${DB_TABLES.users}\`(sender) ON DELETE CASCADE ON UPDATE CASCADE
+      ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
+      loggerPrefix
+    );
 
-    // Command Analytics Table
-    await runQuery(`
-      CREATE TABLE IF NOT EXISTS \`${analytics}\` (
+    await createTableIfNotExists(
+      DB_TABLES.analytics,
+      `CREATE TABLE IF NOT EXISTS \`${DB_TABLES.analytics}\` (
         \`id\` BIGINT AUTO_INCREMENT PRIMARY KEY, \`user_id\` VARCHAR(255) NOT NULL, \`command_name\` VARCHAR(50) NOT NULL,
         \`group_id\` VARCHAR(255) NULL, \`timestamp\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         \`is_premium_at_execution\` TINYINT(1) NOT NULL, \`execution_status\` ENUM('allowed', 'rate_limited', 'disabled', 'error') NOT NULL,
@@ -195,35 +182,32 @@ async function createTables() {
         INDEX \`idx_analytics_user_id\` (\`user_id\`), INDEX \`idx_analytics_command_name\` (\`command_name\`),
         INDEX \`idx_analytics_group_id\` (\`group_id\`), INDEX \`idx_analytics_timestamp\` (\`timestamp\`),
         INDEX \`idx_analytics_is_premium\` (\`is_premium_at_execution\`), INDEX \`idx_analytics_status\` (\`execution_status\`),
-        CONSTRAINT \`fk_analytics_user_id\` FOREIGN KEY (\`user_id\`) REFERENCES \`${users}\`(\`sender\`) ON DELETE CASCADE ON UPDATE CASCADE,
-        CONSTRAINT \`fk_analytics_group_id\` FOREIGN KEY (\`group_id\`) REFERENCES \`${groups}\`(\`id\`) ON DELETE SET NULL ON UPDATE CASCADE
-      ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-    `);
-    logger.info(`[ createTables ] ✅ Tabela '${analytics}' verificada/criada.`);
+        CONSTRAINT \`fk_analytics_user_id\` FOREIGN KEY (\`user_id\`) REFERENCES \`${DB_TABLES.users}\`(\`sender\`) ON DELETE CASCADE ON UPDATE CASCADE,
+        CONSTRAINT \`fk_analytics_group_id\` FOREIGN KEY (\`group_id\`) REFERENCES \`${DB_TABLES.groups}\`(\`id\`) ON DELETE SET NULL ON UPDATE CASCADE
+      ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
+      loggerPrefix
+    );
 
-    // Interaction History Table (Using the destructured variable)
-    await runQuery(`
-      CREATE TABLE IF NOT EXISTS \`${interactionHistory}\` (
+    await createTableIfNotExists(
+      DB_TABLES.interactionHistory,
+      `CREATE TABLE IF NOT EXISTS \`${DB_TABLES.interactionHistory}\` (
         id BIGINT AUTO_INCREMENT PRIMARY KEY, user_id VARCHAR(255) NOT NULL,
         timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         interaction_type ENUM('private_message', 'private_command', 'group_command', 'group_message') NOT NULL,
         group_id VARCHAR(255) NULL DEFAULT NULL, command_name VARCHAR(50) NULL DEFAULT NULL,
-        CONSTRAINT fk_interaction_user FOREIGN KEY (user_id) REFERENCES \`${users}\`(sender) ON DELETE CASCADE ON UPDATE CASCADE,
+        CONSTRAINT fk_interaction_user FOREIGN KEY (user_id) REFERENCES \`${DB_TABLES.users}\`(sender) ON DELETE CASCADE ON UPDATE CASCADE,
         INDEX idx_interaction_user (user_id), INDEX idx_interaction_timestamp (timestamp), INDEX idx_interaction_group (group_id)
-      ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-    `);
-    logger.info(`[ createTables ] ✅ Tabela '${interactionHistory}' verificada/criada.`);
+      ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
+      loggerPrefix
+    );
 
     logger.info("[ createTables ] ✅ Verificação/criação de todas as tabelas concluída.");
   } catch (error) {
-    logger.error(`[ createTables ] ❌ Erro crítico ao criar/verificar tabelas: ${error.message}`, { stack: error.stack });
+    logger.error(`[ createTables ] ❌ Falha crítica durante a inicialização das tabelas.`);
     throw new Error(`Falha ao inicializar tabelas do banco de dados: ${error.message}`);
   }
 }
 
-/**
- * Ensures the interaction-related columns exist in the users table.
- */
 async function ensureUserInteractionColumns() {
   logger.info("[ensureUserInteractionColumns] Verificando colunas de interação na tabela users...");
   const columnsToAdd = [
@@ -231,7 +215,7 @@ async function ensureUserInteractionColumns() {
     { name: "last_interaction_at", definition: "DATETIME NULL DEFAULT NULL" },
     { name: "has_interacted", definition: "TINYINT(1) DEFAULT 0" },
   ];
-  const usersTable = config.database.tables.users;
+  const usersTable = DB_TABLES.users;
   let allOk = true;
 
   for (const column of columnsToAdd) {
@@ -265,27 +249,20 @@ async function ensureUserInteractionColumns() {
   if (allOk) {
     logger.info("[ensureUserInteractionColumns] Verificação das colunas de interação concluída.");
   } else {
-    logger.error("[ensureUserInteractionColumns] Falha ao garantir todas as colunas de interação.");
+    logger.error("[ensureUserInteractionColumns] ❌ Falha ao garantir todas as colunas de interação.");
   }
   return allOk;
 }
 
-// --- Interaction Logging ---
-
-/**
- * Logs an interaction event, updating user timestamps and adding to history.
- * Determines if this is the user's first *eligible* interaction.
- * @returns {Promise<boolean>} True if this was the user's first eligible interaction, false otherwise.
- */
 async function logInteraction(userId, pushName, isGroup, isCommand, commandName = null, groupId = null) {
   const now = moment().tz("America/Sao_Paulo").format("YYYY-MM-DD HH:mm:ss");
-  const usersTable = config.database.tables.users;
-  const historyTable = config.database.tables.interactionHistory; // Use configured table name
+  const usersTable = DB_TABLES.users;
+  const historyTable = DB_TABLES.interactionHistory;
   let wasFirstEligibleInteraction = false;
 
-  if (!historyTable) {
-    logger.error("[logInteraction] ❌ Nome da tabela 'interactionHistory' não definido em config.database.tables!");
-    return false; // Cannot log history
+  if (!historyTable || !usersTable) {
+    logger.error("[logInteraction] ❌ Nomes das tabelas 'users' ou 'interactionHistory' não definidos na configuração!");
+    return false;
   }
 
   let interactionType;
@@ -298,39 +275,31 @@ async function logInteraction(userId, pushName, isGroup, isCommand, commandName 
   const isEligibleForFirst = !isGroup || (isGroup && isCommand);
 
   try {
-    // Upsert user data
-    const upsertQuery = `
+    const upsertUserQuery = `
       INSERT INTO \`${usersTable}\` (sender, pushName, first_interaction_at, last_interaction_at, has_interacted)
       VALUES (?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE
           last_interaction_at = VALUES(last_interaction_at),
+          # Only set first_interaction_at if it's currently NULL AND this interaction is eligible
           first_interaction_at = IF(first_interaction_at IS NULL AND ?, VALUES(first_interaction_at), first_interaction_at),
+          # Only set has_interacted to 1 if it's currently 0 AND this interaction is eligible
           has_interacted = IF(has_interacted = 0 AND ?, 1, has_interacted),
+          # Always update pushName in case it changed
           pushName = VALUES(pushName);
     `;
-    const params = [
-      userId,
-      sanitizeData(pushName, config.defaults.pushName),
-      now,
-      now,
-      isEligibleForFirst ? 1 : 0, // Value for has_interacted if set
-      isEligibleForFirst ? 1 : 0, // Condition for setting first_interaction_at
-      isEligibleForFirst ? 1 : 0, // Condition for setting has_interacted
-    ];
-    await runQuery(upsertQuery, params); // Changed from result = await... as result wasn't reliably used
 
-    // Re-query to confirm if first_interaction_at was just set
+    const userParams = [userId, sanitizeData(pushName, DEFAULT_USER_PUSHNAME), now, now, isEligibleForFirst ? 1 : 0, isEligibleForFirst, isEligibleForFirst];
+    const upsertResult = await runQuery(upsertUserQuery, userParams);
+
     if (isEligibleForFirst) {
       const checkQuery = `SELECT 1 FROM \`${usersTable}\` WHERE sender = ? AND first_interaction_at = ? LIMIT 1`;
       const checkResult = await runQuery(checkQuery, [userId, now]);
       if (checkResult.length > 0) {
-        // This confirms 'now' is the value, implying it was likely just set
         wasFirstEligibleInteraction = true;
         logger.info(`[logInteraction] 🎉 Primeira interação elegível registrada para ${userId} às ${now}.`);
       }
     }
 
-    // Insert into interaction history
     const historyQuery = `
       INSERT INTO \`${historyTable}\` (user_id, timestamp, interaction_type, group_id, command_name)
       VALUES (?, ?, ?, ?, ?);
@@ -340,107 +309,105 @@ async function logInteraction(userId, pushName, isGroup, isCommand, commandName 
     logger.debug(`[logInteraction] Interação registrada para ${userId}. Tipo: ${interactionType}. Foi a primeira elegível: ${wasFirstEligibleInteraction}`);
   } catch (error) {
     logger.error(`[logInteraction] ❌ Erro ao registrar interação para ${userId}: ${error.message}`, { stack: error.stack });
-    return false; // Return false on error
+    return false;
   }
 
   return wasFirstEligibleInteraction;
 }
 
-// --- User and Group Data Management ---
-
-/**
- * Saves or updates user's pushName. Less critical if logInteraction handles upsert.
- * Kept for compatibility with existing calls.
- */
 async function saveUserToDatabase(userId, pushName) {
-  const finalPushName = sanitizeData(pushName, config.defaults.pushName);
-  // This function now primarily ensures the user exists and updates pushName.
-  // Interaction flags/timestamps are handled by logInteraction.
-  const insertQuery = `INSERT IGNORE INTO ${config.database.tables.users} (sender, pushName) VALUES (?, ?);`;
-  const updateQuery = `UPDATE ${config.database.tables.users} SET pushName = ? WHERE sender = ?;`;
+  const finalPushName = sanitizeData(pushName, DEFAULT_USER_PUSHNAME);
+  const query = `
+    INSERT INTO ${DB_TABLES.users} (sender, pushName)
+    VALUES (?, ?)
+    ON DUPLICATE KEY UPDATE pushName = VALUES(pushName);
+  `;
   try {
-    await runQuery(insertQuery, [userId, finalPushName]);
-    await runQuery(updateQuery, [finalPushName, userId]);
-    // logger.debug(`[ saveUserToDatabase ] ✅ Usuário ${userId} verificado/atualizado (pushName: ${finalPushName}).`);
+    await runQuery(query, [userId, finalPushName]);
+    logger.debug(`[ saveUserToDatabase ] Usuário ${userId} salvo/atualizado.`);
   } catch (error) {
     logger.error(`[ saveUserToDatabase ] ❌ Erro ao salvar/atualizar usuário ${userId}: ${error.message}`, { stack: error.stack });
     throw error;
   }
 }
 
-/**
- * Saves or updates group metadata in the database.
- */
-async function saveGroupToDatabase(groupMeta) {
-  const groupId = groupMeta?.id;
+async function saveGroupToDatabase(mergedGroupMeta) {
+  const groupId = mergedGroupMeta?.id;
   if (!groupId) {
-    logger.error("[ saveGroupToDatabase ] ❌ Erro: ID do grupo ausente.", { groupMeta });
+    logger.error("[ saveGroupToDatabase ] ❌ Erro: ID do grupo ausente nos metadados mesclados.", { mergedGroupMeta });
     throw new Error("ID do grupo ausente nos metadados para salvar.");
   }
+
+  const values = [
+    groupId,
+    sanitizeData(mergedGroupMeta.name, DEFAULT_GROUP_DATA.subject),
+    sanitizeData(mergedGroupMeta.owner, DEFAULT_GROUP_DATA.owner),
+    formatTimestampForDB(mergedGroupMeta.creation),
+    sanitizeData(mergedGroupMeta.description, DEFAULT_GROUP_DATA.desc),
+    sanitizeData(mergedGroupMeta.descId, DEFAULT_GROUP_DATA.descId),
+    sanitizeData(mergedGroupMeta.subjectOwner, DEFAULT_GROUP_DATA.subjectOwner),
+    formatTimestampForDB(mergedGroupMeta.subjectTime),
+    mergedGroupMeta.size || 0,
+    mergedGroupMeta.restrict ? 1 : 0,
+    mergedGroupMeta.announce ? 1 : 0,
+    mergedGroupMeta.isCommunity ? 1 : 0,
+    mergedGroupMeta.isCommunityAnnounce ? 1 : 0,
+    mergedGroupMeta.joinApprovalMode ? 1 : 0,
+    mergedGroupMeta.memberAddMode ? 1 : 0,
+    mergedGroupMeta.isPremium ? 1 : 0,
+    formatTimestampForDB(mergedGroupMeta.premiumTemp),
+    sanitizeData(mergedGroupMeta.is_welcome, DEFAULT_GROUP_DATA.isWelcome),
+    sanitizeData(mergedGroupMeta.welcome_message, DEFAULT_GROUP_DATA.welcomeMessage),
+    sanitizeData(mergedGroupMeta.welcome_media, DEFAULT_GROUP_DATA.welcomeMedia),
+    sanitizeData(mergedGroupMeta.exit_message, DEFAULT_GROUP_DATA.exitMessage),
+    sanitizeData(mergedGroupMeta.exit_media, DEFAULT_GROUP_DATA.exitMedia),
+  ];
+
+  const query = `
+    INSERT INTO \`${DB_TABLES.groups}\` (
+      id, name, owner, created_at, description, description_id, subject_owner, subject_time, size,
+      \`restrict\`, announce, is_community, is_community_announce, join_approval_mode, member_add_mode,
+      isPremium, premiumTemp, is_welcome, welcome_message, welcome_media, exit_message, exit_media
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON DUPLICATE KEY UPDATE
+      name = VALUES(name), owner = VALUES(owner), created_at = VALUES(created_at), description = VALUES(description),
+      description_id = VALUES(description_id), subject_owner = VALUES(subject_owner), subject_time = VALUES(subject_time),
+      size = VALUES(size), \`restrict\` = VALUES(\`restrict\`), announce = VALUES(announce), is_community = VALUES(is_community),
+      is_community_announce = VALUES(is_community_announce), join_approval_mode = VALUES(join_approval_mode),
+      member_add_mode = VALUES(member_add_mode), isPremium = VALUES(isPremium), premiumTemp = VALUES(premiumTemp),
+      is_welcome = VALUES(is_welcome), welcome_message = VALUES(welcome_message), welcome_media = VALUES(welcome_media),
+      exit_message = VALUES(exit_message), exit_media = VALUES(exit_media);
+  `;
+
   try {
-    const values = [
-      groupId,
-      sanitizeData(groupMeta.name, config.defaults.groupSubject),
-      sanitizeData(groupMeta.owner, config.defaults.groupOwner),
-      formatTimestampForDB(groupMeta.creation),
-      sanitizeData(groupMeta.description, config.defaults.groupDesc),
-      sanitizeData(groupMeta.descId, config.defaults.descId),
-      sanitizeData(groupMeta.subjectOwner, config.defaults.subjectOwner),
-      formatTimestampForDB(groupMeta.subjectTime),
-      groupMeta.size || 0,
-      groupMeta.restrict ? 1 : 0,
-      groupMeta.announce ? 1 : 0,
-      groupMeta.isCommunity ? 1 : 0,
-      groupMeta.isCommunityAnnounce ? 1 : 0,
-      groupMeta.joinApprovalMode ? 1 : 0,
-      groupMeta.memberAddMode ? 1 : 0,
-      groupMeta.isPremium ? 1 : 0,
-      formatTimestampForDB(groupMeta.premiumTemp),
-      sanitizeData(groupMeta.is_welcome, config.defaults.isWelcome),
-      sanitizeData(groupMeta.welcome_message, config.defaults.welcomeMessage),
-      sanitizeData(groupMeta.welcome_media, config.defaults.welcomeMedia),
-      sanitizeData(groupMeta.exit_message, config.defaults.exitMessage),
-      sanitizeData(groupMeta.exit_media, config.defaults.exitMedia),
-    ];
-    const query = `
-      INSERT INTO \`${config.database.tables.groups}\` (
-        id, name, owner, created_at, description, description_id, subject_owner, subject_time, size,
-        \`restrict\`, announce, is_community, is_community_announce, join_approval_mode, member_add_mode,
-        isPremium, premiumTemp, is_welcome, welcome_message, welcome_media, exit_message, exit_media
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON DUPLICATE KEY UPDATE
-        name = VALUES(name), owner = VALUES(owner), created_at = VALUES(created_at), description = VALUES(description),
-        description_id = VALUES(description_id), subject_owner = VALUES(subject_owner), subject_time = VALUES(subject_time),
-        size = VALUES(size), \`restrict\` = VALUES(\`restrict\`), announce = VALUES(announce), is_community = VALUES(is_community),
-        is_community_announce = VALUES(is_community_announce), join_approval_mode = VALUES(join_approval_mode),
-        member_add_mode = VALUES(member_add_mode), isPremium = VALUES(isPremium), premiumTemp = VALUES(premiumTemp),
-        is_welcome = VALUES(is_welcome), welcome_message = VALUES(welcome_message), welcome_media = VALUES(welcome_media),
-        exit_message = VALUES(exit_message), exit_media = VALUES(exit_media);
-    `;
     await runQuery(query, values);
+    logger.debug(`[ saveGroupToDatabase ] Grupo ${groupId} salvo/atualizado.`);
   } catch (error) {
     logger.error(`[ saveGroupToDatabase ] ❌ Erro ao salvar grupo ${groupId}: ${error.message}`, { stack: error.stack });
     throw error;
   }
 }
 
-/**
- * Saves group participants to the database.
- */
 async function saveGroupParticipantsToDatabase(groupId, participants) {
-  if (!Array.isArray(participants) || participants.length === 0) return;
+  if (!Array.isArray(participants) || participants.length === 0) {
+    logger.debug(`[ saveGroupParticipantsToDatabase ] Sem participantes para salvar para ${groupId}.`);
+    return;
+  }
+
   const values = participants.map(p => [groupId, p.id, p.admin === "admin" || p.admin === "superadmin" ? 1 : 0]);
+
   if (values.length === 0) return;
   const placeholders = values.map(() => "(?, ?, ?)").join(", ");
-  const bulkQuery = `INSERT IGNORE INTO ${config.database.tables.participants} (group_id, participant, isAdmin) VALUES ${placeholders};`;
+  const bulkQuery = `INSERT IGNORE INTO ${DB_TABLES.participants} (group_id, participant, isAdmin) VALUES ${placeholders};`;
   const flatValues = values.flat();
   try {
     await runQuery(bulkQuery, flatValues);
+    logger.debug(`[ saveGroupParticipantsToDatabase ] Participantes (bulk) salvos para ${groupId}.`);
   } catch (error) {
     logger.warn(`[ saveGroupParticipantsToDatabase ] ⚠️ Inserção em massa falhou para ${groupId}, tentando individualmente: ${error.message}`);
-    const individualQuery = `INSERT IGNORE INTO ${config.database.tables.participants} (group_id, participant, isAdmin) VALUES (?, ?, ?);`;
-    let successCount = 0,
-      failCount = 0;
+    const individualQuery = `INSERT IGNORE INTO ${DB_TABLES.participants} (group_id, participant, isAdmin) VALUES (?, ?, ?);`;
+    let successCount = 0;
+    let failCount = 0;
     for (const participantData of values) {
       try {
         await runQuery(individualQuery, participantData);
@@ -451,19 +418,17 @@ async function saveGroupParticipantsToDatabase(groupId, participants) {
       }
     }
     logger.warn(`[ saveGroupParticipantsToDatabase ] ⚠️ Fallback concluído para ${groupId}: ${successCount} sucessos, ${failCount} falhas.`);
+
     if (failCount > 0 && successCount === 0) {
       logger.error(`[ saveGroupParticipantsToDatabase ] ❌ Falha crítica: Todas as inserções individuais falharam para ${groupId}.`);
     }
   }
 }
 
-/**
- * Fetches custom group settings from the database.
- */
 async function getGroupSettingsFromDB(groupId) {
   const query = `
     SELECT isPremium, premiumTemp, is_welcome, welcome_message, welcome_media, exit_message, exit_media
-    FROM \`${config.database.tables.groups}\` WHERE id = ? LIMIT 1;
+    FROM \`${DB_TABLES.groups}\` WHERE id = ? LIMIT 1;
   `;
   try {
     const results = await runQuery(query, [groupId]);
@@ -474,21 +439,19 @@ async function getGroupSettingsFromDB(groupId) {
   }
 }
 
-/**
- * Ensures a group exists in the 'groups' table, inserting a minimal entry if needed.
- */
 async function ensureGroupExists(groupId) {
   try {
-    const checkQuery = `SELECT id FROM \`${config.database.tables.groups}\` WHERE id = ? LIMIT 1;`;
+    const checkQuery = `SELECT id FROM \`${DB_TABLES.groups}\` WHERE id = ? LIMIT 1;`;
     const results = await runQuery(checkQuery, [groupId]);
+
     if (results.length === 0) {
-      logger.warn(`[ ensureGroupExists ] Grupo ${groupId} não no DB. Criando entrada mínima.`);
+      logger.warn(`[ ensureGroupExists ] Grupo ${groupId} não encontrado no DB. Criando entrada mínima com defaults.`);
       const insertQuery = `
-        INSERT IGNORE INTO \`${config.database.tables.groups}\`
+        INSERT IGNORE INTO \`${DB_TABLES.groups}\`
           (id, name, owner, created_at, is_welcome, welcome_message, welcome_media, exit_message, exit_media)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
       `;
-      await runQuery(insertQuery, [groupId, config.defaults.groupSubject, config.defaults.groupOwner, moment().format("YYYY-MM-DD HH:mm:ss"), config.defaults.isWelcome, config.defaults.welcomeMessage, config.defaults.welcomeMedia, config.defaults.exitMessage, config.defaults.exitMedia]);
+      await runQuery(insertQuery, [groupId, DEFAULT_GROUP_DATA.subject, DEFAULT_GROUP_DATA.owner, moment().utc().format("YYYY-MM-DD HH:mm:ss"), DEFAULT_GROUP_DATA.isWelcome, DEFAULT_GROUP_DATA.welcomeMessage, DEFAULT_GROUP_DATA.welcomeMedia, DEFAULT_GROUP_DATA.exitMessage, DEFAULT_GROUP_DATA.exitMedia]);
       logger.info(`[ ensureGroupExists ] ✅ Entrada mínima criada para ${groupId}.`);
     }
     return groupId;
@@ -498,38 +461,41 @@ async function ensureGroupExists(groupId) {
   }
 }
 
-/**
- * Saves message details to the database.
- */
 async function saveMessageToDatabase(messageData) {
   const { messageId, userId, groupId, messageType, messageContent, timestamp } = messageData;
+
   if (!messageId || !userId || !messageType || !timestamp) {
     logger.error("[ saveMessageToDatabase ] ❌ Dados da mensagem incompletos.", messageData);
     throw new Error("Dados da mensagem incompletos para salvar.");
   }
+
   const query = `
-    INSERT INTO ${config.database.tables.messages} (message_id, sender_id, group_id, messageType, messageContent, timestamp)
-    VALUES (?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE messageType = VALUES(messageType), messageContent = VALUES(messageContent);
+    INSERT INTO ${DB_TABLES.messages} (message_id, sender_id, group_id, messageType, messageContent, timestamp)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON DUPLICATE KEY UPDATE # Avoid errors if message is processed twice, update content just in case
+        messageType = VALUES(messageType),
+        messageContent = VALUES(messageContent);
   `;
   try {
     await runQuery(query, [messageId, userId, groupId, messageType, messageContent, timestamp]);
+    logger.debug(`[ saveMessageToDatabase ] Mensagem ${messageId} salva.`);
   } catch (error) {
     if (error.code === "ER_NO_REFERENCED_ROW" || error.code === "ER_NO_REFERENCED_ROW_2") {
-      if (error.message.includes("fk_sender_id")) logger.error(`[ saveMessageToDatabase ] ❌ Erro FK: Usuário ${userId} não encontrado. Msg ${messageId} não salva.`);
-      else if (error.message.includes("fk_group_id")) logger.error(`[ saveMessageToDatabase ] ❌ Erro FK: Grupo ${groupId} não encontrado. Msg ${messageId} não salva.`);
-      else logger.error(`[ saveMessageToDatabase ] ❌ Erro FK desconhecido ${messageId}: ${error.message}`, { stack: error.stack });
+      if (error.message.includes("fk_sender_id")) {
+        logger.error(`[ saveMessageToDatabase ] ❌ Erro FK: Usuário ${userId} não encontrado no DB. Mensagem ${messageId} não salva.`);
+      } else if (error.message.includes("fk_group_id") && groupId) {
+        logger.error(`[ saveMessageToDatabase ] ❌ Erro FK: Grupo ${groupId} não encontrado no DB. Mensagem ${messageId} não salva.`);
+      } else {
+        logger.error(`[ saveMessageToDatabase ] ❌ Erro FK desconhecido para msg ${messageId}: ${error.message}`, { stack: error.stack });
+      }
+      throw new Error(`Falha de chave estrangeira ao salvar mensagem ${messageId}: ${error.message}`);
     } else {
       logger.error(`[ saveMessageToDatabase ] ❌ Erro ao salvar msg ${messageId}: ${error.message}`, { stack: error.stack });
+      throw error;
     }
-    throw error;
   }
 }
 
-// --- Message Processing Flow ---
-
-/**
- * Processes incoming message data: validates, saves user, ensures group, saves message.
- */
 async function processIncomingMessageData(info) {
   let validatedData;
   try {
@@ -543,14 +509,10 @@ async function processIncomingMessageData(info) {
 
   const { from, userId, isGroup, messageId } = validatedData;
   const pushName = info.pushName;
-
   try {
-    // Ensure user exists and pushName is updated (using the existing function)
     await saveUserToDatabase(userId, pushName);
   } catch (userSaveError) {
-    // Log error but continue if possible (logInteraction might still work if user exists)
-    logger.error(`[ processIncomingMessageData ] ⚠️ Falha ao salvar/garantir usuário ${userId}: ${userSaveError.message}`);
-    // Depending on severity, you might want to throw here if user saving is critical before message saving
+    logger.error(`[ processIncomingMessageData ] ⚠️ Falha ao salvar/garantir usuário ${userId}. Mensagem ${messageId} pode não ser salva corretamente devido a FK. Erro: ${userSaveError.message}`);
   }
 
   let groupId = null;
@@ -558,62 +520,72 @@ async function processIncomingMessageData(info) {
     try {
       groupId = await ensureGroupExists(from);
     } catch (groupEnsureError) {
-      logger.error(`[ processIncomingMessageData ] ❌ Falha crítica ao garantir grupo ${from}. Msg ${messageId} não será salva. Erro: ${groupEnsureError.message}`);
+      logger.error(`[ processIncomingMessageData ] ❌ Falha crítica ao garantir grupo ${from}. Mensagem ${messageId} não será salva. Erro: ${groupEnsureError.message}`);
       throw groupEnsureError;
     }
   }
 
   try {
-    const messageType = Object.keys(info.message || {})[0] || "unknown";
+    const messageType = baileys.getContentType(info.message) || "unknown";
     let messageContent = null;
-    if (info.message && info.message[messageType]) {
+    if (info.message) {
       try {
-        messageContent = JSON.stringify(info.message[messageType]);
-        // Add length check if needed
+        const content = info.message[messageType];
+        if (content) {
+          messageContent = JSON.stringify(content);
+        } else {
+          messageContent = JSON.stringify(info.message);
+          logger.debug(`[ processIncomingMessageData ] Conteúdo direto para tipo ${messageType} não encontrado, stringificando info.message completo (ID: ${messageId})`);
+        }
       } catch (stringifyError) {
-        logger.warn(`[ processIncomingMessageData ] ⚠️ Falha ao stringificar conteúdo ${messageType} (ID: ${messageId}): ${stringifyError.message}`);
+        logger.warn(`[ processIncomingMessageData ] ⚠️ Falha ao stringificar conteúdo ${messageType} (ID: ${messageId}): ${stringifyError.message}. Usando fallback.`);
         messageContent = JSON.stringify({ error: `Falha ao stringificar: ${stringifyError.message}` });
       }
     }
+
     const timestamp = moment().tz("America/Sao_Paulo").format("YYYY-MM-DD HH:mm:ss");
+
     await saveMessageToDatabase({ messageId, userId, groupId, messageType, messageContent, timestamp });
-    return { userId, groupId, messageId }; // Return identifiers
+
+    return { userId, groupId, messageId };
   } catch (messageSaveError) {
-    logger.error(`[ processIncomingMessageData ] ❌ Erro final ao salvar msg ${messageId}.`);
+    logger.error(`[ processIncomingMessageData ] ❌ Erro final ao salvar dados da mensagem ${messageId}.`);
     throw messageSaveError;
   }
 }
 
-/**
- * Handles updates to group metadata, merging with DB settings.
- */
 async function handleGroupMetadataUpdate(groupId, client) {
   if (!client || typeof client.groupMetadata !== "function") {
-    logger.error(`[ handleGroupMetadataUpdate ] ❌ Cliente inválido para buscar metadados de ${groupId}.`);
+    logger.error(`[ handleGroupMetadataUpdate ] ❌ Cliente inválido ou sem função groupMetadata para buscar metadados de ${groupId}.`);
     return;
   }
-  const cachedData = groupMetadataCache.get(groupId);
-  if (cachedData) return; // Use cache
 
-  logger.info(`[ handleGroupMetadataUpdate ] 🔄 Buscando metadados E config DB para ${groupId}`);
+  const cachedData = groupMetadataCache.get(groupId);
+  if (cachedData) {
+    logger.debug(`[ handleGroupMetadataUpdate ] ⚡ Usando cache para metadados de ${groupId}.`);
+
+    return;
+  }
+
+  logger.info(`[ handleGroupMetadataUpdate ] 🔄 Buscando metadados (API) E config (DB) para ${groupId} (sem cache válido).`);
   try {
     const fetchedMeta = await client.groupMetadata(groupId);
     if (!fetchedMeta || !fetchedMeta.id) {
-      logger.warn(`[ handleGroupMetadataUpdate ] ⚠️ Metadados inválidos via cliente para ${groupId}.`);
+      logger.warn(`[ handleGroupMetadataUpdate ] ⚠️ Metadados inválidos ou não encontrados via cliente para ${groupId}. Grupo pode não existir mais.`);
       groupMetadataCache.delete(groupId);
       return;
     }
+
     const existingDbSettings = await getGroupSettingsFromDB(groupId);
 
     const mergedMeta = {
-      ...fetchedMeta,
       id: groupId,
-      name: sanitizeData(fetchedMeta.subject, config.defaults.groupSubject),
-      owner: sanitizeData(fetchedMeta.owner, config.defaults.groupOwner),
+      name: sanitizeData(fetchedMeta.subject, DEFAULT_GROUP_DATA.subject),
+      owner: sanitizeData(fetchedMeta.owner, DEFAULT_GROUP_DATA.owner),
       creation: fetchedMeta.creation,
-      description: sanitizeData(fetchedMeta.desc, config.defaults.groupDesc),
-      descId: sanitizeData(fetchedMeta.descId, config.defaults.descId),
-      subjectOwner: sanitizeData(fetchedMeta.subjectOwner, config.defaults.subjectOwner),
+      description: sanitizeData(fetchedMeta.desc, DEFAULT_GROUP_DATA.desc),
+      descId: sanitizeData(fetchedMeta.descId, DEFAULT_GROUP_DATA.descId),
+      subjectOwner: sanitizeData(fetchedMeta.subjectOwner, DEFAULT_GROUP_DATA.subjectOwner),
       subjectTime: fetchedMeta.subjectTime,
       size: fetchedMeta.size || 0,
       restrict: fetchedMeta.restrict ? 1 : 0,
@@ -624,68 +596,89 @@ async function handleGroupMetadataUpdate(groupId, client) {
       memberAddMode: fetchedMeta.memberAddMode ? 1 : 0,
       isPremium: existingDbSettings?.isPremium ?? 0,
       premiumTemp: existingDbSettings?.premiumTemp ?? null,
-      is_welcome: existingDbSettings?.is_welcome ?? config.defaults.isWelcome,
-      welcome_message: existingDbSettings?.welcome_message ?? config.defaults.welcomeMessage,
-      welcome_media: existingDbSettings?.welcome_media ?? config.defaults.welcomeMedia,
-      exit_message: existingDbSettings?.exit_message ?? config.defaults.exitMessage,
-      exit_media: existingDbSettings?.exit_media ?? config.defaults.exitMedia,
+      is_welcome: existingDbSettings?.is_welcome ?? DEFAULT_GROUP_DATA.isWelcome,
+      welcome_message: existingDbSettings?.welcome_message ?? DEFAULT_GROUP_DATA.welcomeMessage,
+      welcome_media: existingDbSettings?.welcome_media ?? DEFAULT_GROUP_DATA.welcomeMedia,
+      exit_message: existingDbSettings?.exit_message ?? DEFAULT_GROUP_DATA.exitMessage,
+      exit_media: existingDbSettings?.exit_media ?? DEFAULT_GROUP_DATA.exitMedia,
     };
-    const participantsToSave = fetchedMeta.participants;
-    delete mergedMeta.participants;
 
-    groupMetadataCache.set(groupId, fetchedMeta); // Cache raw fetched data
-    await saveGroupToDatabase(mergedMeta); // Save merged data
+    const participantsToSave = fetchedMeta.participants;
+
+    await saveGroupToDatabase(mergedMeta);
+
     if (Array.isArray(participantsToSave)) {
       await saveGroupParticipantsToDatabase(groupId, participantsToSave);
+    } else {
+      logger.warn(`[ handleGroupMetadataUpdate ] ⚠️ Lista de participantes ausente ou inválida nos metadados buscados para ${groupId}.`);
     }
-    logger.info(`[ handleGroupMetadataUpdate ] ✅ Metadados (mesclados) e participantes de ${groupId} salvos.`);
+
+    groupMetadataCache.set(groupId, fetchedMeta);
+
+    logger.info(`[ handleGroupMetadataUpdate ] ✅ Metadados (mesclados com DB) e participantes de ${groupId} salvos. Cache atualizado.`);
   } catch (fetchSaveError) {
     if (fetchSaveError.message?.includes("group not found") || fetchSaveError.output?.statusCode === 404) {
-      logger.warn(`[ handleGroupMetadataUpdate ] ⚠️ Grupo ${groupId} não encontrado pelo cliente.`);
+      logger.warn(`[ handleGroupMetadataUpdate ] ⚠️ Grupo ${groupId} não encontrado pelo cliente durante busca/processamento.`);
       groupMetadataCache.delete(groupId);
     } else {
-      logger.error(`[ handleGroupMetadataUpdate ] ❌ Erro ao processar metadados de ${groupId}: ${fetchSaveError.message}`, { stack: fetchSaveError.stack });
+      logger.error(`[ handleGroupMetadataUpdate ] ❌ Erro ao buscar/processar metadados de ${groupId}: ${fetchSaveError.message}`, { stack: fetchSaveError.stack });
     }
   }
 }
 
-/**
- * Main function to process user data from incoming message events.
- */
 async function processUserData(data, client) {
-  if (!data?.messages || !Array.isArray(data.messages) || data.messages.length === 0) return;
+  const messages = Array.isArray(data?.messages) ? data.messages : [];
+  if (messages.length === 0) {
+    return;
+  }
 
-  for (const info of data.messages) {
-    let messageId = info?.key?.id || "ID_DESCONHECIDO";
+  const validMessages = messages.filter(({ key }) => {
+    const jid = key?.remoteJid;
+    const isValid = typeof jid === "string" && (jid.endsWith("@s.whatsapp.net") || jid.endsWith("@g.us"));
+    if (!isValid && jid) {
+      logger.warn(`[ processUserData ] ⚠️ Ignorando mensagem com JID inválido: ${jid}`);
+    }
+    return isValid;
+  });
+
+  if (validMessages.length === 0) {
+    logger.debug("[ processUserData ] Nenhuma mensagem com JID válido encontrada no lote.");
+    return;
+  }
+
+  logger.info(`[ processUserData ] Processando ${validMessages.length} mensagens válidas...`);
+
+  for (const info of validMessages) {
+    const messageId = info?.key?.id || "ID_DESCONHECIDO_" + crypto.randomUUID();
+
     try {
-      // Process message: validate, save user, ensure group, save message
-      const { groupId } = await processIncomingMessageData(info); // Ensure this returns groupId
-      messageId = info.key?.id || messageId;
+      const { groupId } = await processIncomingMessageData(info);
 
-      // Trigger metadata update for groups (runs in background)
-      if (groupId) {
-        handleGroupMetadataUpdate(groupId, client);
+      if (typeof groupId === "string" && groupId.endsWith("@g.us")) {
+        await handleGroupMetadataUpdate(groupId, client);
       }
     } catch (error) {
       if (error.message !== "Dados inválidos ou mensagem própria.") {
-        logger.error(`[ processUserData ] ❌ Erro ao processar msg ${messageId}: ${error.message}`, { stack: error.stack, messageKey: info?.key });
+        logger.error(`[ processUserData ] ❌ Erro ao processar msg ${messageId} (User: ${info?.key?.participant || info?.key?.remoteJid}, Group: ${info?.key?.remoteJid}): ${error.message}`, {
+          messageKey: info?.key,
+        });
       }
     }
   }
+  logger.info(`[ processUserData ] Processamento de ${validMessages.length} mensagens concluído.`);
 }
 
-// --- Exports ---
 module.exports = {
   createTables,
-  ensureUserInteractionColumns, // Export schema checker
-  logInteraction, // Export interaction logger
-  // ensureUserExists,          // Export if needed, otherwise keep internal
-  processUserData, // Main entry point for message processing
-  groupMetadataCache, // Export cache instance
-  handleGroupMetadataUpdate, // Export if needed externally
-  saveGroupToDatabase, // Export if needed externally
-  saveGroupParticipantsToDatabase, // Export if needed externally
-  ensureGroupExists, // Export if needed externally
-  getGroupSettingsFromDB, // Export for commands needing group settings
-  saveUserToDatabase, // Keep exporting if other parts rely on it
+  ensureUserInteractionColumns,
+  logInteraction,
+  processUserData,
+  groupMetadataCache,
+  handleGroupMetadataUpdate,
+  saveGroupToDatabase,
+  saveGroupParticipantsToDatabase,
+  ensureGroupExists,
+  getGroupSettingsFromDB,
+  saveUserToDatabase,
+  saveMessageToDatabase,
 };

@@ -15,6 +15,37 @@
         "number": "559591264582@s.whatsapp.net",
         "whatsapp": "https://wa.me/message/C4CZHIMQU66PD1"
     },
+    "database": {
+        "tables": {
+            "groups": "groups",
+            "users": "users",
+            "messages": "messages",
+            "participants": "group_participants",
+            "commandUsage": "command_usage",
+            "analytics": "command_analytics",
+            "interactionHistory": "interaction_history"
+        }
+    },
+    "defaults": {
+        "userData": {
+            "pushName": "Desconhecido"
+        },
+        "groupData": {
+            "subject": "Grupo Desconhecido",
+            "owner": null,
+            "desc": null,
+            "descId": null,
+            "subjectOwner": null,
+            "isWelcome": 0,
+            "welcomeMessage": "Bem-vindo(a) ao {groupName}, {user}! 🎉",
+            "welcomeMedia": null,
+            "exitMessage": "Até mais, {user}! Sentiremos sua falta. 👋",
+            "exitMedia": null
+        }
+    },
+    "cache": {
+        "groupMetadataExpiryMs": 300000
+    },
     "commandLimits": {
         "s": {
             "description": "Cria figurinhas a partir de imagens, vídeos ou GIFs.",
