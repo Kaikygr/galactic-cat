@@ -5,7 +5,7 @@
   "main": "src",
   "scripts": {
     "start": "npx node ./src/auth/connection.js",
-    "start:pm2": "pm2 ecosystem.config",
+    "start:pm2": "pm2 start ecosystem.config",
     "restart": "npx pm2 restart all",
     "stop": "npx pm2 stop all",
     "logs": "npx pm2 monit"
