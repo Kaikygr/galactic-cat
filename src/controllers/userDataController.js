@@ -1,13 +1,13 @@
-const { runQuery } = require("../database/processDatabase");
-const logger = require("../utils/logger");
-const moment = require("moment-timezone");
-const crypto = require("crypto");
-const path = require("path");
-const baileys = require("baileys");
+const { runQuery } = require('../database/processDatabase');
+const logger = require('../utils/logger');
+const moment = require('moment-timezone');
+const crypto = require('crypto');
+const path = require('path');
+const baileys = require('baileys');
 
-const sharedConfigPath = path.join(__dirname, "../config/options.json");
+const sharedConfigPath = path.join(__dirname, '../config/options.json');
 const sharedConfig = require(sharedConfigPath);
-logger.info("[ userDataController ] ⚙️ Configuração carregada.");
+logger.info('[ userDataController ] ⚙️ Configuração carregada.');
 
 if (!sharedConfig?.database?.tables) {
   throw new Error("Configuração inválida: 'database.tables' não encontrado em options.json");
@@ -23,82 +23,157 @@ if (sharedConfig?.cache?.groupMetadataExpiryMs === undefined) {
 }
 
 const DB_TABLES = sharedConfig.database.tables;
-const DEFAULT_USER_PUSHNAME = sharedConfig.defaults.userData.pushName || "Desconhecido";
+const DEFAULT_USER_PUSHNAME = sharedConfig.defaults.userData.pushName || 'Desconhecido';
 const DEFAULT_GROUP_DATA = sharedConfig.defaults.groupData || {
-  subject: "Grupo Desconhecido",
+  subject: 'Grupo Desconhecido',
   owner: null,
   desc: null,
   descId: null,
   subjectOwner: null,
   isWelcome: 0,
-  welcomeMessage: "Bem-vindo(a) ao {groupName}, {user}! 🎉",
+  welcomeMessage: 'Bem-vindo(a) ao {groupName}, {user}! 🎉',
   welcomeMedia: null,
-  exitMessage: "Até mais, {user}! Sentiremos sua falta. 👋",
+  exitMessage: 'Até mais, {user}! Sentiremos sua falta. 👋',
   exitMedia: null,
 };
 const GROUP_CACHE_EXPIRY_MS = sharedConfig.cache.groupMetadataExpiryMs ?? 5 * 60 * 1000;
 
 class GroupMetadataCache {
-  constructor(expiryMs = GROUP_CACHE_EXPIRY_MS) {
+  constructor(expiryMs = GROUP_CACHE_EXPIRY_MS, customLogger = logger) {
     this.cache = new Map();
     this.expiryMs = expiryMs;
-    logger.info(`[ GroupMetadataCache ] 🕒 Inicializado com expiração: ${expiryMs}ms`);
+    this.logger = customLogger;
+    this.cleanupInterval = null;
+
+    this.logger.info(`[ GroupMetadataCache ] 🕒 Inicializado com expiração: ${expiryMs}ms`);
   }
+
   set(key, data) {
+    if (typeof key !== 'string' || data === undefined) {
+      this.logger.warn(`[ GroupMetadataCache ] ❌ Tentativa de set inválida. Key: ${key}, Data: ${data}`);
+      return;
+    }
     this.cache.set(key, { data, timestamp: Date.now() });
   }
+
   get(key) {
     const entry = this.cache.get(key);
     if (!entry) return null;
+
     if (Date.now() - entry.timestamp > this.expiryMs) {
-      logger.debug(`[ GroupMetadataCache ] ⏳ Cache expirado para ${key}. Removendo.`);
+      this.logger.debug(`[ GroupMetadataCache ] ⏳ Cache expirado para ${key}. Removendo.`);
       this.cache.delete(key);
       return null;
     }
+
     return entry.data;
   }
+
+  has(key) {
+    return this.get(key) !== null;
+  }
+
   delete(key) {
     this.cache.delete(key);
   }
+
   clear() {
     this.cache.clear();
-    logger.info("[ GroupMetadataCache ] 📤 Cache limpo.");
+    this.logger.info('[ GroupMetadataCache ] 📤 Cache limpo.');
+  }
+
+  get size() {
+    return this.cache.size;
+  }
+
+  startAutoCleanup(intervalMs = 60000) {
+    if (this.cleanupInterval) return;
+
+    this.cleanupInterval = setInterval(() => {
+      const now = Date.now();
+      for (const [key, entry] of this.cache) {
+        if (now - entry.timestamp > this.expiryMs) {
+          this.cache.delete(key);
+          this.logger.debug(`[ GroupMetadataCache ] ♻️ Expirado no sweep: ${key}`);
+        }
+      }
+    }, intervalMs);
+
+    this.logger.info(`[ GroupMetadataCache ] 🔄 Auto-cleanup iniciado a cada ${intervalMs}ms.`);
+  }
+
+  stopAutoCleanup() {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+      this.logger.info('[ GroupMetadataCache ] 🛑 Auto-cleanup parado.');
+    }
   }
 }
+
+cache.startAutoCleanup(); // Inicia a limpeza automática do cache
+
 const groupMetadataCache = new GroupMetadataCache();
 
 const sanitizeData = (value, defaultValue = null) => (value == null ? defaultValue : value);
 
-const formatTimestampForDB = timestamp => {
+const formatTimestampForDB = (timestamp) => {
   if (timestamp == null) return null;
-  let m = null;
-  if (typeof timestamp === "number" && timestamp > 0) m = moment.unix(timestamp);
-  else if (timestamp instanceof Date) m = moment(timestamp);
-  else m = moment(timestamp);
-  return m.isValid() ? m.utc().format("YYYY-MM-DD HH:mm:ss") : null;
+
+  let momentObj = null;
+
+  if (typeof timestamp === 'number' && timestamp > 0) {
+    momentObj = moment.unix(timestamp);
+  } else if (timestamp instanceof Date && !isNaN(timestamp)) {
+    momentObj = moment(timestamp);
+  } else if (typeof timestamp === 'string' || moment.isMoment(timestamp)) {
+    momentObj = moment(timestamp);
+  } else {
+    return null;
+  }
+
+  return momentObj.isValid() ? momentObj.utc().format('YYYY-MM-DD HH:mm:ss') : null;
 };
 
-const validateIncomingInfo = info => {
-  if (!info?.key || info.key.fromMe) {
-    throw new Error("Dados inválidos ou mensagem própria.");
+const validateIncomingInfo = (info) => {
+  const key = info?.key;
+
+  if (!key) {
+    throw new Error('Mensagem sem chave (`key`) fornecida.');
   }
-  const from = info.key.remoteJid;
-  if (!from || (!from.endsWith("@g.us") && !from.endsWith("@s.whatsapp.net"))) {
-    throw new Error(`RemoteJid inválido: ${from}`);
+
+  if (key.fromMe) {
+    throw new Error('Mensagem enviada por você mesmo foi ignorada.');
   }
-  const isGroup = from.endsWith("@g.us");
-  const userId = isGroup ? sanitizeData(info.key.participant) : from;
+
+  const from = key.remoteJid;
+  if (typeof from !== 'string' || (!from.endsWith('@g.us') && !from.endsWith('@s.whatsapp.net'))) {
+    throw new Error(`RemoteJid inválido ou ausente: ${from}`);
+  }
+
+  const isGroup = from.endsWith('@g.us');
+  const participant = isGroup ? key.participant : from;
+  const userId = sanitizeData(participant);
+
   if (!userId) {
-    throw new Error("ID do remetente não determinado.");
+    throw new Error(`Remetente não identificado (participant: ${participant}).`);
   }
-  const messageId = info.key.id || crypto.randomUUID();
-  if (!info.key.id) {
-    logger.warn(`[validateIncomingInfo] Mensagem sem ID original (from: ${from}, sender: ${userId}). Gerado UUID: ${messageId}`);
+
+  const messageId = key.id || crypto.randomUUID();
+
+  if (!key.id) {
+    logger.warn(`[validateIncomingInfo] ⚠️ Mensagem sem ID original (from: ${from}, sender: ${userId}). Gerado UUID: ${messageId}`);
   }
-  return { from, userId, isGroup, messageId };
+
+  return {
+    from,
+    userId,
+    isGroup,
+    messageId,
+  };
 };
 
-async function createTableIfNotExists(tableName, createStatement, loggerPrefix = "[ createTableIfNotExists ]") {
+async function createTableIfNotExists(tableName, createStatement, loggerPrefix = '[ createTableIfNotExists ]') {
   try {
     await runQuery(createStatement);
     logger.info(`${loggerPrefix} ✅ Tabela '${tableName}' verificada/criada.`);
@@ -109,8 +184,8 @@ async function createTableIfNotExists(tableName, createStatement, loggerPrefix =
 }
 
 async function createTables() {
-  logger.info("[ createTables ] 📦 Verificando e criando tabelas...");
-  const loggerPrefix = "[ createTables ]";
+  logger.info('[ createTables ] 📦 Verificando e criando tabelas...');
+  const loggerPrefix = '[ createTables ]';
 
   try {
     await createTableIfNotExists(
@@ -124,7 +199,7 @@ async function createTables() {
         is_welcome TINYINT(1) DEFAULT ${DEFAULT_GROUP_DATA.isWelcome}, welcome_message TEXT, welcome_media TEXT DEFAULT NULL,
         exit_message TEXT, exit_media TEXT DEFAULT NULL
       ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
-      loggerPrefix
+      loggerPrefix,
     );
 
     await createTableIfNotExists(
@@ -135,7 +210,7 @@ async function createTables() {
         first_interaction_at DATETIME NULL DEFAULT NULL COMMENT 'Timestamp of the first eligible interaction',
         last_interaction_at DATETIME NULL DEFAULT NULL COMMENT 'Timestamp of the last interaction of any type'
       ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
-      loggerPrefix
+      loggerPrefix,
     );
 
     await createTableIfNotExists(
@@ -147,7 +222,7 @@ async function createTables() {
         CONSTRAINT fk_sender_id FOREIGN KEY (sender_id) REFERENCES \`${DB_TABLES.users}\`(sender) ON DELETE CASCADE ON UPDATE CASCADE,
         CONSTRAINT fk_group_id FOREIGN KEY (group_id) REFERENCES \`${DB_TABLES.groups}\`(id) ON DELETE SET NULL ON UPDATE CASCADE
       ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
-      loggerPrefix
+      loggerPrefix,
     );
 
     await createTableIfNotExists(
@@ -158,7 +233,7 @@ async function createTables() {
         CONSTRAINT fk_group_participants_group FOREIGN KEY (group_id) REFERENCES \`${DB_TABLES.groups}\`(id) ON DELETE CASCADE ON UPDATE CASCADE,
         INDEX idx_participant (participant)
       ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
-      loggerPrefix
+      loggerPrefix,
     );
 
     await createTableIfNotExists(
@@ -169,7 +244,7 @@ async function createTables() {
         PRIMARY KEY (user_id, command_name),
         CONSTRAINT fk_user_usage FOREIGN KEY (user_id) REFERENCES \`${DB_TABLES.users}\`(sender) ON DELETE CASCADE ON UPDATE CASCADE
       ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
-      loggerPrefix
+      loggerPrefix,
     );
 
     await createTableIfNotExists(
@@ -185,7 +260,7 @@ async function createTables() {
         CONSTRAINT \`fk_analytics_user_id\` FOREIGN KEY (\`user_id\`) REFERENCES \`${DB_TABLES.users}\`(\`sender\`) ON DELETE CASCADE ON UPDATE CASCADE,
         CONSTRAINT \`fk_analytics_group_id\` FOREIGN KEY (\`group_id\`) REFERENCES \`${DB_TABLES.groups}\`(\`id\`) ON DELETE SET NULL ON UPDATE CASCADE
       ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
-      loggerPrefix
+      loggerPrefix,
     );
 
     await createTableIfNotExists(
@@ -198,10 +273,10 @@ async function createTables() {
         CONSTRAINT fk_interaction_user FOREIGN KEY (user_id) REFERENCES \`${DB_TABLES.users}\`(sender) ON DELETE CASCADE ON UPDATE CASCADE,
         INDEX idx_interaction_user (user_id), INDEX idx_interaction_timestamp (timestamp), INDEX idx_interaction_group (group_id)
       ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
-      loggerPrefix
+      loggerPrefix,
     );
 
-    logger.info("[ createTables ] ✅ Verificação/criação de todas as tabelas concluída.");
+    logger.info('[ createTables ] ✅ Verificação/criação de todas as tabelas concluída.');
   } catch (error) {
     logger.error(`[ createTables ] ❌ Falha crítica durante a inicialização das tabelas.`);
     throw new Error(`Falha ao inicializar tabelas do banco de dados: ${error.message}`);
@@ -209,11 +284,11 @@ async function createTables() {
 }
 
 async function ensureUserInteractionColumns() {
-  logger.info("[ensureUserInteractionColumns] Verificando colunas de interação na tabela users...");
+  logger.info('[ensureUserInteractionColumns] Verificando colunas de interação na tabela users...');
   const columnsToAdd = [
-    { name: "first_interaction_at", definition: "DATETIME NULL DEFAULT NULL" },
-    { name: "last_interaction_at", definition: "DATETIME NULL DEFAULT NULL" },
-    { name: "has_interacted", definition: "TINYINT(1) DEFAULT 0" },
+    { name: 'first_interaction_at', definition: 'DATETIME NULL DEFAULT NULL' },
+    { name: 'last_interaction_at', definition: 'DATETIME NULL DEFAULT NULL' },
+    { name: 'has_interacted', definition: 'TINYINT(1) DEFAULT 0' },
   ];
   const usersTable = DB_TABLES.users;
   let allOk = true;
@@ -230,7 +305,7 @@ async function ensureUserInteractionColumns() {
           await runQuery(alterQuery, []);
           logger.info(`[ensureUserInteractionColumns] ✅ Coluna '${column.name}' adicionada.`);
         } catch (alterError) {
-          if (alterError.code === "ER_DUP_FIELDNAME") {
+          if (alterError.code === 'ER_DUP_FIELDNAME') {
             logger.warn(`[ensureUserInteractionColumns] 🔄 Coluna '${column.name}' já existe (detectado durante ALTER).`);
           } else {
             logger.error(`[ensureUserInteractionColumns] ❌ Erro ao adicionar '${column.name}': ${alterError.message}`, { stack: alterError.stack });
@@ -247,15 +322,15 @@ async function ensureUserInteractionColumns() {
   }
 
   if (allOk) {
-    logger.info("[ensureUserInteractionColumns] Verificação das colunas de interação concluída.");
+    logger.info('[ensureUserInteractionColumns] Verificação das colunas de interação concluída.');
   } else {
-    logger.error("[ensureUserInteractionColumns] ❌ Falha ao garantir todas as colunas de interação.");
+    logger.error('[ensureUserInteractionColumns] ❌ Falha ao garantir todas as colunas de interação.');
   }
   return allOk;
 }
 
 async function logInteraction(userId, pushName, isGroup, isCommand, commandName = null, groupId = null) {
-  const now = moment().tz("America/Sao_Paulo").format("YYYY-MM-DD HH:mm:ss");
+  const now = moment().tz('America/Sao_Paulo').format('YYYY-MM-DD HH:mm:ss');
   const usersTable = DB_TABLES.users;
   const historyTable = DB_TABLES.interactionHistory;
   let wasFirstEligibleInteraction = false;
@@ -267,9 +342,9 @@ async function logInteraction(userId, pushName, isGroup, isCommand, commandName 
 
   let interactionType;
   if (isGroup) {
-    interactionType = isCommand ? "group_command" : "group_message";
+    interactionType = isCommand ? 'group_command' : 'group_message';
   } else {
-    interactionType = isCommand ? "private_command" : "private_message";
+    interactionType = isCommand ? 'private_command' : 'private_message';
   }
 
   const isEligibleForFirst = !isGroup || (isGroup && isCommand);
@@ -334,8 +409,8 @@ async function saveUserToDatabase(userId, pushName) {
 async function saveGroupToDatabase(mergedGroupMeta) {
   const groupId = mergedGroupMeta?.id;
   if (!groupId) {
-    logger.error("[ saveGroupToDatabase ] ❌ Erro: ID do grupo ausente nos metadados mesclados.", { mergedGroupMeta });
-    throw new Error("ID do grupo ausente nos metadados para salvar.");
+    logger.error('[ saveGroupToDatabase ] ❌ Erro: ID do grupo ausente nos metadados mesclados.', { mergedGroupMeta });
+    throw new Error('ID do grupo ausente nos metadados para salvar.');
   }
 
   const values = [
@@ -394,10 +469,10 @@ async function saveGroupParticipantsToDatabase(groupId, participants) {
     return;
   }
 
-  const values = participants.map(p => [groupId, p.id, p.admin === "admin" || p.admin === "superadmin" ? 1 : 0]);
+  const values = participants.map((p) => [groupId, p.id, p.admin === 'admin' || p.admin === 'superadmin' ? 1 : 0]);
 
   if (values.length === 0) return;
-  const placeholders = values.map(() => "(?, ?, ?)").join(", ");
+  const placeholders = values.map(() => '(?, ?, ?)').join(', ');
   const bulkQuery = `INSERT IGNORE INTO ${DB_TABLES.participants} (group_id, participant, isAdmin) VALUES ${placeholders};`;
   const flatValues = values.flat();
   try {
@@ -451,7 +526,7 @@ async function ensureGroupExists(groupId) {
           (id, name, owner, created_at, is_welcome, welcome_message, welcome_media, exit_message, exit_media)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
       `;
-      await runQuery(insertQuery, [groupId, DEFAULT_GROUP_DATA.subject, DEFAULT_GROUP_DATA.owner, moment().utc().format("YYYY-MM-DD HH:mm:ss"), DEFAULT_GROUP_DATA.isWelcome, DEFAULT_GROUP_DATA.welcomeMessage, DEFAULT_GROUP_DATA.welcomeMedia, DEFAULT_GROUP_DATA.exitMessage, DEFAULT_GROUP_DATA.exitMedia]);
+      await runQuery(insertQuery, [groupId, DEFAULT_GROUP_DATA.subject, DEFAULT_GROUP_DATA.owner, moment().utc().format('YYYY-MM-DD HH:mm:ss'), DEFAULT_GROUP_DATA.isWelcome, DEFAULT_GROUP_DATA.welcomeMessage, DEFAULT_GROUP_DATA.welcomeMedia, DEFAULT_GROUP_DATA.exitMessage, DEFAULT_GROUP_DATA.exitMedia]);
       logger.info(`[ ensureGroupExists ] ✅ Entrada mínima criada para ${groupId}.`);
     }
     return groupId;
@@ -465,8 +540,8 @@ async function saveMessageToDatabase(messageData) {
   const { messageId, userId, groupId, messageType, messageContent, timestamp } = messageData;
 
   if (!messageId || !userId || !messageType || !timestamp) {
-    logger.error("[ saveMessageToDatabase ] ❌ Dados da mensagem incompletos.", messageData);
-    throw new Error("Dados da mensagem incompletos para salvar.");
+    logger.error('[ saveMessageToDatabase ] ❌ Dados da mensagem incompletos.', messageData);
+    throw new Error('Dados da mensagem incompletos para salvar.');
   }
 
   const query = `
@@ -480,10 +555,10 @@ async function saveMessageToDatabase(messageData) {
     await runQuery(query, [messageId, userId, groupId, messageType, messageContent, timestamp]);
     logger.debug(`[ saveMessageToDatabase ] Mensagem ${messageId} salva.`);
   } catch (error) {
-    if (error.code === "ER_NO_REFERENCED_ROW" || error.code === "ER_NO_REFERENCED_ROW_2") {
-      if (error.message.includes("fk_sender_id")) {
+    if (error.code === 'ER_NO_REFERENCED_ROW' || error.code === 'ER_NO_REFERENCED_ROW_2') {
+      if (error.message.includes('fk_sender_id')) {
         logger.error(`[ saveMessageToDatabase ] ❌ Erro FK: Usuário ${userId} não encontrado no DB. Mensagem ${messageId} não salva.`);
-      } else if (error.message.includes("fk_group_id") && groupId) {
+      } else if (error.message.includes('fk_group_id') && groupId) {
         logger.error(`[ saveMessageToDatabase ] ❌ Erro FK: Grupo ${groupId} não encontrado no DB. Mensagem ${messageId} não salva.`);
       } else {
         logger.error(`[ saveMessageToDatabase ] ❌ Erro FK desconhecido para msg ${messageId}: ${error.message}`, { stack: error.stack });
@@ -501,7 +576,7 @@ async function processIncomingMessageData(info) {
   try {
     validatedData = validateIncomingInfo(info);
   } catch (validationError) {
-    if (validationError.message !== "Dados inválidos ou mensagem própria.") {
+    if (validationError.message !== 'Dados inválidos ou mensagem própria.') {
       logger.warn(`[ processIncomingMessageData ] ⚠️ Validação falhou: ${validationError.message}`, { key: info?.key });
     }
     throw validationError;
@@ -526,7 +601,7 @@ async function processIncomingMessageData(info) {
   }
 
   try {
-    const messageType = baileys.getContentType(info.message) || "unknown";
+    const messageType = baileys.getContentType(info.message) || 'unknown';
     let messageContent = null;
     if (info.message) {
       try {
@@ -543,7 +618,7 @@ async function processIncomingMessageData(info) {
       }
     }
 
-    const timestamp = moment().tz("America/Sao_Paulo").format("YYYY-MM-DD HH:mm:ss");
+    const timestamp = moment().tz('America/Sao_Paulo').format('YYYY-MM-DD HH:mm:ss');
 
     await saveMessageToDatabase({ messageId, userId, groupId, messageType, messageContent, timestamp });
 
@@ -555,7 +630,7 @@ async function processIncomingMessageData(info) {
 }
 
 async function handleGroupMetadataUpdate(groupId, client) {
-  if (!client || typeof client.groupMetadata !== "function") {
+  if (!client || typeof client.groupMetadata !== 'function') {
     logger.error(`[ handleGroupMetadataUpdate ] ❌ Cliente inválido ou sem função groupMetadata para buscar metadados de ${groupId}.`);
     return;
   }
@@ -617,7 +692,7 @@ async function handleGroupMetadataUpdate(groupId, client) {
 
     logger.info(`[ handleGroupMetadataUpdate ] ✅ Metadados (mesclados com DB) e participantes de ${groupId} salvos. Cache atualizado.`);
   } catch (fetchSaveError) {
-    if (fetchSaveError.message?.includes("group not found") || fetchSaveError.output?.statusCode === 404) {
+    if (fetchSaveError.message?.includes('group not found') || fetchSaveError.output?.statusCode === 404) {
       logger.warn(`[ handleGroupMetadataUpdate ] ⚠️ Grupo ${groupId} não encontrado pelo cliente durante busca/processamento.`);
       groupMetadataCache.delete(groupId);
     } else {
@@ -634,7 +709,7 @@ async function processUserData(data, client) {
 
   const validMessages = messages.filter(({ key }) => {
     const jid = key?.remoteJid;
-    const isValid = typeof jid === "string" && (jid.endsWith("@s.whatsapp.net") || jid.endsWith("@g.us"));
+    const isValid = typeof jid === 'string' && (jid.endsWith('@s.whatsapp.net') || jid.endsWith('@g.us'));
     if (!isValid && jid) {
       logger.warn(`[ processUserData ] ⚠️ Ignorando mensagem com JID inválido: ${jid}`);
     }
@@ -642,24 +717,24 @@ async function processUserData(data, client) {
   });
 
   if (validMessages.length === 0) {
-    logger.debug("[ processUserData ] Nenhuma mensagem com JID válido encontrada no lote.");
+    logger.debug('[ processUserData ] Nenhuma mensagem com JID válido encontrada no lote.');
     return;
   }
 
   logger.info(`[ processUserData ] Processando ${validMessages.length} mensagens válidas...`);
 
   for (const info of validMessages) {
-    const messageId = info?.key?.id || "ID_DESCONHECIDO_" + crypto.randomUUID();
+    const messageId = info?.key?.id || 'ID_DESCONHECIDO_' + crypto.randomUUID();
 
     try {
       const { groupId } = await processIncomingMessageData(info);
 
-      if (typeof groupId === "string" && groupId.endsWith("@g.us")) {
+      if (typeof groupId === 'string' && groupId.endsWith('@g.us')) {
         await handleGroupMetadataUpdate(groupId, client);
       }
     } catch (error) {
-      if (error.message !== "Dados inválidos ou mensagem própria.") {
-        logger.error(`[ processUserData ] ❌ Erro ao processar msg ${messageId} (User: ${info?.key?.participant || info?.key?.remoteJid}, Group: ${info?.key?.remoteJid}): ${error.message}`, {
+      if (error.message !== 'Dados inválidos ou mensagem própria.') {
+        logger.error(`[ processUserData ] ❌ Erro ao processar msg ${messageId} User: ${info?.key?.participant || info?.key?.remoteJid}, Group: ${info?.key?.remoteJid} : ${error.message}`, {
           messageKey: info?.key,
         });
       }

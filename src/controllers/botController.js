@@ -1,23 +1,23 @@
-require("dotenv").config(); // Load environment variables if used
+require('dotenv').config();
 
-const path = require("path");
-const ConfigfilePath = path.join(__dirname, "../config/options.json");
+const path = require('path');
+const ConfigfilePath = path.join(__dirname, '../config/options.json');
 const config = require(ConfigfilePath);
-const logger = require("../utils/logger");
+const logger = require('../utils/logger');
 
 // --- Module Imports ---
-const welcomeHandlers = require("../modules/groupsModule/welcome/welcomeCommands");
-const { processSticker } = require(path.join(__dirname, "../modules/stickerModule/processStickers"));
-const { processPremiumStatus } = require("../database/processUserPremium");
-const { processGeminiCommand, processSetPromptCommand } = require("../modules/geminiModule/geminiCommand");
+const welcomeHandlers = require('../modules/groupsModule/welcome/welcomeCommands');
+const { processSticker } = require(path.join(__dirname, '../modules/stickerModule/processStickers'));
+const { processPremiumStatus } = require('../database/processUserPremium');
+const { processGeminiCommand, processSetPromptCommand } = require('../modules/geminiModule/geminiCommand');
 
 // --- Utility and Controller Imports ---
-const { getFileBuffer } = require(path.join(__dirname, "../utils/getFileBuffer"));
-const { preProcessMessage, isCommand, processQuotedChecks, getExpiration } = require(path.join(__dirname, "./messageTypeController"));
-const { checkRateLimit, isUserPremium } = require("../controllers/rateLimitController");
-const { logCommandAnalytics } = require("../database/processDatabase");
-const { logInteraction } = require("./userDataController");
-const { sendWelcomeMessage } = require("./InteractionController");
+const { getFileBuffer } = require(path.join(__dirname, '../utils/getFileBuffer'));
+const { preProcessMessage, isCommand, processQuotedChecks, getExpiration } = require(path.join(__dirname, './messageTypeController'));
+const { checkRateLimit, isUserPremium } = require('../controllers/rateLimitController');
+const { logCommandAnalytics } = require('../database/processDatabase');
+const { logInteraction } = require('./userDataController');
+const { sendWelcomeMessage } = require('./InteractionController');
 
 async function handleWhatsAppUpdate(upsert, client) {
   for (const info of upsert?.messages || []) {
@@ -30,18 +30,22 @@ async function handleWhatsAppUpdate(upsert, client) {
 
     const from = info.key.remoteJid;
     if (!from) {
-      logger.warn("[handleWhatsAppUpdate] Skipping update: Could not determine remote JID.", { key: info.key });
+      logger.warn('[handleWhatsAppUpdate] Skipping update: Could not determine remote JID.', {
+        key: info.key,
+      });
       continue;
     }
 
-    const isGroup = from.endsWith("@g.us");
+    const isGroup = from.endsWith('@g.us');
     const sender = isGroup ? info.key.participant : info.key.remoteJid;
     if (!sender) {
-      logger.warn("[handleWhatsAppUpdate] Skipping update: Could not determine sender JID.", { key: info.key });
+      logger.warn('[handleWhatsAppUpdate] Skipping update: Could not determine sender JID.', {
+        key: info.key,
+      });
       continue;
     }
 
-    const userName = info.pushName || "Desconhecido";
+    const userName = info.pushName || 'Desconhecido';
     const expirationMessage = getExpiration(info);
 
     const { type, body, isMedia } = preProcessMessage(info);
@@ -51,7 +55,7 @@ async function handleWhatsAppUpdate(upsert, client) {
     const isCmd = processCommand?.isCommand || false; // Boolean: Is it a command?
     const command = processCommand?.command; // String: Command name (e.g., 'menu') or null
     const args = processCommand?.args; // Array: Arguments after the command or null
-    const text = args ? args.join(" ") : ""; // String: Full text after the command
+    const text = args ? args.join(' ') : ''; // String: Full text after the command
 
     // --- Owner Information ---
     const isOwner = sender === config.owner.number;
@@ -59,7 +63,7 @@ async function handleWhatsAppUpdate(upsert, client) {
     const ownerName = config.owner.name;
 
     // --- Rate Limiting & Analytics (Applied ONLY to Commands) ---
-    let rateLimitResult = { status: "allowed", isPremium: false, limit: 0, currentCount: 0 }; // Default for non-commands or allowed commands
+    let rateLimitResult = { status: 'allowed', isPremium: false, limit: 0, currentCount: 0 }; // Default for non-commands or allowed commands
 
     if (isCmd) {
       if (!isOwner) {
@@ -86,17 +90,23 @@ async function handleWhatsAppUpdate(upsert, client) {
       }
 
       // --- Handle Rate Limit Result (Block if not allowed) ---
-      if (rateLimitResult.status !== "allowed") {
+      if (rateLimitResult.status !== 'allowed') {
         logger.info(`[handleWhatsAppUpdate] Command '!${command}' from ${sender} blocked. Status: ${rateLimitResult.status}`);
         if (rateLimitResult.message) {
-          await client.sendMessage(from, { react: { text: "⏱️", key: info.key } });
+          await client.sendMessage(from, { react: { text: '⏱️', key: info.key } });
           await client.sendMessage(from, { text: rateLimitResult.message }, { quoted: info, ephemeralExpiration: expirationMessage });
-        } else if (rateLimitResult.status === "disabled") {
-          await client.sendMessage(from, { react: { text: "🚫", key: info.key } });
+        } else if (rateLimitResult.status === 'disabled') {
+          await client.sendMessage(from, { react: { text: '🚫', key: info.key } });
           await client.sendMessage(from, { text: `❌ O comando \`!${command}\` está desativado.` }, { quoted: info, ephemeralExpiration: expirationMessage });
-        } else if (rateLimitResult.status === "error") {
-          await client.sendMessage(from, { react: { text: "⚠️", key: info.key } });
-          await client.sendMessage(from, { text: rateLimitResult.message || `❌ Ocorreu um erro ao processar o comando \`!${command}\`. Tente novamente.` }, { quoted: info, ephemeralExpiration: expirationMessage });
+        } else if (rateLimitResult.status === 'error') {
+          await client.sendMessage(from, { react: { text: '⚠️', key: info.key } });
+          await client.sendMessage(
+            from,
+            {
+              text: rateLimitResult.message || `❌ Ocorreu um erro ao processar o comando \`!${command}\`. Tente novamente.`,
+            },
+            { quoted: info, ephemeralExpiration: expirationMessage },
+          );
         }
         continue;
       }
@@ -125,7 +135,7 @@ async function handleWhatsAppUpdate(upsert, client) {
       if (isGroup) {
         try {
           const groupMeta = await client.groupMetadata(from);
-          const admins = (groupMeta?.participants || []).filter(p => p.admin === "admin" || p.admin === "superadmin").map(p => p.id);
+          const admins = (groupMeta?.participants || []).filter((p) => p.admin === 'admin' || p.admin === 'superadmin').map((p) => p.id);
           isGroupAdmin = admins.includes(sender);
         } catch (groupMetaError) {
           logger.warn(`[handleWhatsAppUpdate] Failed to get groupMetadata for admin check in ${from}: ${groupMetaError.message}`);
@@ -134,94 +144,94 @@ async function handleWhatsAppUpdate(upsert, client) {
 
       const quotedParticipant = info.message?.extendedTextMessage?.contextInfo?.participant;
       const mentionedJids = info.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
-      const targetUsers = [...new Set([quotedParticipant, ...mentionedJids].filter(jid => jid && jid !== sender))];
+      const targetUsers = [...new Set([quotedParticipant, ...mentionedJids].filter((jid) => jid && jid !== sender))];
 
       try {
         switch (command) {
-          case "menu": {
+          case 'menu': {
             logger.info(`[handleWhatsAppUpdate] Menu command executed by ${sender}.`);
             const commandList = Object.entries(config.commandLimits || {});
-            const prefix = config.bot.globalSettings.prefix || "/";
+            const prefix = config.bot.globalSettings.prefix || '/';
 
             if (commandList.length === 0) {
-              await client.sendMessage(from, { text: "ℹ️ Nenhum comando configurado encontrado." }, { quoted: info, ephemeralExpiration: expirationMessage });
+              await client.sendMessage(from, { text: 'ℹ️ Nenhum comando configurado encontrado.' }, { quoted: info, ephemeralExpiration: expirationMessage });
               break;
             }
 
-            let menuMessage = "📜 *Menu de Comandos* 📜\n\n";
-            menuMessage += "Aqui estão os comandos disponíveis:\n\n";
+            let menuMessage = '📜 *Menu de Comandos* 📜\n\n';
+            menuMessage += 'Aqui estão os comandos disponíveis:\n\n';
 
             commandList.forEach(([cmdName, cmdDetails]) => {
               const limits = cmdDetails?.nonPremium;
               if (!limits || limits.limit !== 0) {
-                const description = cmdDetails?.description || "Sem descrição disponível.";
+                const description = cmdDetails?.description || 'Sem descrição disponível.';
                 menuMessage += `🔹 *${prefix}${cmdName}* - ${description}\n`;
               }
             });
 
-            menuMessage += "\nUse os comandos conforme listado acima.";
+            menuMessage += '\nUse os comandos conforme listado acima.';
             await client.sendMessage(from, { text: menuMessage }, { quoted: info, ephemeralExpiration: expirationMessage });
             break;
           }
 
-          case "s": {
+          case 's': {
             await processSticker(client, info, expirationMessage, sender, from, text, isMedia, isQuotedVideo, isQuotedImage, config, getFileBuffer);
             break;
           }
 
-          case "cat":
+          case 'cat':
             await processGeminiCommand(client, info, sender, from, text, expirationMessage);
             break;
 
-          case "setia":
+          case 'setia':
             {
               await processSetPromptCommand(client, info, sender, from, args);
             }
             break;
 
-          case "welcome":
+          case 'welcome':
             await welcomeHandlers.handleWelcomeToggleCommand(client, info, sender, from, text, expirationMessage, isGroup, isGroupAdmin); // Pass isGroupAdmin for potential internal use
             break;
-          case "setwelcome":
+          case 'setwelcome':
             await welcomeHandlers.handleSetWelcomeMessageCommand(client, info, sender, from, text, expirationMessage, isGroup, isGroupAdmin);
             break;
-          case "setwelcomemedia":
+          case 'setwelcomemedia':
             await welcomeHandlers.handleSetWelcomeMediaCommand(client, info, sender, from, text, expirationMessage, isGroup, isGroupAdmin);
             break;
-          case "setexit":
+          case 'setexit':
             await welcomeHandlers.handleSetExitMessageCommand(client, info, sender, from, text, expirationMessage, isGroup, isGroupAdmin);
             break;
-          case "setexitmedia":
+          case 'setexitmedia':
             await welcomeHandlers.handleSetExitMediaCommand(client, info, sender, from, text, expirationMessage, isGroup, isGroupAdmin);
             break;
 
-          case "p": {
+          case 'p': {
             if (!isOwner) {
               logger.warn(`[handleWhatsAppUpdate] Non-owner ${sender} attempted owner command 'p'.`);
-              await client.sendMessage(from, { text: "❌ Apenas o dono do bot pode executar este comando." }, { quoted: info, ephemeralExpiration: expirationMessage });
+              await client.sendMessage(from, { text: '❌ Apenas o dono do bot pode executar este comando.' }, { quoted: info, ephemeralExpiration: expirationMessage });
               break;
             }
 
             const parts = text.trim().split(/\s+/);
-            let potentialNumber = "";
-            let duration = "";
+            let potentialNumber = '';
+            let duration = '';
             let targetUserJid = null;
 
             if (mentionedJids.length > 0) {
               targetUserJid = mentionedJids[0];
-              duration = parts.length > 0 ? parts[parts.length - 1] : "";
+              duration = parts.length > 0 ? parts[parts.length - 1] : '';
               logger.info(`[handleWhatsAppUpdate] 'p' command target identified via mention: ${targetUserJid}`);
             } else if (quotedParticipant) {
               targetUserJid = quotedParticipant;
-              duration = parts.length > 0 ? parts[parts.length - 1] : "";
+              duration = parts.length > 0 ? parts[parts.length - 1] : '';
               logger.info(`[handleWhatsAppUpdate] 'p' command target identified via quote: ${targetUserJid}`);
             } else {
-              potentialNumber = parts.slice(0, -1).join(" ").trim();
-              duration = parts.length > 0 ? parts[parts.length - 1] : "";
+              potentialNumber = parts.slice(0, -1).join(' ').trim();
+              duration = parts.length > 0 ? parts[parts.length - 1] : '';
               if (potentialNumber) {
-                let cleanNumber = potentialNumber.replace(/[^0-9+]/g, "");
-                if (!cleanNumber.includes("@s.whatsapp.net")) {
-                  if (cleanNumber.startsWith("+") && cleanNumber.length > 10) {
+                let cleanNumber = potentialNumber.replace(/[^0-9+]/g, '');
+                if (!cleanNumber.includes('@s.whatsapp.net')) {
+                  if (cleanNumber.startsWith('+') && cleanNumber.length > 10) {
                     targetUserJid = `${cleanNumber}@s.whatsapp.net`;
                   } else if (cleanNumber.length >= 10 && cleanNumber.length <= 13) {
                     targetUserJid = `55${cleanNumber}@s.whatsapp.net`;
@@ -240,9 +250,9 @@ async function handleWhatsAppUpdate(upsert, client) {
               await client.sendMessage(
                 from,
                 {
-                  text: "❌ Formato inválido!\nUso: `!p <@mention/número> <duração>`\nEx: `!p @user 30d` ou `!p 55119... 7days`\n\nDuração: `30d` (dias), `24h` (horas), `60m` (minutos)",
+                  text: '❌ Formato inválido!\nUso: `!p <@mention/número> <duração>`\nEx: `!p @user 30d` ou `!p 55119... 7days`\n\nDuração: `30d` (dias), `24h` (horas), `60m` (minutos)',
                 },
-                { quoted: info, ephemeralExpiration: expirationMessage }
+                { quoted: info, ephemeralExpiration: expirationMessage },
               );
               break;
             }
@@ -269,7 +279,13 @@ async function handleWhatsAppUpdate(upsert, client) {
         logger.error(`[handleWhatsAppUpdate] ❌ Error executing command '!${command}' for user ${sender}: ${commandError.message}`, { stack: commandError.stack });
         // Notify user of the internal error
         try {
-          await client.sendMessage(from, { text: `❌ Ocorreu um erro interno ao executar o comando \`!${command}\`. Por favor, tente novamente mais tarde ou contate o suporte.` }, { quoted: info, ephemeralExpiration: expirationMessage });
+          await client.sendMessage(
+            from,
+            {
+              text: `❌ Ocorreu um erro interno ao executar o comando \`!${command}\`. Por favor, tente novamente mais tarde ou contate o suporte.`,
+            },
+            { quoted: info, ephemeralExpiration: expirationMessage },
+          );
         } catch (replyError) {
           logger.error(`[handleWhatsAppUpdate] ❌ Failed to send error reply to user ${sender}: ${replyError.message}`);
         }
