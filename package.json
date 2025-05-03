@@ -4,8 +4,9 @@
   "description": "Chatbot avançado com inteligência artificial para automação no WhatsApp, integração via API e suporte a múltiplas funcionalidades.",
   "main": "src",
   "scripts": {
-    "start": "npx node ./src/auth/connection.js",
-    "start:pm2": "pm2 start ecosystem.config.js",
+    "start": "npm run start:prod",
+    "dev": "nodemon ./src/auth/connection.js",
+    "start:prod": "pm2 start ecosystem.config.js --env production",
     "restart": "npx pm2 restart all",
     "stop": "npx pm2 stop all",
     "logs": "npx pm2 monit"
@@ -28,6 +29,7 @@
     "node-cache": "5.1.2",
     "node-fetch": "3.3.2",
     "node-webpmux": "3.2.0",
+    "nodemon": "^3.1.10",
     "pino": "9.6.0",
     "pm2": "^6.0.5",
     "qrcode-terminal": "0.12.0",
