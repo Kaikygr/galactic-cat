@@ -20,7 +20,7 @@ const env = cleanEnv(process.env, {
     default: process.env.NODE_ENV === "production" ? "info" : "debug",
     desc: "Logging level",
   }),
-  ECOSYSTEM_NAME: str({ default: "meu-bot", desc: "Service name for logs" }),
+  ECOSYSTEM_NAME: str({ default: "system", desc: "Service name for logs" }),
   PM2_INSTANCE_ID: str({ default: undefined, desc: "PM2 instance ID (standard)" }),
   NODE_APP_INSTANCE: str({ default: undefined, desc: "PM2 instance ID (alternative)" }),
   pm_id: str({ default: undefined, desc: "PM2 instance ID (legacy)" }),
@@ -108,14 +108,7 @@ const consoleFormat = winston.format.combine(
   })
 );
 
-const fileFormat = winston.format.combine(
-  redactFormat(),
-  winston.format.timestamp(),
-  winston.format.splat(),
-  winston.format.errors({ stack: true }),
-  winston.format.metadata({ fillExcept: ["message", "level", "timestamp", "service", "instanceId", "environment", "stack"] }),
-  winston.format.json() // Log in JSON format
-);
+const fileFormat = winston.format.combine(redactFormat(), winston.format.timestamp(), winston.format.splat(), winston.format.errors({ stack: true }), winston.format.metadata({ fillExcept: ["message", "level", "timestamp", "service", "instanceId", "environment", "stack"] }), winston.format.json());
 
 const getDefaultTransportDefinitions = level => [
   {

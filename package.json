@@ -4,12 +4,8 @@
   "description": "Chatbot avançado com inteligência artificial para automação no WhatsApp, integração via API e suporte a múltiplas funcionalidades.",
   "main": "src",
   "scripts": {
-    "start": "npm run start:prod",
-    "dev": "nodemon ./src/auth/connection.js",
-    "start:prod": "pm2 start ecosystem.config.js --env production",
-    "restart": "npx pm2 restart all",
-    "stop": "npx pm2 stop all",
-    "logs": "npx pm2 monit"
+    "start": "pm2 start ecosystem.config.js --env production",
+    "dev": "pm2 start ecosystem.config.js --env development"
   },
   "author": "Kaikygr",
   "license": "MIT",
