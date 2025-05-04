@@ -673,24 +673,41 @@ async function getGroupSettingsFromDB(groupId) {
   }
 }
 
+/**
+ * Garante que o grupo existe no banco de dados. Se não existir, insere um registro mínimo com valores padrão.
+ *
+ * @param {string} groupId - ID do grupo a ser verificado.
+ * @returns {Promise<string>} - Retorna o próprio ID do grupo.
+ */
 async function ensureGroupExists(groupId) {
-  try {
-    const checkQuery = `SELECT id FROM \`${DB_TABLES.groups}\` WHERE id = ? LIMIT 1;`;
-    const results = await runQuery(checkQuery, [groupId]);
+  const table = DB_TABLES.groups;
+  const checkQuery = `SELECT id FROM \`${table}\` WHERE id = ? LIMIT 1;`;
 
-    if (results.length === 0) {
-      logger.warn(`[ ensureGroupExists ] Grupo ${groupId} não encontrado no DB. Criando entrada mínima com defaults.`);
+  try {
+    const [group] = await runQuery(checkQuery, [groupId]);
+
+    if (!group) {
+      logger.warn(`[ensureGroupExists] Grupo ${groupId} não encontrado. Criando entrada mínima com dados padrão.`);
+
       const insertQuery = `
-        INSERT IGNORE INTO \`${DB_TABLES.groups}\`
+        INSERT IGNORE INTO \`${table}\`
           (id, name, owner, created_at, is_welcome, welcome_message, welcome_media, exit_message, exit_media)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
       `;
-      await runQuery(insertQuery, [groupId, DEFAULT_GROUP_DATA.subject, DEFAULT_GROUP_DATA.owner, moment().utc().format('YYYY-MM-DD HH:mm:ss'), DEFAULT_GROUP_DATA.isWelcome, DEFAULT_GROUP_DATA.welcomeMessage, DEFAULT_GROUP_DATA.welcomeMedia, DEFAULT_GROUP_DATA.exitMessage, DEFAULT_GROUP_DATA.exitMedia]);
-      logger.info(`[ ensureGroupExists ] ✅ Entrada mínima criada para ${groupId}.`);
+
+      const nowUtc = moment().utc().format('YYYY-MM-DD HH:mm:ss');
+      const values = [groupId, DEFAULT_GROUP_DATA.subject, DEFAULT_GROUP_DATA.owner, nowUtc, DEFAULT_GROUP_DATA.isWelcome, DEFAULT_GROUP_DATA.welcomeMessage, DEFAULT_GROUP_DATA.welcomeMedia, DEFAULT_GROUP_DATA.exitMessage, DEFAULT_GROUP_DATA.exitMedia];
+
+      /* Executa a query para inserir o grupo com dados padrão */
+      await runQuery(insertQuery, values);
+      logger.info(`[ensureGroupExists] ✅ Grupo ${groupId} criado com dados padrão.`);
+    } else {
+      logger.debug(`[ensureGroupExists] Grupo ${groupId} já existe.`);
     }
+
     return groupId;
   } catch (error) {
-    logger.error(`[ ensureGroupExists ] ❌ Erro crítico ao verificar/criar grupo ${groupId}: ${error.message}`, { stack: error.stack });
+    logger.error(`[ensureGroupExists] ❌ Erro ao garantir existência do grupo ${groupId}: ${error.message}`, { stack: error.stack });
     throw error;
   }
 }
