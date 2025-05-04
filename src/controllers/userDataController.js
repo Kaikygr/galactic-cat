@@ -203,14 +203,20 @@ async function createTableIfNotExists(tableName, createStatement) {
   }
 }
 
+/**
+ * Cria todas as tabelas necessárias no banco de dados, caso ainda não existam.
+ * Utiliza instruções SQL específicas para garantir estrutura e integridade referencial.
+ *
+ * @throws {Error} Caso ocorra falha crítica na criação de qualquer tabela.
+ */
 async function createTables() {
   logger.info('[ createTables ] 📦 Verificando e criando tabelas...');
-  const loggerPrefix = '[ createTables ]';
 
   try {
     await createTableIfNotExists(
       DB_TABLES.groups,
-      `CREATE TABLE IF NOT EXISTS \`${DB_TABLES.groups}\` (
+      /* SQL */ `
+      CREATE TABLE IF NOT EXISTS \`${DB_TABLES.groups}\` (
         id VARCHAR(255) PRIMARY KEY, name VARCHAR(255), owner VARCHAR(255), created_at DATETIME,
         description TEXT, description_id VARCHAR(255), subject_owner VARCHAR(255), subject_time DATETIME,
         size INT, \`restrict\` TINYINT(1) DEFAULT 0, announce TINYINT(1) DEFAULT 0, is_community TINYINT(1) DEFAULT 0,
@@ -218,88 +224,104 @@ async function createTables() {
         isPremium TINYINT(1) DEFAULT 0, premiumTemp DATETIME DEFAULT NULL,
         is_welcome TINYINT(1) DEFAULT ${DEFAULT_GROUP_DATA.isWelcome}, welcome_message TEXT, welcome_media TEXT DEFAULT NULL,
         exit_message TEXT, exit_media TEXT DEFAULT NULL
-      ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
-      loggerPrefix,
+      ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `,
     );
+    logger.debug(`[ createTables ] 🔧 Tabela '${DB_TABLES.groups}' pronta.`);
 
     await createTableIfNotExists(
       DB_TABLES.users,
-      `CREATE TABLE IF NOT EXISTS \`${DB_TABLES.users}\` (
+      /* SQL */ `
+      CREATE TABLE IF NOT EXISTS \`${DB_TABLES.users}\` (
         sender VARCHAR(255) PRIMARY KEY, pushName VARCHAR(255), isPremium TINYINT(1) DEFAULT 0,
-        premiumTemp DATETIME DEFAULT NULL, has_interacted TINYINT(1) DEFAULT 0 COMMENT 'Flag set on first eligible interaction',
-        first_interaction_at DATETIME NULL DEFAULT NULL COMMENT 'Timestamp of the first eligible interaction',
-        last_interaction_at DATETIME NULL DEFAULT NULL COMMENT 'Timestamp of the last interaction of any type'
-      ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
-      loggerPrefix,
+        premiumTemp DATETIME DEFAULT NULL, has_interacted TINYINT(1) DEFAULT 0,
+        first_interaction_at DATETIME NULL DEFAULT NULL, last_interaction_at DATETIME NULL DEFAULT NULL
+      ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `,
     );
+    logger.debug(`[ createTables ] 🔧 Tabela '${DB_TABLES.users}' pronta.`);
 
     await createTableIfNotExists(
       DB_TABLES.messages,
-      `CREATE TABLE IF NOT EXISTS \`${DB_TABLES.messages}\` (
+      /* SQL */ `
+      CREATE TABLE IF NOT EXISTS \`${DB_TABLES.messages}\` (
         message_id VARCHAR(255) NOT NULL, sender_id VARCHAR(255) NOT NULL, group_id VARCHAR(255),
         messageType VARCHAR(255), messageContent MEDIUMTEXT, timestamp DATETIME NOT NULL,
-        PRIMARY KEY (sender_id, timestamp, message_id), INDEX idx_message_id (message_id), INDEX idx_group_id (group_id),
+        PRIMARY KEY (sender_id, timestamp, message_id),
+        INDEX idx_message_id (message_id), INDEX idx_group_id (group_id),
         CONSTRAINT fk_sender_id FOREIGN KEY (sender_id) REFERENCES \`${DB_TABLES.users}\`(sender) ON DELETE CASCADE ON UPDATE CASCADE,
         CONSTRAINT fk_group_id FOREIGN KEY (group_id) REFERENCES \`${DB_TABLES.groups}\`(id) ON DELETE SET NULL ON UPDATE CASCADE
-      ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
-      loggerPrefix,
+      ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `,
     );
+    logger.debug(`[ createTables ] 🔧 Tabela '${DB_TABLES.messages}' pronta.`);
 
     await createTableIfNotExists(
       DB_TABLES.participants,
-      `CREATE TABLE IF NOT EXISTS \`${DB_TABLES.participants}\` (
+      /* SQL */ `
+      CREATE TABLE IF NOT EXISTS \`${DB_TABLES.participants}\` (
         group_id VARCHAR(255) NOT NULL, participant VARCHAR(255) NOT NULL, isAdmin TINYINT(1) DEFAULT 0,
         PRIMARY KEY (group_id, participant),
         CONSTRAINT fk_group_participants_group FOREIGN KEY (group_id) REFERENCES \`${DB_TABLES.groups}\`(id) ON DELETE CASCADE ON UPDATE CASCADE,
         INDEX idx_participant (participant)
-      ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
-      loggerPrefix,
+      ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `,
     );
+    logger.debug(`[ createTables ] 🔧 Tabela '${DB_TABLES.participants}' pronta.`);
 
     await createTableIfNotExists(
       DB_TABLES.commandUsage,
-      `CREATE TABLE IF NOT EXISTS \`${DB_TABLES.commandUsage}\` (
+      /* SQL */ `
+      CREATE TABLE IF NOT EXISTS \`${DB_TABLES.commandUsage}\` (
         user_id VARCHAR(255) NOT NULL, command_name VARCHAR(50) NOT NULL, usage_count_window INT DEFAULT 0,
         window_start_timestamp DATETIME NULL, last_used_timestamp DATETIME NULL,
         PRIMARY KEY (user_id, command_name),
         CONSTRAINT fk_user_usage FOREIGN KEY (user_id) REFERENCES \`${DB_TABLES.users}\`(sender) ON DELETE CASCADE ON UPDATE CASCADE
-      ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
-      loggerPrefix,
+      ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `,
     );
+    logger.debug(`[ createTables ] 🔧 Tabela '${DB_TABLES.commandUsage}' pronta.`);
 
     await createTableIfNotExists(
       DB_TABLES.analytics,
-      `CREATE TABLE IF NOT EXISTS \`${DB_TABLES.analytics}\` (
-        \`id\` BIGINT AUTO_INCREMENT PRIMARY KEY, \`user_id\` VARCHAR(255) NOT NULL, \`command_name\` VARCHAR(50) NOT NULL,
-        \`group_id\` VARCHAR(255) NULL, \`timestamp\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        \`is_premium_at_execution\` TINYINT(1) NOT NULL, \`execution_status\` ENUM('allowed', 'rate_limited', 'disabled', 'error') NOT NULL,
-        \`rate_limit_count_before\` INT NULL, \`rate_limit_limit_at_execution\` INT NULL,
-        INDEX \`idx_analytics_user_id\` (\`user_id\`), INDEX \`idx_analytics_command_name\` (\`command_name\`),
-        INDEX \`idx_analytics_group_id\` (\`group_id\`), INDEX \`idx_analytics_timestamp\` (\`timestamp\`),
-        INDEX \`idx_analytics_is_premium\` (\`is_premium_at_execution\`), INDEX \`idx_analytics_status\` (\`execution_status\`),
-        CONSTRAINT \`fk_analytics_user_id\` FOREIGN KEY (\`user_id\`) REFERENCES \`${DB_TABLES.users}\`(\`sender\`) ON DELETE CASCADE ON UPDATE CASCADE,
-        CONSTRAINT \`fk_analytics_group_id\` FOREIGN KEY (\`group_id\`) REFERENCES \`${DB_TABLES.groups}\`(\`id\`) ON DELETE SET NULL ON UPDATE CASCADE
-      ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
-      loggerPrefix,
+      /* SQL */ `
+      CREATE TABLE IF NOT EXISTS \`${DB_TABLES.analytics}\` (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY, user_id VARCHAR(255) NOT NULL, command_name VARCHAR(50) NOT NULL,
+        group_id VARCHAR(255) NULL, timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        is_premium_at_execution TINYINT(1) NOT NULL, execution_status ENUM('allowed', 'rate_limited', 'disabled', 'error') NOT NULL,
+        rate_limit_count_before INT NULL, rate_limit_limit_at_execution INT NULL,
+        INDEX idx_analytics_user_id (user_id), INDEX idx_analytics_command_name (command_name),
+        INDEX idx_analytics_group_id (group_id), INDEX idx_analytics_timestamp (timestamp),
+        INDEX idx_analytics_is_premium (is_premium_at_execution), INDEX idx_analytics_status (execution_status),
+        CONSTRAINT fk_analytics_user_id FOREIGN KEY (user_id) REFERENCES \`${DB_TABLES.users}\`(sender) ON DELETE CASCADE ON UPDATE CASCADE,
+        CONSTRAINT fk_analytics_group_id FOREIGN KEY (group_id) REFERENCES \`${DB_TABLES.groups}\`(id) ON DELETE SET NULL ON UPDATE CASCADE
+      ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `,
     );
+    logger.debug(`[ createTables ] 🔧 Tabela '${DB_TABLES.analytics}' pronta.`);
 
     await createTableIfNotExists(
       DB_TABLES.interactionHistory,
-      `CREATE TABLE IF NOT EXISTS \`${DB_TABLES.interactionHistory}\` (
+      /* SQL */ `
+      CREATE TABLE IF NOT EXISTS \`${DB_TABLES.interactionHistory}\` (
         id BIGINT AUTO_INCREMENT PRIMARY KEY, user_id VARCHAR(255) NOT NULL,
         timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         interaction_type ENUM('private_message', 'private_command', 'group_command', 'group_message') NOT NULL,
         group_id VARCHAR(255) NULL DEFAULT NULL, command_name VARCHAR(50) NULL DEFAULT NULL,
         CONSTRAINT fk_interaction_user FOREIGN KEY (user_id) REFERENCES \`${DB_TABLES.users}\`(sender) ON DELETE CASCADE ON UPDATE CASCADE,
         INDEX idx_interaction_user (user_id), INDEX idx_interaction_timestamp (timestamp), INDEX idx_interaction_group (group_id)
-      ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
-      loggerPrefix,
+      ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `,
     );
+    logger.debug(`[ createTables ] 🔧 Tabela '${DB_TABLES.interactionHistory}' pronta.`);
 
-    logger.info('[ createTables ] ✅ Verificação/criação de todas as tabelas concluída.');
+    logger.info('[ createTables ] ✅ Verificação de todas as tabelas concluída.');
   } catch (error) {
-    logger.error(`[ createTables ] ❌ Falha crítica durante a inicialização das tabelas.`);
-    throw new Error(`Falha ao inicializar tabelas do banco de dados: ${error.message}`);
+    logger.error('[ createTables ] ❌ Falha crítica durante a inicialização das tabelas.', {
+      message: error.message,
+      stack: error.stack,
+    });
+    throw new Error(`Falha ao inicializar tabelas: ${error.message}`);
   }
 }
 
