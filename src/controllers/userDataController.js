@@ -213,9 +213,10 @@ async function createTables() {
   logger.info('[ createTables ] 📦 Verificando e criando tabelas...');
 
   try {
+    /* faz a criação das tabela de groups */
     await createTableIfNotExists(
       DB_TABLES.groups,
-      /* SQL */ `
+      `
       CREATE TABLE IF NOT EXISTS \`${DB_TABLES.groups}\` (
         id VARCHAR(255) PRIMARY KEY, name VARCHAR(255), owner VARCHAR(255), created_at DATETIME,
         description TEXT, description_id VARCHAR(255), subject_owner VARCHAR(255), subject_time DATETIME,
@@ -229,9 +230,10 @@ async function createTables() {
     );
     logger.debug(`[ createTables ] 🔧 Tabela '${DB_TABLES.groups}' pronta.`);
 
+    /*faz a criação da tabela de users */
     await createTableIfNotExists(
       DB_TABLES.users,
-      /* SQL */ `
+      `
       CREATE TABLE IF NOT EXISTS \`${DB_TABLES.users}\` (
         sender VARCHAR(255) PRIMARY KEY, pushName VARCHAR(255), isPremium TINYINT(1) DEFAULT 0,
         premiumTemp DATETIME DEFAULT NULL, has_interacted TINYINT(1) DEFAULT 0,
@@ -241,9 +243,10 @@ async function createTables() {
     );
     logger.debug(`[ createTables ] 🔧 Tabela '${DB_TABLES.users}' pronta.`);
 
+    /* faz a criação da tabela de mensagens */
     await createTableIfNotExists(
       DB_TABLES.messages,
-      /* SQL */ `
+      `
       CREATE TABLE IF NOT EXISTS \`${DB_TABLES.messages}\` (
         message_id VARCHAR(255) NOT NULL, sender_id VARCHAR(255) NOT NULL, group_id VARCHAR(255),
         messageType VARCHAR(255), messageContent MEDIUMTEXT, timestamp DATETIME NOT NULL,
@@ -256,9 +259,10 @@ async function createTables() {
     );
     logger.debug(`[ createTables ] 🔧 Tabela '${DB_TABLES.messages}' pronta.`);
 
+    /* faz a criação da tabela de participantes */
     await createTableIfNotExists(
       DB_TABLES.participants,
-      /* SQL */ `
+      `
       CREATE TABLE IF NOT EXISTS \`${DB_TABLES.participants}\` (
         group_id VARCHAR(255) NOT NULL, participant VARCHAR(255) NOT NULL, isAdmin TINYINT(1) DEFAULT 0,
         PRIMARY KEY (group_id, participant),
@@ -269,9 +273,10 @@ async function createTables() {
     );
     logger.debug(`[ createTables ] 🔧 Tabela '${DB_TABLES.participants}' pronta.`);
 
+    /* faz a criação da tabela de uso de comandos */
     await createTableIfNotExists(
       DB_TABLES.commandUsage,
-      /* SQL */ `
+      `
       CREATE TABLE IF NOT EXISTS \`${DB_TABLES.commandUsage}\` (
         user_id VARCHAR(255) NOT NULL, command_name VARCHAR(50) NOT NULL, usage_count_window INT DEFAULT 0,
         window_start_timestamp DATETIME NULL, last_used_timestamp DATETIME NULL,
@@ -282,9 +287,10 @@ async function createTables() {
     );
     logger.debug(`[ createTables ] 🔧 Tabela '${DB_TABLES.commandUsage}' pronta.`);
 
+    /* faz a criação da tabela de analytics */
     await createTableIfNotExists(
       DB_TABLES.analytics,
-      /* SQL */ `
+      `
       CREATE TABLE IF NOT EXISTS \`${DB_TABLES.analytics}\` (
         id BIGINT AUTO_INCREMENT PRIMARY KEY, user_id VARCHAR(255) NOT NULL, command_name VARCHAR(50) NOT NULL,
         group_id VARCHAR(255) NULL, timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -300,9 +306,10 @@ async function createTables() {
     );
     logger.debug(`[ createTables ] 🔧 Tabela '${DB_TABLES.analytics}' pronta.`);
 
+    /* faz a criação da tabela de histórico de interações */
     await createTableIfNotExists(
       DB_TABLES.interactionHistory,
-      /* SQL */ `
+      `
       CREATE TABLE IF NOT EXISTS \`${DB_TABLES.interactionHistory}\` (
         id BIGINT AUTO_INCREMENT PRIMARY KEY, user_id VARCHAR(255) NOT NULL,
         timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
