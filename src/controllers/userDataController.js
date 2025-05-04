@@ -405,66 +405,76 @@ async function ensureUserInteractionColumns() {
     return false;
   }
 }
-
+/**
+ * Registra uma interação do usuário no banco de dados, atualizando seu registro e salvando no histórico.
+ * Define a primeira interação elegível quando aplicável.
+ *
+ * @param {string} userId - ID do remetente (usuário).
+ * @param {string} pushName - Nome visível do usuário.
+ * @param {boolean} isGroup - Indica se foi em grupo.
+ * @param {boolean} isCommand - Indica se foi uma interação via comando.
+ * @param {string|null} commandName - Nome do comando executado (se aplicável).
+ * @param {string|null} groupId - ID do grupo (se aplicável).
+ * @returns {Promise<boolean>} - `true` se foi a primeira interação elegível, `false` caso contrário ou em erro.
+ */
 async function logInteraction(userId, pushName, isGroup, isCommand, commandName = null, groupId = null) {
   const now = moment().tz('America/Sao_Paulo').format('YYYY-MM-DD HH:mm:ss');
   const usersTable = DB_TABLES.users;
   const historyTable = DB_TABLES.interactionHistory;
-  let wasFirstEligibleInteraction = false;
 
-  if (!historyTable || !usersTable) {
-    logger.error("[logInteraction] ❌ Nomes das tabelas 'users' ou 'interactionHistory' não definidos na configuração!");
+  if (!userId || !usersTable || !historyTable) {
+    /* verifica se os parâmetros são válidos */
+    logger.error('[ logInteraction ] ❌ Parâmetros ou tabelas inválidas.');
     return false;
   }
 
-  let interactionType;
-  if (isGroup) {
-    interactionType = isCommand ? 'group_command' : 'group_message';
-  } else {
-    interactionType = isCommand ? 'private_command' : 'private_message';
-  }
+  const interactionType = isGroup ? (isCommand ? 'group_command' : 'group_message') : isCommand ? 'private_command' : 'private_message';
 
-  const isEligibleForFirst = !isGroup || (isGroup && isCommand);
+  const isEligibleForFirst = !isGroup || isCommand;
+  let wasFirstEligibleInteraction = false;
 
   try {
+    /* Verifica se as colunas de interação existem e cria se necessário */
     const upsertUserQuery = `
       INSERT INTO \`${usersTable}\` (sender, pushName, first_interaction_at, last_interaction_at, has_interacted)
       VALUES (?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE
           last_interaction_at = VALUES(last_interaction_at),
-          # Only set first_interaction_at if it's currently NULL AND this interaction is eligible
           first_interaction_at = IF(first_interaction_at IS NULL AND ?, VALUES(first_interaction_at), first_interaction_at),
-          # Only set has_interacted to 1 if it's currently 0 AND this interaction is eligible
           has_interacted = IF(has_interacted = 0 AND ?, 1, has_interacted),
-          # Always update pushName in case it changed
           pushName = VALUES(pushName);
     `;
 
     const userParams = [userId, sanitizeData(pushName, DEFAULT_USER_PUSHNAME), now, now, isEligibleForFirst ? 1 : 0, isEligibleForFirst, isEligibleForFirst];
-    const upsertResult = await runQuery(upsertUserQuery, userParams);
 
+    await runQuery(upsertUserQuery, userParams);
+
+    /*Checa se foi a primeira interação apenas se necessário*/
     if (isEligibleForFirst) {
       const checkQuery = `SELECT 1 FROM \`${usersTable}\` WHERE sender = ? AND first_interaction_at = ? LIMIT 1`;
       const checkResult = await runQuery(checkQuery, [userId, now]);
       if (checkResult.length > 0) {
         wasFirstEligibleInteraction = true;
-        logger.info(`[logInteraction] 🎉 Primeira interação elegível registrada para ${userId} às ${now}.`);
+        logger.info(`[ logInteraction ] 🎉 Primeira interação elegível registrada para ${userId} às ${now}.`);
       }
     }
 
+    /* Registra a interação no histórico */
     const historyQuery = `
       INSERT INTO \`${historyTable}\` (user_id, timestamp, interaction_type, group_id, command_name)
       VALUES (?, ?, ?, ?, ?);
     `;
     await runQuery(historyQuery, [userId, now, interactionType, groupId, commandName]);
 
-    logger.debug(`[logInteraction] Interação registrada para ${userId}. Tipo: ${interactionType}. Foi a primeira elegível: ${wasFirstEligibleInteraction}`);
+    logger.debug(`[ logInteraction ] Interação registrada para ${userId}. Tipo: ${interactionType}. Primeira elegível: ${wasFirstEligibleInteraction}`);
+    return wasFirstEligibleInteraction;
   } catch (error) {
-    logger.error(`[logInteraction] ❌ Erro ao registrar interação para ${userId}: ${error.message}`, { stack: error.stack });
+    /* Se falhar, loga o erro e retorna false */
+    logger.error(`[ logInteraction]  ❌ Erro ao registrar interação para ${userId}: ${error.message}`, {
+      stack: error.stack,
+    });
     return false;
   }
-
-  return wasFirstEligibleInteraction;
 }
 
 async function saveUserToDatabase(userId, pushName) {
