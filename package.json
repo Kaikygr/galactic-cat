@@ -1,13 +1,23 @@
 {
-  "name": "cat-galactic",
-  "version": "0.2.1",
-  "description": "Chatbot avançado com inteligência artificial para automação no WhatsApp, integração via API e suporte a múltiplas funcionalidades.",
-  "main": "src",
+  "name": "galactic-cat",
+  "version": "0.1.2",
+  "description": "Chatbot open-source robusto e extensível para automação no WhatsApp, construído com Node.js e a biblioteca baileys. Projetado para ser eficiente e confiável, ele oferece uma base sólida para desenvolvedores criarem interações complexas e automatizadas, desde respostas simples até integrações com serviços de IA e gerenciamento avançado de grupos.",
+  "main": "./src/auth/connection.js",
+  "private": true,
   "scripts": {
     "start": "pm2 start ecosystem.config.js --env production",
-    "dev": "pm2 start ecosystem.config.js --env development"
+    "dev": "pm2 start ecosystem.config.js --env development",
+    "stop": "pm2 stop ecosystem.config.js",
+    "restart": "pm2 restart ecosystem.config.js",
+    "logs": "pm2 logs",
+    "flush": "pm2 flush",
+    "delete": "pm2 delete ecosystem.config.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "author": "Kaikygr",
+  "author": {
+    "name": "Kaikygr",
+    "url": "https://github.com/Kaikygr"
+  },
   "license": "MIT",
   "dependencies": {
     "@adiwajshing/keyed-db": "latest",
@@ -55,10 +65,22 @@
     "cloud",
     "backend",
     "express",
-    "automation-tools"
+    "automation-tools",
+    "gemini",
+    "mysql",
+    "sticker",
+    "pm2",
+    "winston"
   ],
   "bugs": {
     "url": "https://github.com/Kaikygr/galactic-cat/issues"
   },
-  "homepage": "https://github.com/Kaikygr/galactic-cat#readme"
+  "homepage": "https://github.com/Kaikygr/galactic-cat#readme",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "funding": {
+    "type": "individual",
+    "url": "https://bit.ly/m/Kaally"
+  }
 }
