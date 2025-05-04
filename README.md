@@ -407,8 +407,8 @@ Este projeto é distribuído sob a **Licença MIT**.
 ## Autor
 
 - **Kaikygr**
-  - GitHub: [@Kaikygr](https://www.google.com/search?q=https://github.com/Kaikygr)
-  - Contato: [WhatsApp](https://www.google.com/search?q=https://wa.me/message/C4CZHIMQU66PD1) (Link do `options.json`)
+  - GitHub: [@Kaikygr](https://github.com/Kaikygr)
+  - Contato: [WhatsApp](https://bit.ly/m/Kaally)
 
 ---
 
