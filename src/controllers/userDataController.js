@@ -513,10 +513,18 @@ async function saveUserToDatabase(userId, pushName) {
   }
 }
 
+/**
+ * Salva ou atualiza informações de um grupo no banco de dados.
+ *
+ * @param {object} mergedGroupMeta - Objeto com metadados mesclados do grupo.
+ * @returns {Promise<void>}
+ * @throws Lança erro se o ID estiver ausente ou a query falhar.
+ */
 async function saveGroupToDatabase(mergedGroupMeta) {
   const groupId = mergedGroupMeta?.id;
   if (!groupId) {
-    logger.error('[ saveGroupToDatabase ] ❌ Erro: ID do grupo ausente nos metadados mesclados.', { mergedGroupMeta });
+    /* Verifica se o ID do grupo é válido */
+    logger.error('[ saveGroupToDatabase ] ❌ Erro: ID do grupo ausente nos metadados.', { mergedGroupMeta });
     throw new Error('ID do grupo ausente nos metadados para salvar.');
   }
 
@@ -544,26 +552,29 @@ async function saveGroupToDatabase(mergedGroupMeta) {
     sanitizeData(mergedGroupMeta.exit_message, DEFAULT_GROUP_DATA.exitMessage),
     sanitizeData(mergedGroupMeta.exit_media, DEFAULT_GROUP_DATA.exitMedia),
   ];
-
+  /* Verifica se os valores são válidos */
   const query = `
     INSERT INTO \`${DB_TABLES.groups}\` (
       id, name, owner, created_at, description, description_id, subject_owner, subject_time, size,
       \`restrict\`, announce, is_community, is_community_announce, join_approval_mode, member_add_mode,
       isPremium, premiumTemp, is_welcome, welcome_message, welcome_media, exit_message, exit_media
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (${Array(values.length).fill('?').join(', ')})
     ON DUPLICATE KEY UPDATE
-      name = VALUES(name), owner = VALUES(owner), created_at = VALUES(created_at), description = VALUES(description),
+      name = VALUES(name), owner = VALUES(owner),
+      description = VALUES(description),
       description_id = VALUES(description_id), subject_owner = VALUES(subject_owner), subject_time = VALUES(subject_time),
-      size = VALUES(size), \`restrict\` = VALUES(\`restrict\`), announce = VALUES(announce), is_community = VALUES(is_community),
-      is_community_announce = VALUES(is_community_announce), join_approval_mode = VALUES(join_approval_mode),
-      member_add_mode = VALUES(member_add_mode), isPremium = VALUES(isPremium), premiumTemp = VALUES(premiumTemp),
-      is_welcome = VALUES(is_welcome), welcome_message = VALUES(welcome_message), welcome_media = VALUES(welcome_media),
-      exit_message = VALUES(exit_message), exit_media = VALUES(exit_media);
+      size = VALUES(size), \`restrict\` = VALUES(\`restrict\`), announce = VALUES(announce),
+      is_community = VALUES(is_community), is_community_announce = VALUES(is_community_announce),
+      join_approval_mode = VALUES(join_approval_mode), member_add_mode = VALUES(member_add_mode),
+      isPremium = VALUES(isPremium), premiumTemp = VALUES(premiumTemp),
+      is_welcome = VALUES(is_welcome), welcome_message = VALUES(welcome_message),
+      welcome_media = VALUES(welcome_media), exit_message = VALUES(exit_message), exit_media = VALUES(exit_media);
   `;
 
   try {
+    /* Executa a query para inserir ou atualizar o grupo */
     await runQuery(query, values);
-    logger.debug(`[ saveGroupToDatabase ] Grupo ${groupId} salvo/atualizado.`);
+    logger.debug(`[ saveGroupToDatabase ] ✅ Grupo ${groupId} salvo/atualizado.`);
   } catch (error) {
     logger.error(`[ saveGroupToDatabase ] ❌ Erro ao salvar grupo ${groupId}: ${error.message}`, { stack: error.stack });
     throw error;
