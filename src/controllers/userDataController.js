@@ -766,82 +766,121 @@ async function saveMessageToDatabase(messageData) {
   }
 }
 
+/**
+ * Processa dados de uma mensagem recebida e persiste no banco de dados.
+ *
+ * @param {Object} info - Dados crus da mensagem recebida pelo Baileys.
+ * @returns {Promise<{ userId: string, groupId: string|null, messageId: string }>}
+ */
 async function processIncomingMessageData(info) {
   let validatedData;
+
+  /* Validação inicial da mensagem */
   try {
     validatedData = validateIncomingInfo(info);
   } catch (validationError) {
     if (validationError.message !== 'Dados inválidos ou mensagem própria.') {
-      logger.warn(`[ processIncomingMessageData ] ⚠️ Validação falhou: ${validationError.message}`, { key: info?.key });
+      logger.warn(`[ processIncomingMessageData ] ⚠️ Validação falhou: ${validationError.message}`, {
+        key: info?.key,
+        pushName: info?.pushName,
+      });
     }
     throw validationError;
   }
 
   const { from, userId, isGroup, messageId } = validatedData;
   const pushName = info.pushName;
+
+  /* Garante usuário no banco */
   try {
     await saveUserToDatabase(userId, pushName);
   } catch (userSaveError) {
-    logger.error(`[ processIncomingMessageData ] ⚠️ Falha ao salvar/garantir usuário ${userId}. Mensagem ${messageId} pode não ser salva corretamente devido a FK. Erro: ${userSaveError.message}`);
+    logger.error(`[ processIncomingMessageData ] ⚠️ Falha ao salvar usuário ${userId}. FK pode falhar para mensagem ${messageId}. Erro: ${userSaveError.message}`);
   }
 
+  /* Garante grupo se for uma mensagem de grupo */
   let groupId = null;
   if (isGroup) {
     try {
       groupId = await ensureGroupExists(from);
     } catch (groupEnsureError) {
-      logger.error(`[ processIncomingMessageData ] ❌ Falha crítica ao garantir grupo ${from}. Mensagem ${messageId} não será salva. Erro: ${groupEnsureError.message}`);
+      logger.error(`[ processIncomingMessageData ] ❌ Falha crítica ao garantir grupo ${from}. Mensagem ${messageId} não será salva.`, {
+        error: groupEnsureError.message,
+      });
       throw groupEnsureError;
     }
   }
 
+  /* Determina tipo e conteúdo da mensagem */
   try {
     const messageType = baileys.getContentType(info.message) || 'unknown';
     let messageContent = null;
+
     if (info.message) {
       try {
-        const content = info.message[messageType];
-        if (content) {
-          messageContent = JSON.stringify(content);
-        } else {
-          messageContent = JSON.stringify(info.message);
-          logger.debug(`[ processIncomingMessageData ] Conteúdo direto para tipo ${messageType} não encontrado, stringificando info.message completo (ID: ${messageId})`);
+        const rawContent = info.message[messageType];
+
+        messageContent = rawContent ? JSON.stringify(rawContent) : JSON.stringify(info.message);
+
+        if (!rawContent) {
+          logger.debug(`[ processIncomingMessageData ] Tipo ${messageType} sem conteúdo direto. Serializado info.message completo (ID: ${messageId})`);
         }
       } catch (stringifyError) {
-        logger.warn(`[ processIncomingMessageData ] ⚠️ Falha ao stringificar conteúdo ${messageType} (ID: ${messageId}): ${stringifyError.message}. Usando fallback.`);
-        messageContent = JSON.stringify({ error: `Falha ao stringificar: ${stringifyError.message}` });
+        logger.warn(`[ processIncomingMessageData ] ⚠️ Erro ao stringificar conteúdo ${messageType} (ID: ${messageId}): ${stringifyError.message}`);
+        messageContent = JSON.stringify({
+          error: `Falha ao serializar conteúdo: ${stringifyError.message}`,
+        });
       }
     }
 
     const timestamp = moment().tz('America/Sao_Paulo').format('YYYY-MM-DD HH:mm:ss');
 
-    await saveMessageToDatabase({ messageId, userId, groupId, messageType, messageContent, timestamp });
+    /* Salva a mensagem no banco */
+    await saveMessageToDatabase({
+      messageId,
+      userId,
+      groupId,
+      messageType,
+      messageContent,
+      timestamp,
+    });
 
     return { userId, groupId, messageId };
   } catch (messageSaveError) {
-    logger.error(`[ processIncomingMessageData ] ❌ Erro final ao salvar dados da mensagem ${messageId}.`);
+    logger.error(`[ processIncomingMessageData ] ❌ Erro final ao salvar mensagem ${messageId}: ${messageSaveError.message}`, {
+      stack: messageSaveError.stack,
+    });
     throw messageSaveError;
   }
 }
-
+/**
+ * Atualiza e salva os metadados de um grupo no banco de dados e cache.
+ *
+ * @param {string} groupId - ID do grupo do WhatsApp
+ * @param {Object} client - Instância do cliente Baileys
+ * @returns {Promise<void>}
+ */
 async function handleGroupMetadataUpdate(groupId, client) {
   if (!client || typeof client.groupMetadata !== 'function') {
-    logger.error(`[ handleGroupMetadataUpdate ] ❌ Cliente inválido ou sem função groupMetadata para buscar metadados de ${groupId}.`);
+    logger.error(`[ handleGroupMetadataUpdate ] ❌ Cliente inválido ou sem método groupMetadata para buscar dados de ${groupId}.`);
     return;
   }
 
   const cachedData = groupMetadataCache.get(groupId);
   if (cachedData) {
-    logger.debug(`[ handleGroupMetadataUpdate ] ⚡ Usando cache para metadados de ${groupId}.`);
-
+    /* Verifica se os metadados já estão no cache */
+    logger.debug(`[ handleGroupMetadataUpdate ] ⚡ Metadados de ${groupId} recuperados do cache.`);
     return;
   }
 
-  logger.info(`[ handleGroupMetadataUpdate ] 🔄 Buscando metadados (API) E config (DB) para ${groupId} (sem cache válido).`);
+  logger.info(`[ handleGroupMetadataUpdate ] 🔄 Buscando metadados via API e configurações via DB para ${groupId}.`);
+
   try {
     const fetchedMeta = await client.groupMetadata(groupId);
-    if (!fetchedMeta || !fetchedMeta.id) {
-      logger.warn(`[ handleGroupMetadataUpdate ] ⚠️ Metadados inválidos ou não encontrados via cliente para ${groupId}. Grupo pode não existir mais.`);
+
+    if (!fetchedMeta?.id) {
+      /* Verifica se os metadados são válidos */
+      logger.warn(`[ handleGroupMetadataUpdate ] ⚠️ Metadados inválidos ou ausentes para ${groupId}. Pode ser que o grupo não exista mais.`);
       groupMetadataCache.delete(groupId);
       return;
     }
@@ -873,53 +912,69 @@ async function handleGroupMetadataUpdate(groupId, client) {
       exit_media: existingDbSettings?.exit_media ?? DEFAULT_GROUP_DATA.exitMedia,
     };
 
-    const participantsToSave = fetchedMeta.participants;
-
+    /* Salva os metadados do grupo no banco de dados */
     await saveGroupToDatabase(mergedMeta);
 
-    if (Array.isArray(participantsToSave)) {
-      await saveGroupParticipantsToDatabase(groupId, participantsToSave);
+    const participants = fetchedMeta.participants;
+    if (Array.isArray(participants)) {
+      /* Salva os participantes do grupo no banco de dados */
+      await saveGroupParticipantsToDatabase(groupId, participants);
     } else {
-      logger.warn(`[ handleGroupMetadataUpdate ] ⚠️ Lista de participantes ausente ou inválida nos metadados buscados para ${groupId}.`);
+      logger.warn(`[ handleGroupMetadataUpdate ] ⚠️ Lista de participantes ausente ou inválida para ${groupId}.`);
     }
 
     groupMetadataCache.set(groupId, fetchedMeta);
 
-    logger.info(`[ handleGroupMetadataUpdate ] ✅ Metadados (mesclados com DB) e participantes de ${groupId} salvos. Cache atualizado.`);
-  } catch (fetchSaveError) {
-    if (fetchSaveError.message?.includes('group not found') || fetchSaveError.output?.statusCode === 404) {
-      logger.warn(`[ handleGroupMetadataUpdate ] ⚠️ Grupo ${groupId} não encontrado pelo cliente durante busca/processamento.`);
+    logger.info(`[ handleGroupMetadataUpdate ] ✅ Metadados e participantes de ${groupId} atualizados e salvos com sucesso.`);
+  } catch (error) {
+    if (error.message?.includes('group not found') || error.output?.statusCode === 404) {
+      logger.warn(`[ handleGroupMetadataUpdate ] ⚠️ Grupo ${groupId} não encontrado durante tentativa de atualização.`);
       groupMetadataCache.delete(groupId);
     } else {
-      logger.error(`[ handleGroupMetadataUpdate ] ❌ Erro ao buscar/processar metadados de ${groupId}: ${fetchSaveError.message}`, { stack: fetchSaveError.stack });
+      logger.error(`[ handleGroupMetadataUpdate ] ❌ Erro ao processar metadados de ${groupId}: ${error.message}`, {
+        stack: error.stack,
+      });
     }
   }
 }
 
+/**
+ * Processa dados de mensagens recebidos em lote, validando JIDs e atualizando dados de grupo se necessário.
+ *
+ * @param {Object} data - Objeto com mensagens recebidas
+ * @param {Object} client - Cliente do WhatsApp com acesso à API de metadados
+ * @returns {Promise<void>}
+ */
 async function processUserData(data, client) {
   const messages = Array.isArray(data?.messages) ? data.messages : [];
+
   if (messages.length === 0) {
+    logger.debug('[processUserData] Nenhuma mensagem recebida para processamento.');
     return;
   }
 
   const validMessages = messages.filter(({ key }) => {
     const jid = key?.remoteJid;
     const isValid = typeof jid === 'string' && (jid.endsWith('@s.whatsapp.net') || jid.endsWith('@g.us'));
+
     if (!isValid && jid) {
-      logger.warn(`[ processUserData ] ⚠️ Ignorando mensagem com JID inválido: ${jid}`);
+      logger.warn(`[processUserData] ⚠️ Ignorando mensagem com JID inválido: ${jid}`);
     }
+
     return isValid;
   });
 
   if (validMessages.length === 0) {
-    logger.debug('[ processUserData ] Nenhuma mensagem com JID válido encontrada no lote.');
+    logger.debug('[processUserData] Nenhuma mensagem com JID válido encontrada no lote.');
     return;
   }
 
-  logger.info(`[ processUserData ] Processando ${validMessages.length} mensagens válidas...`);
+  logger.info(`[processUserData] 🔍 Iniciando processamento de ${validMessages.length} mensagens válidas.`);
 
   for (const info of validMessages) {
-    const messageId = info?.key?.id || 'ID_DESCONHECIDO_' + crypto.randomUUID();
+    const messageId = info?.key?.id || `ID_DESCONHECIDO_${crypto.randomUUID()}`;
+    const senderJid = info?.key?.participant || info?.key?.remoteJid;
+    const groupJid = info?.key?.remoteJid;
 
     try {
       const { groupId } = await processIncomingMessageData(info);
@@ -929,13 +984,15 @@ async function processUserData(data, client) {
       }
     } catch (error) {
       if (error.message !== 'Dados inválidos ou mensagem própria.') {
-        logger.error(`[ processUserData ] ❌ Erro ao processar msg ${messageId} User: ${info?.key?.participant || info?.key?.remoteJid}, Group: ${info?.key?.remoteJid} : ${error.message}`, {
+        logger.error(`[processUserData] ❌ Erro ao processar mensagem ${messageId} | User: ${senderJid} | Group: ${groupJid} | Erro: ${error.message}`, {
           messageKey: info?.key,
+          stack: error.stack,
         });
       }
     }
   }
-  logger.info(`[ processUserData ] Processamento de ${validMessages.length} mensagens concluído.`);
+
+  logger.info(`[processUserData] ✅ Processamento concluído para ${validMessages.length} mensagens.`);
 }
 
 module.exports = {
