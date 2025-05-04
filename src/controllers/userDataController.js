@@ -581,53 +581,94 @@ async function saveGroupToDatabase(mergedGroupMeta) {
   }
 }
 
+/**
+ * Salva os participantes de um grupo no banco de dados.
+ * Tenta inserir em massa com fallback para inserção individual em caso de erro.
+ *
+ * @param {string} groupId - ID do grupo.
+ * @param {Array<{id: string, admin?: string}>} participants - Lista de participantes com ID e status admin.
+ */
 async function saveGroupParticipantsToDatabase(groupId, participants) {
   if (!Array.isArray(participants) || participants.length === 0) {
     logger.debug(`[ saveGroupParticipantsToDatabase ] Sem participantes para salvar para ${groupId}.`);
     return;
   }
 
+  /* Prepara os valores: [groupId, participantId, isAdmin] */
   const values = participants.map((p) => [groupId, p.id, p.admin === 'admin' || p.admin === 'superadmin' ? 1 : 0]);
-
   if (values.length === 0) return;
+
+  /* Cria os placeholders (?,?,?), (?,?,?)... */
   const placeholders = values.map(() => '(?, ?, ?)').join(', ');
-  const bulkQuery = `INSERT IGNORE INTO ${DB_TABLES.participants} (group_id, participant, isAdmin) VALUES ${placeholders};`;
-  const flatValues = values.flat();
+
+  /* Flatten dos valores sem usar .flat() */
+  const flatValues = [];
+  for (const row of values) flatValues.push(...row);
+
+  const bulkQuery = `
+    INSERT IGNORE INTO \`${DB_TABLES.participants}\` (group_id, participant, isAdmin)
+    VALUES ${placeholders};
+  `;
+
   try {
+    /* Executa a inserção em massa */
     await runQuery(bulkQuery, flatValues);
-    logger.debug(`[ saveGroupParticipantsToDatabase ] Participantes (bulk) salvos para ${groupId}.`);
+    logger.debug(`[ saveGroupParticipantsToDatabase ] ✅ Participantes (bulk) salvos para ${groupId}.`);
   } catch (error) {
-    logger.warn(`[ saveGroupParticipantsToDatabase ] ⚠️ Inserção em massa falhou para ${groupId}, tentando individualmente: ${error.message}`);
-    const individualQuery = `INSERT IGNORE INTO ${DB_TABLES.participants} (group_id, participant, isAdmin) VALUES (?, ?, ?);`;
+    logger.warn(`[ saveGroupParticipantsToDatabase ] ⚠️ Inserção em massa falhou para ${groupId}, fallback ativado: ${error.message}`);
+
+    const individualQuery = `
+      INSERT IGNORE INTO \`${DB_TABLES.participants}\` (group_id, participant, isAdmin)
+      VALUES (?, ?, ?);
+    `;
+
     let successCount = 0;
     let failCount = 0;
+
     for (const participantData of values) {
       try {
+        /* Executa a inserção individual */
         await runQuery(individualQuery, participantData);
         successCount++;
       } catch (individualError) {
         failCount++;
-        logger.error(`[ saveGroupParticipantsToDatabase ] ❌ Erro individual ${participantData[1]} para ${groupId}: ${individualError.message}`);
+        logger.error(`[ saveGroupParticipantsToDatabase ] ❌ Erro individual ao inserir ${participantData[1]} em ${groupId}: ${individualError.message}`, { stack: individualError.stack });
       }
     }
-    logger.warn(`[ saveGroupParticipantsToDatabase ] ⚠️ Fallback concluído para ${groupId}: ${successCount} sucessos, ${failCount} falhas.`);
+
+    logger.warn(`[ saveGroupParticipantsToDatabase ] ⚠️ Fallback concluído para ${groupId}: ${successCount} sucesso(s), ${failCount} falha(s).`);
 
     if (failCount > 0 && successCount === 0) {
-      logger.error(`[ saveGroupParticipantsToDatabase ] ❌ Falha crítica: Todas as inserções individuais falharam para ${groupId}.`);
+      logger.error(`[ saveGroupParticipantsToDatabase ] ❌ Falha crítica: todas as inserções falharam para ${groupId}.`);
     }
   }
 }
 
+/**
+ * Busca configurações customizadas de um grupo no banco de dados.
+ *
+ * @param {string} groupId - ID do grupo.
+ * @returns {Promise<Object|null>} - Configurações do grupo ou null se não encontradas.
+ */
 async function getGroupSettingsFromDB(groupId) {
+  /* Verifica se o groupId é válido */
   const query = `
     SELECT isPremium, premiumTemp, is_welcome, welcome_message, welcome_media, exit_message, exit_media
     FROM \`${DB_TABLES.groups}\` WHERE id = ? LIMIT 1;
   `;
+
   try {
-    const results = await runQuery(query, [groupId]);
-    return results.length > 0 ? results[0] : null;
+    /* Executa a query para buscar as configurações do grupo */
+    const [settings] = await runQuery(query, [groupId]);
+    if (!settings) {
+      logger.debug(`[ getGroupSettingsFromDB ] Nenhuma configuração encontrada para o grupo ${groupId}.`);
+      return null;
+    }
+
+    logger.debug(`[ getGroupSettingsFromDB ] Configurações carregadas para o grupo ${groupId}.`);
+    return settings;
   } catch (error) {
-    logger.error(`[getGroupSettingsFromDB] ❌ Erro ao buscar config customizada para ${groupId}: ${error.message}`);
+    logger.error(`[ getGroupSettingsFromDB ] ❌ Erro ao buscar configurações do grupo ${groupId}: ${error.message}`, { stack: error.stack });
     return null;
   }
 }
