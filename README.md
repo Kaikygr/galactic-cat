@@ -330,7 +330,7 @@ Após configurar os pré-requisitos e o ambiente:
 
 1.  **Clone o repositório:**
     ```bash
-    git clone [https://github.com/Kaikygr/galactic-cat.git](https://github.com/Kaikygr/galactic-cat.git)
+    git clone https://github.com/Kaikygr/galactic-cat.git
     cd galactic-cat
     ```
 2.  **Instale as dependências do Node.js:**
@@ -402,7 +402,7 @@ Sua contribuição é muito bem-vinda\! Para ajudar a melhorar o Galactic-Cat:
 
 ## Licença
 
-Este projeto é distribuído sob a **Licença MIT**. Consulte o arquivo [https://www.google.com/search?q=LICENSE](https://www.google.com/search?q=LICENSE) para obter o texto completo da licença.
+Este projeto é distribuído sob a **Licença MIT**.
 
 ## Autor
 
