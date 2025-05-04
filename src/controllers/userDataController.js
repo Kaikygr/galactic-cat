@@ -111,8 +111,6 @@ class GroupMetadataCache {
   }
 }
 
-cache.startAutoCleanup(); // Inicia a limpeza automática do cache
-
 const groupMetadataCache = new GroupMetadataCache();
 
 const sanitizeData = (value, defaultValue = null) => (value == null ? defaultValue : value);
@@ -173,12 +171,34 @@ const validateIncomingInfo = (info) => {
   };
 };
 
-async function createTableIfNotExists(tableName, createStatement, loggerPrefix = '[ createTableIfNotExists ]') {
+/**
+ * Verifica se uma tabela existe no banco de dados e a cria, se necessário.
+ *
+ * @param {string} tableName - Nome da tabela a ser criada ou verificada.
+ * @param {string} createStatement - Instrução SQL `CREATE TABLE IF NOT EXISTS`.
+ * @throws {Error} Lança erro se os parâmetros forem inválidos ou se a execução da query falhar.
+ */
+async function createTableIfNotExists(tableName, createStatement) {
+  /* Verifica se os parâmetros são válidos */
+  if (typeof tableName !== 'string' || !tableName.trim()) {
+    throw new Error(`[ createTableIfNotExists ] Nome da tabela inválido.`);
+  }
+  /* Verifica se a instrução SQL é válida */
+  if (typeof createStatement !== 'string' || !createStatement.trim().toUpperCase().startsWith('CREATE TABLE')) {
+    throw new Error(`[ createTableIfNotExists ] SQL inválido para criação da tabela '${tableName}'.`);
+  }
+
   try {
+    /* Executa a instrução SQL para criar a tabela, se não existir */
+    logger.debug(`[ createTableIfNotExists ] Executando: ${createStatement}`);
     await runQuery(createStatement);
-    logger.info(`${loggerPrefix} ✅ Tabela '${tableName}' verificada/criada.`);
+    logger.info(`[ createTableIfNotExists ] ✅ Tabela '${tableName}' verificada com sucesso.`);
   } catch (error) {
-    logger.error(`${loggerPrefix} ❌ Erro ao criar/verificar tabela '${tableName}': ${error.message}`, { stack: error.stack });
+    logger.error(`[ createTableIfNotExists ] ❌ Erro ao criar/verificar tabela '${tableName}': ${error.message}`, {
+      stack: error.stack,
+      tableName,
+      createStatement,
+    });
     throw error;
   }
 }
