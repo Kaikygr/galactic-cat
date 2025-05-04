@@ -405,6 +405,7 @@ async function ensureUserInteractionColumns() {
     return false;
   }
 }
+
 /**
  * Registra uma interação do usuário no banco de dados, atualizando seu registro e salvando no histórico.
  * Define a primeira interação elegível quando aplicável.
