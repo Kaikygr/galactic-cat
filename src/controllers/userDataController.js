@@ -332,50 +332,78 @@ async function createTables() {
   }
 }
 
+/**
+ * Garante que as colunas de interação existem na tabela `users`.
+ * Adiciona dinamicamente as colunas ausentes com os tipos definidos.
+ *
+ * @returns {Promise<boolean>} `true` se todas as colunas foram verificadas ou criadas com sucesso, `false` se alguma falhou.
+ */
 async function ensureUserInteractionColumns() {
-  logger.info('[ensureUserInteractionColumns] Verificando colunas de interação na tabela users...');
+  logger.info('[ ensureUserInteractionColumns ] Verificando colunas de interação na tabela users...');
+  /* lista de colunas que devem existir */
   const columnsToAdd = [
     { name: 'first_interaction_at', definition: 'DATETIME NULL DEFAULT NULL' },
     { name: 'last_interaction_at', definition: 'DATETIME NULL DEFAULT NULL' },
     { name: 'has_interacted', definition: 'TINYINT(1) DEFAULT 0' },
   ];
+
   const usersTable = DB_TABLES.users;
-  let allOk = true;
+  const failedColumns = [];
 
   for (const column of columnsToAdd) {
     try {
-      const checkQuery = `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?;`;
+      /* faz a verificação se a coluna existe */
+      const checkQuery = `
+        SELECT COLUMN_NAME
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = ?
+        AND COLUMN_NAME = ?;
+      `;
+
       const checkResult = await runQuery(checkQuery, [usersTable, column.name]);
 
       if (checkResult.length === 0) {
-        logger.warn(`[ensureUserInteractionColumns] ⚠️ Coluna '${column.name}' não encontrada. Adicionando...`);
+        logger.warn(`[ ensureUserInteractionColumns ] ⚠️ Coluna '${column.name}' não encontrada. Adicionando...`);
+
         const alterQuery = `ALTER TABLE \`${usersTable}\` ADD COLUMN \`${column.name}\` ${column.definition};`;
+
         try {
-          await runQuery(alterQuery, []);
-          logger.info(`[ensureUserInteractionColumns] ✅ Coluna '${column.name}' adicionada.`);
+          /* faz a adição da coluna */
+          await runQuery(alterQuery);
+          logger.info(`[ ensureUserInteractionColumns ] ✅ Coluna '${column.name}' adicionada.`);
         } catch (alterError) {
           if (alterError.code === 'ER_DUP_FIELDNAME') {
-            logger.warn(`[ensureUserInteractionColumns] 🔄 Coluna '${column.name}' já existe (detectado durante ALTER).`);
+            logger.warn(`[ ensureUserInteractionColumns ] 🔄 Coluna '${column.name}' já existe (detectado durante ALTER).`);
           } else {
-            logger.error(`[ensureUserInteractionColumns] ❌ Erro ao adicionar '${column.name}': ${alterError.message}`, { stack: alterError.stack });
-            allOk = false;
+            logger.error(`[ ensureUserInteractionColumns ] ❌ Erro ao adicionar '${column.name}': ${alterError.message}`, {
+              stack: alterError.stack,
+              column: column.name,
+            });
+            failedColumns.push(column.name);
           }
         }
       } else {
-        logger.debug(`[ensureUserInteractionColumns] Coluna '${column.name}' já existe.`);
+        /* se a coluna já existe, apenas loga */
+        logger.debug(`[ ensureUserInteractionColumns ] Coluna '${column.name}' já existe.`);
       }
     } catch (error) {
-      logger.error(`[ensureUserInteractionColumns] ❌ Erro ao verificar/adicionar '${column.name}': ${error.message}`, { stack: error.stack });
-      allOk = false;
+      logger.error(`[ ensureUserInteractionColumns ] ❌ Erro ao verificar '${column.name}': ${error.message}`, {
+        stack: error.stack,
+        column: column.name,
+      });
+      /* se a verificação falhar, adiciona a coluna à lista de falhas */
+      failedColumns.push(column.name);
     }
   }
 
-  if (allOk) {
-    logger.info('[ensureUserInteractionColumns] Verificação das colunas de interação concluída.');
+  if (failedColumns.length === 0) {
+    logger.info('[ ensureUserInteractionColumns ] ✅ Verificação das colunas de interação concluída com sucesso.');
+    return true;
   } else {
-    logger.error('[ensureUserInteractionColumns] ❌ Falha ao garantir todas as colunas de interação.');
+    logger.error(`[ ensureUserInteractionColumns ] ❌ Falha ao garantir as colunas: ${failedColumns.join(', ')}`);
+    return false;
   }
-  return allOk;
 }
 
 async function logInteraction(userId, pushName, isGroup, isCommand, commandName = null, groupId = null) {
