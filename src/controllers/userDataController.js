@@ -687,7 +687,7 @@ async function ensureGroupExists(groupId) {
     const [group] = await runQuery(checkQuery, [groupId]);
 
     if (!group) {
-      logger.warn(`[ensureGroupExists] Grupo ${groupId} não encontrado. Criando entrada mínima com dados padrão.`);
+      logger.warn(`[ ensureGroupExists ] Grupo ${groupId} não encontrado. Criando entrada mínima com dados padrão.`);
 
       const insertQuery = `
         INSERT IGNORE INTO \`${table}\`
@@ -700,50 +700,69 @@ async function ensureGroupExists(groupId) {
 
       /* Executa a query para inserir o grupo com dados padrão */
       await runQuery(insertQuery, values);
-      logger.info(`[ensureGroupExists] ✅ Grupo ${groupId} criado com dados padrão.`);
+      logger.info(`[ ensureGroupExists ] ✅ Grupo ${groupId} criado com dados padrão.`);
     } else {
-      logger.debug(`[ensureGroupExists] Grupo ${groupId} já existe.`);
+      logger.debug(`[ ensureGroupExists ] Grupo ${groupId} já existe.`);
     }
 
     return groupId;
   } catch (error) {
-    logger.error(`[ensureGroupExists] ❌ Erro ao garantir existência do grupo ${groupId}: ${error.message}`, { stack: error.stack });
+    logger.error(`[ ensureGroupExists ] ❌ Erro ao garantir existência do grupo ${groupId}: ${error.message}`, { stack: error.stack });
     throw error;
   }
 }
 
+/**
+ * Salva uma mensagem no banco de dados. Atualiza tipo e conteúdo caso já exista (evita duplicação).
+ *
+ * @param {Object} messageData - Dados da mensagem.
+ * @param {string} messageData.messageId - ID da mensagem.
+ * @param {string} messageData.userId - ID do remetente.
+ * @param {string|null} messageData.groupId - ID do grupo (pode ser null para mensagens privadas).
+ * @param {string} messageData.messageType - Tipo da mensagem (ex: 'text', 'image', etc).
+ * @param {string|null} messageData.messageContent - Conteúdo da mensagem (pode ser null).
+ * @param {string} messageData.timestamp - Timestamp da mensagem em formato compatível com MySQL.
+ */
 async function saveMessageToDatabase(messageData) {
   const { messageId, userId, groupId, messageType, messageContent, timestamp } = messageData;
 
   if (!messageId || !userId || !messageType || !timestamp) {
-    logger.error('[ saveMessageToDatabase ] ❌ Dados da mensagem incompletos.', messageData);
-    throw new Error('Dados da mensagem incompletos para salvar.');
+    logger.error('[ saveMessageToDatabase ] ❌ Dados obrigatórios da mensagem estão incompletos.', messageData);
+    throw new Error('Dados obrigatórios da mensagem ausentes para salvar.');
   }
 
+  const table = DB_TABLES.messages;
   const query = `
-    INSERT INTO ${DB_TABLES.messages} (message_id, sender_id, group_id, messageType, messageContent, timestamp)
+    INSERT INTO \`${table}\` (message_id, sender_id, group_id, messageType, messageContent, timestamp)
     VALUES (?, ?, ?, ?, ?, ?)
-    ON DUPLICATE KEY UPDATE # Avoid errors if message is processed twice, update content just in case
-        messageType = VALUES(messageType),
-        messageContent = VALUES(messageContent);
+    ON DUPLICATE KEY UPDATE
+      messageType = VALUES(messageType),
+      messageContent = VALUES(messageContent);
   `;
+
+  const values = [messageId, userId, groupId, messageType, messageContent, timestamp];
+
   try {
-    await runQuery(query, [messageId, userId, groupId, messageType, messageContent, timestamp]);
-    logger.debug(`[ saveMessageToDatabase ] Mensagem ${messageId} salva.`);
+    /* Executa a query para inserir ou atualizar a mensagem */
+    await runQuery(query, values);
+    logger.debug(`[ saveMessageToDatabase ] Mensagem ${messageId} salva com sucesso.`);
   } catch (error) {
+    /* Tratamento específico para erros de chave estrangeira */
     if (error.code === 'ER_NO_REFERENCED_ROW' || error.code === 'ER_NO_REFERENCED_ROW_2') {
       if (error.message.includes('fk_sender_id')) {
-        logger.error(`[ saveMessageToDatabase ] ❌ Erro FK: Usuário ${userId} não encontrado no DB. Mensagem ${messageId} não salva.`);
+        logger.error(`[ saveMessageToDatabase ] ❌ FK Error: Usuário ${userId} não encontrado. Mensagem ${messageId} descartada.`);
       } else if (error.message.includes('fk_group_id') && groupId) {
-        logger.error(`[ saveMessageToDatabase ] ❌ Erro FK: Grupo ${groupId} não encontrado no DB. Mensagem ${messageId} não salva.`);
+        logger.error(`[ saveMessageToDatabase ] ❌ FK Error: Grupo ${groupId} não encontrado. Mensagem ${messageId} descartada.`);
       } else {
-        logger.error(`[ saveMessageToDatabase ] ❌ Erro FK desconhecido para msg ${messageId}: ${error.message}`, { stack: error.stack });
+        logger.error(`[ saveMessageToDatabase ] ❌ FK Error desconhecido em ${messageId}: ${error.message}`, { stack: error.stack });
       }
-      throw new Error(`Falha de chave estrangeira ao salvar mensagem ${messageId}: ${error.message}`);
-    } else {
-      logger.error(`[ saveMessageToDatabase ] ❌ Erro ao salvar msg ${messageId}: ${error.message}`, { stack: error.stack });
-      throw error;
+      throw new Error(`Erro de integridade referencial ao salvar a mensagem ${messageId}: ${error.message}`);
     }
+    /* Outros erros */
+    logger.error(`[saveMessageToDatabase] ❌ Erro inesperado ao salvar mensagem ${messageId}: ${error.message}`, {
+      stack: error.stack,
+    });
+    throw error;
   }
 }
 
