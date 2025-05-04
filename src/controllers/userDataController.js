@@ -478,18 +478,37 @@ async function logInteraction(userId, pushName, isGroup, isCommand, commandName 
   }
 }
 
+/**
+ * Insere ou atualiza um usuário no banco de dados com base no ID e pushName.
+ *
+ * @param {string} userId - ID do remetente (usuário).
+ * @param {string} pushName - Nome visível do usuário.
+ * @returns {Promise<void>}
+ * @throws Lança erro se a operação falhar.
+ */
 async function saveUserToDatabase(userId, pushName) {
+  if (!userId) {
+    /* Verifica se o userId é válido */
+    logger.warn('[ saveUserToDatabase ] ⚠️ userId inválido ou ausente. Operação ignorada.');
+    return;
+  }
+
   const finalPushName = sanitizeData(pushName, DEFAULT_USER_PUSHNAME);
+  /* Verifica se o pushName é válido */
   const query = `
-    INSERT INTO ${DB_TABLES.users} (sender, pushName)
+    INSERT INTO \`${DB_TABLES.users}\` (sender, pushName)
     VALUES (?, ?)
     ON DUPLICATE KEY UPDATE pushName = VALUES(pushName);
   `;
+
   try {
+    /* Executa a query para inserir ou atualizar o usuário */
     await runQuery(query, [userId, finalPushName]);
-    logger.debug(`[ saveUserToDatabase ] Usuário ${userId} salvo/atualizado.`);
+    logger.debug(`[ saveUserToDatabase ] ✅ Usuário ${userId} salvo/atualizado com pushName "${finalPushName}".`);
   } catch (error) {
-    logger.error(`[ saveUserToDatabase ] ❌ Erro ao salvar/atualizar usuário ${userId}: ${error.message}`, { stack: error.stack });
+    logger.error(`[ saveUserToDatabase ] ❌ Erro ao salvar/atualizar usuário ${userId}: ${error.message}`, {
+      stack: error.stack,
+    });
     throw error;
   }
 }
