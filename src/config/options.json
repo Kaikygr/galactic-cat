@@ -1,8 +1,11 @@
 {
     "bot": {
+        "onboarding": {
+            "firstInteractionMessage": "Olá, {userName}! 😄 Seja muito bem-vindo(a)!\n\nSou seu assistente virtual, pronto pra te ajudar em tudo que precisar por aqui. 🤖✨\n\n🔸 *Quer explorar tudo o que posso fazer?* Digite `{prefix}menu` e descubra os comandos disponíveis.\n🔸 *Dúvidas, sugestões ou só quer dar um oi?* Fale direto com meu criador, o Kaiky: {ownerWhatsappLink} 💬\n\nFique à vontade! Estou aqui pra tornar sua experiência incrível. 🚀"
+        },
         "globalSettings": {
             "prefix": [
-                "!"
+                "/"
             ]
         }
     },
@@ -11,9 +14,40 @@
         "number": "559591264582@s.whatsapp.net",
         "whatsapp": "https://wa.me/message/C4CZHIMQU66PD1"
     },
-    "apiKeys": {},
+    "database": {
+        "tables": {
+            "groups": "groups",
+            "users": "users",
+            "messages": "messages",
+            "participants": "group_participants",
+            "commandUsage": "command_usage",
+            "analytics": "command_analytics",
+            "interactionHistory": "interaction_history"
+        }
+    },
+    "defaults": {
+        "userData": {
+            "pushName": "Desconhecido"
+        },
+        "groupData": {
+            "subject": "Grupo Desconhecido",
+            "owner": null,
+            "desc": null,
+            "descId": null,
+            "subjectOwner": null,
+            "isWelcome": 0,
+            "welcomeMessage": "Bem-vindo(a) ao {groupName}, {user}! 🎉",
+            "welcomeMedia": null,
+            "exitMessage": "Até mais, {user}! Sentiremos sua falta. 👋",
+            "exitMedia": null
+        }
+    },
+    "cache": {
+        "groupMetadataExpiryMs": 300000
+    },
     "commandLimits": {
         "s": {
+            "description": "Cria figurinhas a partir de imagens, vídeos ou GIFs.",
             "nonPremium": {
                 "limit": 10,
                 "windowMinutes": 60
@@ -24,6 +58,7 @@
             }
         },
         "cat": {
+            "description": "converse com uma IA.",
             "nonPremium": {
                 "limit": 5,
                 "windowMinutes": 60
@@ -34,6 +69,7 @@
             }
         },
         "setia": {
+            "description": "Configura inteligência artificial",
             "nonPremium": {
                 "limit": 2,
                 "windowMinutes": 1440
@@ -44,6 +80,7 @@
             }
         },
         "p": {
+            "description": "Comando premium.",
             "nonPremium": {
                 "limit": 0,
                 "windowMinutes": 60
@@ -51,6 +88,61 @@
             "premium": {
                 "limit": -1,
                 "windowMinutes": 60
+            }
+        },
+        "welcome": {
+            "description": "Ativa/desativa as mensagens de boas-vindas no grupo.",
+            "nonPremium": {
+                "limit": 5,
+                "windowMinutes": 1440
+            },
+            "premium": {
+                "limit": 5,
+                "windowMinutes": 1440
+            }
+        },
+        "setwelcome": {
+            "description": "Define a mensagem de texto para as boas-vindas.",
+            "nonPremium": {
+                "limit": 5,
+                "windowMinutes": 1440
+            },
+            "premium": {
+                "limit": 5,
+                "windowMinutes": 1440
+            }
+        },
+        "setwelcomemedia": {
+            "description": "Define a mídia (imagem/vídeo) para as boas-vindas.",
+            "nonPremium": {
+                "limit": 5,
+                "windowMinutes": 1440
+            },
+            "premium": {
+                "limit": 5,
+                "windowMinutes": 1440
+            }
+        },
+        "setexit": {
+            "description": "Define a mensagem de texto para despedidas/saídas.",
+            "nonPremium": {
+                "limit": 5,
+                "windowMinutes": 1440
+            },
+            "premium": {
+                "limit": 5,
+                "windowMinutes": 1440
+            }
+        },
+        "setexitmedia": {
+            "description": "Define a mídia (imagem/vídeo) para despedidas/saídas.",
+            "nonPremium": {
+                "limit": 5,
+                "windowMinutes": 1440
+            },
+            "premium": {
+                "limit": 5,
+                "windowMinutes": 1440
             }
         }
     }
