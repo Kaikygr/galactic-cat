@@ -1,5 +1,6 @@
 const logger = require('../utils/logger');
 const config = require('../config/options.json');
+require('dotenv').config();
 
 async function sendWelcomeMessage(userId, userName, client, from, info, expirationMessage, ownerName, ownerNumber) {
   const shouldSendWelcome = process.env.SEND_WELCOME_MESSAGES === 'true';
