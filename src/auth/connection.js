@@ -31,402 +31,371 @@ const INITIAL_CONNECT_FAIL_DELAY = parseInt(process.env.INITIAL_CONNECT_FAIL_DEL
 const DEFAULT_MAX_RECONNECT_DELAY = parseInt(process.env.DEFAULT_MAX_RECONNECT_DELAY, 10) || 60000;
 const DEFAULT_RECONNECT_MAX_EXPONENT = parseInt(process.env.DEFAULT_RECONNECT_MAX_EXPONENT, 10) || 10;
 
-/**
- * @type {number}
- * @description Contador para as tentativas de reconexão atuais.
- */
-let reconnectAttempts = 0;
-/**
- * @type {NodeJS.Timeout | null}
- * @description ID do timeout para a reconexão agendada. Nulo se nenhuma reconexão estiver agendada.
- */
-let reconnectTimeout = null;
+class ConnectionManager {
+  /**
+   * @param {object} options - Opções para o ConnectionManager.
+   * @param {string} options.authStatePath - Caminho para armazenar o estado de autenticação.
+   * @param {object} options.dbFunctions - Funções relacionadas ao banco de dados.
+   * @param {() => Promise<void>} options.dbFunctions.initDatabase - Função para inicializar o DB.
+   * @param {() => Promise<void>} options.dbFunctions.closePool - Função para fechar o pool do DB.
+   * @param {object} options.controllerFunctions - Funções de controller.
+   * @param {() => Promise<void>} options.controllerFunctions.createTables - Função para criar tabelas.
+   * @param {(data: any, client: any) => Promise<void>} options.controllerFunctions.processUserData - Função para processar dados do usuário.
+   * @param {(event: any, client: any) => Promise<void>} options.controllerFunctions.processParticipantUpdate - Função para processar atualização de participantes.
+   * @param {(data: any, client: any) => Promise<void>} options.controllerFunctions.botController - Função principal do controller do bot.
+   * @param {import('pino').Logger} options.loggerInstance - Instância do logger.
+   */
+  constructor(options) {
+    this.AUTH_STATE_PATH = options.authStatePath;
+    this.db = options.dbFunctions;
+    this.controllers = options.controllerFunctions;
+    this.logger = options.loggerInstance;
 
-/**
- * @type {import('baileys').WASocket | null}
- * @description Armazena a instância singleton do cliente WhatsApp Baileys.
- */
-let clientInstance = null;
+    this.clientInstance = null;
+    this.reconnectAttempts = 0;
+    this.reconnectTimeout = null;
 
-/**
- * Agenda uma tentativa de reconexão com uma estratégia de backoff exponencial.
- * @param {() => Promise<void> | void} connectFn - A função a ser chamada para tentar a reconexão.
- * @param {object} [options] - Opções para agendar a reconexão.
- * @param {number} [options.initialDelay=1000] - Atraso inicial em milissegundos.
- * @param {number} [options.maxDelay=60000] - Atraso máximo em milissegundos.
- * @param {number} [options.maxExponent=6] - Expoente máximo para o cálculo do backoff.
- * @param {string} [options.label='scheduleReconnect'] - Um rótulo para fins de log.
- */
-const scheduleReconnect = (
-  connectFn,
-  options = {
-    initialDelay: 1000,
-    maxDelay: 60000,
-    maxExponent: 6,
-    label: 'scheduleReconnect',
-  },
-) => {
-  logger.debug(`[ ${options.label} ] Iniciando scheduleReconnect. Tentativas atuais: ${reconnectAttempts}. Timeout existente: ${!!reconnectTimeout}`);
-  if (reconnectTimeout) return;
-
-  reconnectAttempts = Math.min(reconnectAttempts + 1, options.maxExponent + 10);
-  const exponent = Math.min(reconnectAttempts, options.maxExponent);
-  const delay = Math.min(options.initialDelay * 2 ** exponent, options.maxDelay);
-
-  logger.debug(`[ ${options.label} ] Calculado delay: ${delay}ms. Expoente: ${exponent}. Tentativa: ${reconnectAttempts}`);
-  logger.warn(`[ ${options.label} ] Conexão perdida. Tentando reconectar em ${delay / 1000}s... Tentativa: ${reconnectAttempts}`);
-
-  reconnectTimeout = setTimeout(() => {
-    reconnectTimeout = null;
-    connectFn();
-  }, delay);
-};
-
-/**
- * Reseta o contador de tentativas de reconexão e limpa qualquer timeout de reconexão pendente.
- * @param {string} [label='ConnectionLogic'] - Um rótulo para fins de log, indicando
- *                                             o que acionou o reset.
- */
-const resetReconnectAttempts = (label = 'ConnectionLogic') => {
-  logger.debug(`[ ${label} ] Chamada para resetar tentativas de reconexão.`);
-  logger.info(`[ ${label} ] Resetando tentativas de reconexão.`);
-  reconnectAttempts = 0;
-  if (reconnectTimeout) {
-    clearTimeout(reconnectTimeout);
-    reconnectTimeout = null;
-  }
-};
-
-/**
- * Lida com as atualizações de conexão do cliente Baileys.
- * Isso inclui geração de código QR, mudanças no status da conexão (conectando, aberta, fechada)
- * e gerenciamento da lógica de reconexão com base nos motivos da desconexão.
- * @param {Partial<import('baileys').ConnectionState>} update - O objeto de atualização da conexão do Baileys.
- */
-const handleConnectionUpdate = async (update) => {
-  const { connection, lastDisconnect, qr } = update;
-  logger.debug('[ handleConnectionUpdate ] Recebida atualização de conexão:', update);
-
-  if (qr) {
-    logger.info('[ handleConnectionUpdate ] QR Code recebido, escaneie por favor.');
-    reconnectAttempts = 0;
-    resetReconnectAttempts('handleConnectionUpdate-QR');
+    // Bind methods
+    this.handleConnectionUpdate = this.handleConnectionUpdate.bind(this);
+    // handleCredsUpdate é chamado com saveCreds, então o bind direto de saveCreds acontece em registerAllEventHandlers
+    this.handleMessagesUpsert = this.handleMessagesUpsert.bind(this);
+    this.handleGroupsUpdate = this.handleGroupsUpdate.bind(this);
+    this.handleGroupParticipantsUpdate = this.handleGroupParticipantsUpdate.bind(this);
+    this.connectToWhatsApp = this.connectToWhatsApp.bind(this);
   }
 
-  if (connection === 'connecting') {
-    logger.info('[ handleConnectionUpdate ] Conectando ao WhatsApp...');
-  } else if (connection === 'open') {
-    logger.info('[ handleConnectionUpdate ] Conexão aberta com sucesso. Bot disponível.');
-    resetReconnectAttempts('handleConnectionUpdate-Open');
-  } else if (connection === 'close') {
-    const statusCode = lastDisconnect?.error?.output?.statusCode;
-    const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-    logger.debug(`[ handleConnectionUpdate ] Detalhes da desconexão:`, { error: lastDisconnect?.error, statusCode, shouldReconnect });
+  /**
+   * Agenda uma tentativa de reconexão com uma estratégia de backoff exponencial.
+   * @param {() => Promise<void> | void} connectFn - A função a ser chamada para tentar a reconexão.
+   * @param {object} [options] - Opções para agendar a reconexão.
+   * @param {number} [options.initialDelay=1000] - Atraso inicial em milissegundos.
+   * @param {number} [options.maxDelay=60000] - Atraso máximo em milissegundos.
+   * @param {number} [options.maxExponent=6] - Expoente máximo para o cálculo do backoff.
+   * @param {string} [options.label='scheduleReconnect'] - Um rótulo para fins de log.
+   */
+  scheduleReconnect(
+    connectFn,
+    options = {
+      initialDelay: 1000,
+      maxDelay: 60000,
+      maxExponent: 6,
+      label: 'scheduleReconnect',
+    },
+  ) {
+    this.logger.debug(`[ ${options.label} ] Iniciando scheduleReconnect. Tentativas atuais: ${this.reconnectAttempts}. Timeout existente: ${!!this.reconnectTimeout}`);
+    if (this.reconnectTimeout) return;
 
-    logger.error(`[ handleConnectionUpdate ] Conexão fechada. Razão: ${DisconnectReason[statusCode] || 'Desconhecida'} Código: ${statusCode}`);
+    this.reconnectAttempts = Math.min(this.reconnectAttempts + 1, options.maxExponent + 10);
+    const exponent = Math.min(this.reconnectAttempts, options.maxExponent);
+    const delay = Math.min(options.initialDelay * 2 ** exponent, options.maxDelay);
 
-    if (shouldReconnect) {
-      logger.info('[ handleConnectionUpdate ] Tentando reconectar...');
-      scheduleReconnect(connectToWhatsApp, {
-        initialDelay: DEFAULT_INITIAL_RECONNECT_DELAY,
+    this.logger.debug(`[ ${options.label} ] Calculado delay: ${delay}ms. Expoente: ${exponent}. Tentativa: ${this.reconnectAttempts}`);
+    this.logger.warn(`[ ${options.label} ] Conexão perdida. Tentando reconectar em ${delay / 1000}s... Tentativa: ${this.reconnectAttempts}`);
+
+    this.reconnectTimeout = setTimeout(() => {
+      this.reconnectTimeout = null;
+      connectFn();
+    }, delay);
+  }
+
+  /**
+   * Reseta o contador de tentativas de reconexão e limpa qualquer timeout de reconexão pendente.
+   * @param {string} [label='ConnectionLogic'] - Um rótulo para fins de log.
+   */
+  resetReconnectAttempts(label = 'ConnectionLogic') {
+    this.logger.debug(`[ ${label} ] Chamada para resetar tentativas de reconexão.`);
+    this.logger.info(`[ ${label} ] Resetando tentativas de reconexão.`);
+    this.reconnectAttempts = 0;
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
+  }
+
+  async handleConnectionUpdate(update) {
+    const { connection, lastDisconnect, qr } = update;
+    this.logger.debug('[ handleConnectionUpdate ] Recebida atualização de conexão:', update);
+
+    if (qr) {
+      this.logger.info('[ handleConnectionUpdate ] QR Code recebido, escaneie por favor.');
+      this.resetReconnectAttempts('handleConnectionUpdate-QR');
+    }
+
+    if (connection === 'connecting') {
+      this.logger.info('[ handleConnectionUpdate ] Conectando ao WhatsApp...');
+    } else if (connection === 'open') {
+      this.logger.info('[ handleConnectionUpdate ] Conexão aberta com sucesso. Bot disponível.');
+      this.resetReconnectAttempts('handleConnectionUpdate-Open');
+    } else if (connection === 'close') {
+      const statusCode = lastDisconnect?.error?.output?.statusCode;
+      const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+      this.logger.debug('[ handleConnectionUpdate ] Detalhes da desconexão:', { error: lastDisconnect?.error, statusCode, shouldReconnect });
+
+      this.logger.error(`[ handleConnectionUpdate ] Conexão fechada. Razão: ${DisconnectReason[statusCode] || 'Desconhecida'} Código: ${statusCode}`);
+
+      if (shouldReconnect) {
+        this.logger.info('[ handleConnectionUpdate ] Tentando reconectar...');
+        this.scheduleReconnect(this.connectToWhatsApp, {
+          initialDelay: DEFAULT_INITIAL_RECONNECT_DELAY,
+          maxDelay: DEFAULT_MAX_RECONNECT_DELAY,
+          maxExponent: DEFAULT_RECONNECT_MAX_EXPONENT,
+          label: 'WhatsAppConnection',
+        });
+      } else {
+        this.logger.warn('[ handleConnectionUpdate ] Reconexão não será tentada devido ao DisconnectReason.loggedOut.');
+        this.logger.error("[ handleConnectionUpdate ]  Não foi possível reconectar: Deslogado. Exclua a pasta 'temp/auth_state' e reinicie para gerar um novo QR Code.");
+      }
+    }
+  }
+
+  async handleCredsUpdate(saveCreds) {
+    this.logger.debug('[ handleCredsUpdate ] Chamada para atualizar credenciais.');
+    if (typeof saveCreds !== 'function') {
+      this.logger.error('[ handleCredsUpdate ] saveCreds não é uma função válida.');
+      return;
+    }
+    try {
+      await saveCreds();
+      this.logger.info('[ handleCredsUpdate ] Credenciais salvas com sucesso.');
+    } catch (error) {
+      this.logger.error('[ handleCredsUpdate ] Erro ao salvar credenciais:', {
+        message: error.message,
+        stack: error.stack,
+      });
+    }
+  }
+
+  async handleMessagesUpsert(data) {
+    this.logger.debug('[ handleMessagesUpsert ] Recebido evento messages.upsert:', { messageCount: data.messages?.length, type: data.type });
+    if (!this.clientInstance) {
+      this.logger.error('[ handleMessagesUpsert ] Instância do cliente inválida.');
+      return;
+    }
+
+    const msg = data.messages?.[0];
+    if (!msg?.key?.remoteJid || !msg.message) {
+      this.logger.debug('[ handleMessagesUpsert ] Mensagem ignorada: sem remoteJid ou conteúdo da mensagem.', { key: msg?.key, message: msg?.message });
+      return;
+    }
+
+    this.logger.debug(`[ handleMessagesUpsert ] Agendando processamento para mensagem ID: ${msg.key.id} de ${msg.key.remoteJid}`);
+    setImmediate(() => this.processMessage(data, msg));
+  }
+
+  async processMessage(data, msg) {
+    const messageId = msg.key.id;
+    const remoteJid = msg.key.remoteJid;
+    this.logger.debug(`[ processMessage ] Iniciando processamento da mensagem ID: ${messageId} de ${remoteJid}`);
+
+    try {
+      await this.controllers.processUserData(data, this.clientInstance);
+    } catch (err) {
+      this.logger.debug('[ processMessage ] Erro detalhado em processUserData:', err);
+      this.logger.error(`[ processMessage ] ID:${messageId} Erro em processUserData para ${remoteJid}: ${err.message}`, {
+        stack: err.stack,
+      });
+      return;
+    }
+
+    try {
+      await this.controllers.botController(data, this.clientInstance);
+    } catch (err) {
+      this.logger.debug('[ processMessage ] Erro detalhado em botController:', err);
+      const messageType = Object.keys(msg.message || {})[0] || 'tipo desconhecido';
+      this.logger.error(`[ processMessage ] ID:${messageId} Erro em botController com tipo '${messageType}' no JID ${remoteJid}: ${err.message}`, {
+        stack: err.stack,
+      });
+      return;
+    }
+  }
+
+  async handleGroupsUpdate(updates) {
+    this.logger.debug('[ handleGroupsUpdate ] Recebido evento groups.update:', updates);
+    if (!this.clientInstance) {
+      this.logger.error('[ handleGroupsUpdate ] Instância do cliente inválida.');
+      return;
+    }
+
+    if (!Array.isArray(updates)) {
+      this.logger.warn('[ handleGroupsUpdate ] Atualizações de grupo recebidas não são um array. Recebido:', typeof updates, updates);
+      return;
+    }
+
+    this.logger.info(`[ handleGroupsUpdate ]  Recebido ${updates.length} evento(s) de atualização de grupo.`);
+    updates.forEach((groupUpdate) => {
+      const groupId = groupUpdate.id;
+      if (groupId) {
+        this.logger.debug(`[ handleGroupsUpdate ] Evento de atualização para o grupo ${groupId}:`, groupUpdate);
+      } else {
+        this.logger.warn('[ handleGroupsUpdate ] Evento de atualização de grupo sem JID.');
+      }
+    });
+  }
+
+  async handleGroupParticipantsUpdate(event) {
+    this.logger.debug('[ handleGroupParticipantsUpdate ] Recebido evento group-participants.update:', event);
+    if (!this.clientInstance) {
+      this.logger.error('[ handleGroupParticipantsUpdate ] Instância do cliente inválida.');
+      return;
+    }
+
+    if (!event || typeof event !== 'object' || !event.id || !Array.isArray(event.participants)) {
+      this.logger.warn('[ handleGroupParticipantsUpdate ] Evento de participantes inválido ou malformado. Recebido:', event);
+      return;
+    }
+
+    const groupId = event.id;
+    const action = event.action || 'ação desconhecida';
+    const participants = event.participants.join(', ');
+
+    this.logger.info(`[ handleGroupParticipantsUpdate ] Evento recebido para grupo ${groupId}. Ação: ${action}. Participantes: ${participants}`);
+
+    try {
+      await this.controllers.processParticipantUpdate(event, this.clientInstance);
+      this.logger.debug(`[ handleGroupParticipantsUpdate ] Evento para grupo ${groupId} processado com sucesso.`);
+    } catch (error) {
+      this.logger.error(`[ handleGroupParticipantsUpdate ] Erro ao processar evento para ${groupId}: ${error.message}`, {
+        eventDetails: event,
+        stack: error.stack,
+      });
+    }
+  }
+
+  registerAllEventHandlers(saveCreds) {
+    this.logger.debug('[ registerAllEventHandlers ] Registrando manipuladores de eventos Baileys.');
+    if (!this.clientInstance) {
+      this.logger.error('[ registerAllEventHandlers ] Tentativa de registrar handlers sem instância de cliente.');
+      return;
+    }
+    this.clientInstance.ev.on('connection.update', this.handleConnectionUpdate);
+    this.clientInstance.ev.on('creds.update', () => this.handleCredsUpdate(saveCreds));
+    this.clientInstance.ev.on('messages.upsert', this.handleMessagesUpsert);
+    this.clientInstance.ev.on('groups.update', this.handleGroupsUpdate);
+    this.clientInstance.ev.on('group-participants.update', this.handleGroupParticipantsUpdate);
+  }
+
+  async connectToWhatsApp() {
+    try {
+      this.logger.info(`[ connectToWhatsApp ] Usando diretório de estado de autenticação: ${this.AUTH_STATE_PATH}`);
+      const { state, saveCreds } = await useMultiFileAuthState(this.AUTH_STATE_PATH);
+      this.logger.debug('[ connectToWhatsApp ] Estado de autenticação carregado/criado.');
+      this.logger.debug(`[ connectToWhatsApp ] Configurações de ambiente relevantes: SYNC_FULL_HISTORY=${process.env.SYNC_FULL_HISTORY === 'true'}, DEBUG_BAILEYS=${process.env.DEBUG_BAILEYS === 'true'}`);
+
+      this.logger.info('[ connectToWhatsApp ] Iniciando a conexão com o WhatsApp...');
+
+      const socketConfig = {
+        auth: state,
+        logger: pino({ level: process.env.DEBUG_BAILEYS === 'true' ? 'debug' : 'silent' }),
+        printQRInTerminal: true,
+        mobile: false,
+        browser: Browsers.macOS('Desktop'),
+        syncFullHistory: process.env.SYNC_FULL_HISTORY === 'true',
+        msgRetryCounterMap: {},
+      };
+      this.logger.debug('[ connectToWhatsApp ] Configurações do socket:', socketConfig);
+
+      this.clientInstance = makeWASocket(socketConfig);
+      this.logger.debug('[ connectToWhatsApp ] Instância do Baileys criada.');
+
+      this.registerAllEventHandlers(saveCreds);
+
+      return this.clientInstance;
+    } catch (error) {
+      this.logger.error(`[ connectToWhatsApp ] Erro crítico ao iniciar a conexão com o WhatsApp: ${error.message}`, {
+        stack: error.stack,
+      });
+      this.scheduleReconnect(this.connectToWhatsApp, {
+        initialDelay: INITIAL_CONNECT_FAIL_DELAY,
         maxDelay: DEFAULT_MAX_RECONNECT_DELAY,
         maxExponent: DEFAULT_RECONNECT_MAX_EXPONENT,
-        label: 'WhatsAppConnection',
+        label: 'WhatsAppInitialConnectFail',
       });
-    } else {
-      logger.warn('[ handleConnectionUpdate ] Reconexão não será tentada devido ao DisconnectReason.loggedOut.');
-      logger.error("[ handleConnectionUpdate ]  Não foi possível reconectar: Deslogado. Exclua a pasta 'temp/auth_state' e reinicie para gerar um novo QR Code.");
+      return null;
     }
   }
-};
 
-/**
- * Lida com as atualizações de credenciais do Baileys.
- * Salva as credenciais atualizadas usando a função `saveCreds` fornecida por `useMultiFileAuthState`.
- * @param {() => Promise<void>} saveCreds - A função para salvar as credenciais.
- */
-const handleCredsUpdate = async (saveCreds) => {
-  logger.debug('[ handleCredsUpdate ] Chamada para atualizar credenciais.');
-  if (typeof saveCreds !== 'function') {
-    logger.error('[ handleCredsUpdate ] saveCreds não é uma função válida.');
-    return;
-  }
-
-  try {
-    await saveCreds();
-    logger.info('[ handleCredsUpdate ] Credenciais salvas com sucesso.');
-  } catch (error) {
-    logger.error('[ handleCredsUpdate ] Erro ao salvar credenciais:', {
-      message: error.message,
-      stack: error.stack,
-    });
-  }
-};
-
-/**
- * Lida com mensagens recebidas ou atualizadas (evento 'messages.upsert').
- * Garante uma instância de cliente e estrutura de mensagem válidas antes de delegar
- * o processamento para `processMessage` usando `setImmediate` para evitar o bloqueio do loop de eventos.
- * @param {import('baileys').BaileysEventMap['messages.upsert']} data - Os dados de upsert da mensagem do Baileys.
- * @param {import('baileys').WASocket} client - A instância do cliente Baileys.
- */
-const handleMessagesUpsert = async (data, client) => {
-  logger.debug('[ handleMessagesUpsert ] Recebido evento messages.upsert:', { messageCount: data.messages?.length, type: data.type });
-  if (!client) {
-    logger.error('[ handleMessagesUpsert ] Instância do cliente inválida.');
-    return;
-  }
-
-  const msg = data.messages?.[0];
-  if (!msg?.key?.remoteJid || !msg.message) {
-    logger.debug('[ handleMessagesUpsert ] Mensagem ignorada: sem remoteJid ou conteúdo da mensagem.', { key: msg?.key, message: msg?.message });
-    return;
-  }
-
-  logger.debug(`[ handleMessagesUpsert ] Agendando processamento para mensagem ID: ${msg.key.id} de ${msg.key.remoteJid}`);
-  setImmediate(() => processMessage(data, client, msg));
-};
-
-/**
- * Processa uma única mensagem.
- * Esta função é responsável por chamar `processUserData` para lidar com dados relacionados ao usuário
- * e, em seguida, `botController` para executar a lógica específica do bot para a mensagem.
- * @param {import('baileys').BaileysEventMap['messages.upsert']} data - Os dados brutos de upsert da mensagem.
- * @param {import('baileys').WASocket} client - A instância do cliente Baileys.
- * @param {import('baileys').WAMessage} msg - O objeto de mensagem específico a ser processado.
- */
-const processMessage = async (data, client, msg) => {
-  const messageId = msg.key.id;
-  const remoteJid = msg.key.remoteJid;
-  logger.debug(`[ processMessage ] Iniciando processamento da mensagem ID: ${messageId} de ${remoteJid}`);
-
-  try {
-    await processUserData(data, client);
-  } catch (err) {
-    logger.debug(`[ processMessage ] Erro detalhado em processUserData:`, err);
-    logger.error(`[ processMessage ] ID:${messageId} Erro em processUserData para ${remoteJid}: ${err.message}`, {
-      stack: err.stack,
-    });
-    return;
-  }
-
-  try {
-    await botController(data, client);
-  } catch (err) {
-    logger.debug(`[ processMessage ] Erro detalhado em botController:`, err);
-    const messageType = Object.keys(msg.message || {})[0] || 'tipo desconhecido';
-    logger.error(`[ processMessage ] ID:${messageId} Erro em botController com tipo '${messageType}' no JID ${remoteJid}: ${err.message}`, {
-      stack: err.stack,
-    });
-    return;
-  }
-};
-
-/**
- * Lida com atualizações de metadados de grupo (evento 'groups.update').
- * @param {import('baileys').GroupMetadata[]} updates - Um array de objetos de atualização de grupo do Baileys.
- * @param {import('baileys').WASocket} client - A instância do cliente Baileys.
- */
-const handleGroupsUpdate = async (updates, client) => {
-  logger.debug('[ handleGroupsUpdate ] Recebido evento groups.update:', updates);
-  if (!client) {
-    logger.error('[ handleGroupsUpdate ] Instância do cliente inválida.');
-    return;
-  }
-
-  if (!Array.isArray(updates)) {
-    logger.warn('[ handleGroupsUpdate ] Atualizações de grupo recebidas não são um array. Recebido:', typeof updates, updates);
-    return;
-  }
-
-  logger.info(`[ handleGroupsUpdate ]  Recebido ${updates.length} evento(s) de atualização de grupo.`);
-
-  updates.forEach((groupUpdate) => {
-    const groupId = groupUpdate.id;
-    if (groupId) {
-      logger.debug(`[ handleGroupsUpdate ] Evento de atualização para o grupo ${groupId}:`, groupUpdate);
-    } else {
-      logger.warn('[ handleGroupsUpdate ] Evento de atualização de grupo sem JID.');
-    }
-  });
-};
-
-/**
- * Lida com atualizações de participantes de grupo (evento 'group-participants.update').
- * Isso inclui eventos como entrada, saída, promoção ou rebaixamento de usuários em um grupo.
- * @param {import('baileys').GroupParticipantsUpdateData} event - Os dados do evento de atualização de participantes do grupo.
- * @param {import('baileys').WASocket} client - A instância do cliente Baileys.
- */
-const handleGroupParticipantsUpdate = async (event, client) => {
-  logger.debug('[ handleGroupParticipantsUpdate ] Recebido evento group-participants.update:', event);
-  if (!client) {
-    logger.error('[ handleGroupParticipantsUpdate ] Instância do cliente inválida.');
-    return;
-  }
-
-  if (!event || typeof event !== 'object' || !event.id || !Array.isArray(event.participants)) {
-    logger.warn('[ handleGroupParticipantsUpdate ] Evento de participantes inválido ou malformado. Recebido:', event);
-    return;
-  }
-
-  const groupId = event.id;
-  const action = event.action || 'ação desconhecida';
-  const participants = event.participants.join(', ');
-
-  logger.info(`[ handleGroupParticipantsUpdate ] Evento recebido para grupo ${groupId}. Ação: ${action}. Participantes: ${participants}`);
-
-  try {
-    await processParticipantUpdate(event, client);
-    logger.debug(`[ handleGroupParticipantsUpdate ] Evento para grupo ${groupId} processado com sucesso.`);
-  } catch (error) {
-    logger.error(`[ handleGroupParticipantsUpdate ] Erro ao processar evento para ${groupId}: ${error.message}`, {
-      eventDetails: event,
-      stack: error.stack,
-    });
-  }
-};
-
-/**
- * Registra todos os manipuladores de eventos Baileys em suas respectivas funções de tratamento.
- * @param {import('baileys').WASocket} client - A instância do cliente Baileys.
- * @param {() => Promise<void>} saveCreds - The function to save credentials,
- *                                         passada para `handleCredsUpdate`.
- */
-const registerAllEventHandlers = (client, saveCreds) => {
-  logger.debug('[ registerAllEventHandlers ] Registrando manipuladores de eventos Baileys.');
-  client.ev.on('connection.update', (update) => handleConnectionUpdate(update));
-  client.ev.on('creds.update', () => handleCredsUpdate(saveCreds));
-  client.ev.on('messages.upsert', (data) => handleMessagesUpsert(data, client));
-  client.ev.on('groups.update', (updates) => handleGroupsUpdate(updates, client));
-  client.ev.on('group-participants.update', (event) => handleGroupParticipantsUpdate(event, client));
-};
-
-/**
- * Inicializa e conecta o cliente WhatsApp Baileys.
- * Configura a autenticação multi-arquivo, configura o socket com as opções apropriadas,
- * registra os manipuladores de eventos e lida com erros de conexão inicial agendando reconexões.
- * @async
- * @returns {Promise<import('baileys').WASocket | null>} Uma promessa que resolve para a instância do cliente Baileys, ou nulo se ocorrer um erro crítico durante a configuração inicial.
- */
-const connectToWhatsApp = async () => {
-  try {
-    logger.info(`[ connectToWhatsApp ] Usando diretório de estado de autenticação: ${AUTH_STATE_PATH}`);
-    const { state, saveCreds } = await useMultiFileAuthState(AUTH_STATE_PATH);
-    logger.debug('[ connectToWhatsApp ] Estado de autenticação carregado/criado.');
-    logger.debug(`[ connectToWhatsApp ] Configurações de ambiente relevantes: SYNC_FULL_HISTORY=${process.env.SYNC_FULL_HISTORY === 'true'}, DEBUG_BAILEYS=${process.env.DEBUG_BAILEYS === 'true'}`);
-
-    logger.info('[ connectToWhatsApp ] Iniciando a conexão com o WhatsApp...');
-
-    const socketConfig = {
-      auth: state,
-      logger: pino({ level: process.env.DEBUG_BAILEYS === 'true' ? 'debug' : 'silent' }),
-      printQRInTerminal: true,
-      mobile: false,
-      browser: Browsers.macOS('Desktop'),
-      syncFullHistory: process.env.SYNC_FULL_HISTORY === 'true',
-      msgRetryCounterMap: {},
-    };
-    logger.debug('[ connectToWhatsApp ] Configurações do socket:', socketConfig);
-
-    clientInstance = makeWASocket(socketConfig);
-    logger.debug('[ connectToWhatsApp ] Instância do Baileys criada.');
-
-    registerAllEventHandlers(clientInstance, saveCreds);
-
-    return clientInstance;
-  } catch (error) {
-    logger.error(`[ connectToWhatsApp ] Erro crítico ao iniciar a conexão com o WhatsApp: ${error.message}`, {
-      stack: error.stack,
-    });
-    scheduleReconnect(connectToWhatsApp, {
-      initialDelay: INITIAL_CONNECT_FAIL_DELAY,
-      maxDelay: DEFAULT_MAX_RECONNECT_DELAY,
-      maxExponent: DEFAULT_RECONNECT_MAX_EXPONENT,
-      label: 'WhatsAppInitialConnectFail',
-    });
-    return null;
-  }
-};
-
-/**
- * Inicializa a aplicação.
- * Esta função orquestra a configuração do banco de dados, criação/verificação de tabelas
- * e, em seguida, inicia a conexão com o WhatsApp.
- * @async
- */
-const initializeApp = async () => {
-  try {
-    logger.info('[ initializeApp ] Iniciando a aplicação...');
-    logger.debug('[ initializeApp ] Fase 1: Inicializando banco de dados.');
-
-    await initDatabase();
-    logger.info('[ initializeApp ] Pool de conexões do banco de dados inicializado.');
-    logger.debug('[ initializeApp ] Fase 2: Criando/Verificando tabelas.');
-
-    await createTables();
-    logger.info('[ initializeApp ] Tabelas do banco de dados verificadas/criadas.');
-    logger.debug('[ initializeApp ] Fase 3: Conectando ao WhatsApp.');
-
-    await connectToWhatsApp();
-    logger.debug('[ initializeApp ] Conexão com WhatsApp iniciada (ou agendada para reconexão).');
-  } catch (error) {
-    logger.error(`[ initializeApp ] Falha crítica durante a inicialização da aplicação: ${error.message}`, {
-      stack: error.stack,
-    });
-    process.exit(1);
-  }
-};
-
-/**
- * Encerra a aplicação de forma graciosa, fechando conexões.
- * @param {string} signal - O sinal que acionou o desligamento (ex: 'SIGINT').
- */
-const shutdownApp = async (signal) => {
-  logger.info(`[ shutdownApp ] Recebido sinal ${signal}. Iniciando desligamento...`);
-  if (reconnectTimeout) {
-    clearTimeout(reconnectTimeout);
-    reconnectTimeout = null;
-    logger.info('[ shutdownApp ] Timeout de reconexão cancelado.');
-  }
-
-  if (clientInstance) {
+  async initialize() {
     try {
-      logger.info('[ shutdownApp ] Fechando conexão com o WhatsApp...');
-      await clientInstance.logout('Desligamento da aplicação solicitado.');
-      logger.info('[ shutdownApp ] Conexão com o WhatsApp fechada.');
+      this.logger.info('[ ConnectionManager.initialize ] Iniciando a aplicação...');
+      this.logger.debug('[ ConnectionManager.initialize ] Fase 1: Inicializando banco de dados.');
+
+      await this.db.initDatabase();
+      this.logger.info('[ ConnectionManager.initialize ] Pool de conexões do banco de dados inicializado.');
+      this.logger.debug('[ ConnectionManager.initialize ] Fase 2: Criando/Verificando tabelas.');
+
+      await this.controllers.createTables();
+      this.logger.info('[ ConnectionManager.initialize ] Tabelas do banco de dados verificadas/criadas.');
+      this.logger.debug('[ ConnectionManager.initialize ] Fase 3: Conectando ao WhatsApp.');
+
+      await this.connectToWhatsApp();
+      this.logger.debug('[ ConnectionManager.initialize ] Conexão com WhatsApp iniciada (ou agendada para reconexão).');
     } catch (error) {
-      logger.error('[ shutdownApp ] Erro ao fechar a conexão com o WhatsApp:', error);
+      this.logger.error(`[ ConnectionManager.initialize ] Falha crítica durante a inicialização da aplicação: ${error.message}`, {
+        stack: error.stack,
+      });
+      process.exit(1);
     }
   }
 
-  // Excluir a pasta de autenticação para forçar novo QR na próxima inicialização
-  try {
-    logger.info(`[ shutdownApp ] Removendo pasta de autenticação: ${AUTH_STATE_PATH}`);
-    await fs.rm(AUTH_STATE_PATH, { recursive: true, force: true });
-    logger.info('[ shutdownApp ] Pasta de autenticação removida com sucesso.');
-  } catch (error) {
-    logger.error(`[ shutdownApp ] Erro ao remover a pasta de autenticação ${AUTH_STATE_PATH}:`, error);
-    // Continuar o desligamento mesmo se a remoção da pasta falhar
+  async shutdown(signal) {
+    this.logger.info(`[ ConnectionManager.shutdown ] Recebido sinal ${signal}. Iniciando desligamento...`);
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+      this.logger.info('[ ConnectionManager.shutdown ] Timeout de reconexão cancelado.');
+    }
+
+    if (this.clientInstance) {
+      try {
+        this.logger.info('[ ConnectionManager.shutdown ] Fechando conexão com o WhatsApp...');
+        await this.clientInstance.logout('Desligamento da aplicação solicitado.');
+        this.logger.info('[ ConnectionManager.shutdown ] Conexão com o WhatsApp fechada.');
+      } catch (error) {
+        this.logger.error('[ ConnectionManager.shutdown ] Erro ao fechar a conexão com o WhatsApp:', error);
+      }
+    }
+
+    try {
+      this.logger.info(`[ ConnectionManager.shutdown ] Removendo pasta de autenticação: ${this.AUTH_STATE_PATH}`);
+      await fs.rm(this.AUTH_STATE_PATH, { recursive: true, force: true });
+      this.logger.info('[ ConnectionManager.shutdown ] Pasta de autenticação removida com sucesso.');
+    } catch (error) {
+      this.logger.error(`[ ConnectionManager.shutdown ] Erro ao remover a pasta de autenticação ${this.AUTH_STATE_PATH}:`, error);
+    }
+
+    await this.db.closePool();
+    this.logger.info('[ ConnectionManager.shutdown ] Desligamento concluído. Saindo.');
+    process.exit(0);
   }
 
-  await closePool(); // Chame a função real para fechar o pool do DB
-
-  logger.info('[ shutdownApp ] Desligamento concluído. Saindo.');
-  process.exit(0);
-};
+  /**
+   * @returns {import('baileys').WASocket | null} A instância atual do cliente Baileys.
+   */
+  getClient() {
+    return this.clientInstance;
+  }
+}
 
 /**
  * @module connection
  * @description Fornece acesso à instância do cliente WhatsApp Baileys.
  */
+
+const connectionManager = new ConnectionManager({
+  authStatePath: AUTH_STATE_PATH,
+  dbFunctions: { initDatabase, closePool },
+  controllerFunctions: { createTables, processUserData, processParticipantUpdate, botController },
+  loggerInstance: logger,
+});
+
 module.exports = {
   /** @returns {import('baileys').WASocket | null} A instância atual do cliente Baileys, ou nulo se não estiver conectado. */
-  getClientInstance: () => clientInstance,
+  getClientInstance: () => connectionManager.getClient(),
 };
 
 // Inicia a aplicação
-initializeApp();
+connectionManager.initialize();
 
 // Listeners para desligamento gracioso
-process.on('SIGINT', () => shutdownApp('SIGINT'));
-process.on('SIGTERM', () => shutdownApp('SIGTERM'));
+process.on('SIGINT', () => connectionManager.shutdown('SIGINT'));
+process.on('SIGTERM', () => connectionManager.shutdown('SIGTERM'));
