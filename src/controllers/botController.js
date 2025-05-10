@@ -50,12 +50,22 @@ async function handleWhatsAppUpdate(upsert, client) {
 
     const { type, body, isMedia } = preProcessMessage(info);
 
-    // --- Command Identification ---
-    const processCommand = isCommand(body, config.bot.globalSettings.prefix);
-    const isCmd = processCommand?.isCommand || false; // Boolean: Is it a command?
-    const command = processCommand?.command; // String: Command name (e.g., 'menu') or null
-    const args = processCommand?.args; // Array: Arguments after the command or null
-    const text = args ? args.join(' ') : ''; // String: Full text after the command
+    /* ------- inicio das definiçoes de comandos e prefix ------- */
+    const processCommand = isCommand(body);
+    logger.debug('[ processCommand ]', processCommand);
+
+    /* Boolean indicando se é comando */
+    const isCmd = processCommand.isCommand;
+
+    /* Nome do comando, ou undefined se não for comando */
+    const command = processCommand.command;
+
+    /* Texto após o comando, como string (pode ser "") */
+    const args = processCommand.args ?? '';
+
+    /* Você pode usar `args` diretamente ou definir `text` como alias sem risco */
+    const text = args;
+    /* ------- fim das definiçoes de comandos e prefix ------- */
 
     // --- Owner Information ---
     const isOwner = sender === config.owner.number;
@@ -203,6 +213,10 @@ async function handleWhatsAppUpdate(upsert, client) {
             break;
           case 'setexitmedia':
             await welcomeHandlers.handleSetExitMediaCommand(client, info, sender, from, text, expirationMessage, isGroup, isGroupAdmin);
+            break;
+
+          case 'teste':
+            client.sendMessage(from, { text: text }, { quoted: info, ephemeralExpiration: expirationMessage });
             break;
 
           case 'p': {

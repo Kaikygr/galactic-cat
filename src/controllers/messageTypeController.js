@@ -1,4 +1,6 @@
-const baileys = require("baileys");
+const baileys = require('baileys');
+const logger = require('../utils/logger');
+require('dotenv').config();
 
 function preProcessMessage(info) {
   const type = baileys.getContentType(info.message);
@@ -6,40 +8,69 @@ function preProcessMessage(info) {
 
   const finalBody = body === undefined ? false : body;
 
-  const mediaTypes = ["imageMessage", "videoMessage", "audioMessage", "documentMessage", "stickerMessage", "contactMessage", "locationMessage", "productMessage"];
+  const mediaTypes = ['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage', 'stickerMessage', 'contactMessage', 'locationMessage', 'productMessage'];
   const isMedia = mediaTypes.includes(type);
 
   return { type, body: finalBody, isMedia };
 }
 
-function isCommand(body, prefixes) {
-  if (!body) return false;
-  if (!Array.isArray(prefixes)) prefixes = [prefixes];
-  const prefix = prefixes.find(p => body.startsWith(p));
-  if (!prefix) return { isCommand: false };
-  const withoutPrefix = body.slice(prefix.length);
-  const parts = withoutPrefix.split(/ +/);
-  const command = parts.shift().toLowerCase();
-  if (!command) return null;
-  return { isCommand: true, command, args: parts };
+/**
+ * Verifica se uma mensagem de texto é um comando válido com base em um prefixo definido.
+ *
+ * @param {string} body - O conteúdo da mensagem que será verificado.
+ * @returns {{
+ *   isCommand: boolean,
+ *   command?: string,
+ *   args?: string
+ * }} Um objeto indicando se é um comando, e se for, retorna o nome do comando e os argumentos como string.
+ *
+ **/
+function isCommand(body) {
+  /* Define o prefixo a ser usado (via variável de ambiente ou padrão ".") */
+  const prefix = process.env.BOT_GLOBAL_PREFIX || '.';
+
+  /* Se não houver conteúdo ou o texto não começar com o prefixo, não é um comando */
+  if (!body || !body.startsWith(prefix)) return { isCommand: false };
+
+  /* Remove o prefixo da mensagem e remove espaços em branco extras */
+  const withoutPrefix = body.slice(prefix.length).trim();
+
+  /* Divide o conteúdo apenas uma vez: comando e o restante */
+  const spaceIndex = withoutPrefix.indexOf(' ');
+
+  let command, args;
+
+  if (spaceIndex === -1) {
+    /* Caso não haja espaço, a mensagem tem apenas o comando */
+    command = withoutPrefix.toLowerCase();
+    args = '';
+  } else {
+    /* Se houver espaço, separamos o comando e o resto como string */
+    command = withoutPrefix.slice(0, spaceIndex).toLowerCase();
+    args = withoutPrefix.slice(spaceIndex + 1).trim();
+  }
+
+  if (!command) return { isCommand: false };
+
+  return { isCommand: true, command, args };
 }
 
 function processQuotedChecks(type, content) {
   const quotedTypes = {
-    textMessage: "isQuotedMsg",
-    imageMessage: "isQuotedImage",
-    videoMessage: "isQuotedVideo",
-    documentMessage: "isQuotedDocument",
-    audioMessage: "isQuotedAudio",
-    stickerMessage: "isQuotedSticker",
-    contactMessage: "isQuotedContact",
-    locationMessage: "isQuotedLocation",
-    productMessage: "isQuotedProduct",
+    textMessage: 'isQuotedMsg',
+    imageMessage: 'isQuotedImage',
+    videoMessage: 'isQuotedVideo',
+    documentMessage: 'isQuotedDocument',
+    audioMessage: 'isQuotedAudio',
+    stickerMessage: 'isQuotedSticker',
+    contactMessage: 'isQuotedContact',
+    locationMessage: 'isQuotedLocation',
+    productMessage: 'isQuotedProduct',
   };
 
   const quotedChecks = {};
   for (const [key, value] of Object.entries(quotedTypes)) {
-    quotedChecks[value] = type === "extendedTextMessage" && content.includes(key);
+    quotedChecks[value] = type === 'extendedTextMessage' && content.includes(key);
   }
 
   return {
@@ -56,7 +87,7 @@ function processQuotedChecks(type, content) {
 }
 
 function getExpiration(info) {
-  const messageTypes = ["conversation", "viewOnceMessageV2", "imageMessage", "videoMessage", "extendedTextMessage", "viewOnceMessage", "documentWithCaptionMessage", "buttonsMessage", "buttonsResponseMessage", "listResponseMessage", "templateButtonReplyMessage", "interactiveResponseMessage"];
+  const messageTypes = ['conversation', 'viewOnceMessageV2', 'imageMessage', 'videoMessage', 'extendedTextMessage', 'viewOnceMessage', 'documentWithCaptionMessage', 'buttonsMessage', 'buttonsResponseMessage', 'listResponseMessage', 'templateButtonReplyMessage', 'interactiveResponseMessage'];
 
   for (const type of messageTypes) {
     const message = info.message?.[type]?.message || info.message?.[type];
