@@ -208,7 +208,7 @@ const processMessage = async (data, client, msg) => {
   } catch (err) {
     logger.debug(`[ processMessage ] Erro detalhado em botController:`, err);
     const messageType = Object.keys(msg.message || {})[0] || 'tipo desconhecido';
-    logger.error(`[ processMessage ] ID:${messageId} ❌ Erro em botController com tipo '${messageType}' no JID ${remoteJid}: ${err.message}`, {
+    logger.error(`[ processMessage ] ID:${messageId} Erro em botController com tipo '${messageType}' no JID ${remoteJid}: ${err.message}`, {
       stack: err.stack,
     });
     return;
@@ -328,7 +328,6 @@ const connectToWhatsApp = async () => {
     return clientInstance;
   } catch (error) {
     logger.error(`[ connectToWhatsApp ] Erro crítico ao iniciar a conexão com o WhatsApp: ${error.message}`, {
-      // Mantido como error por ser crítico
       stack: error.stack,
     });
     scheduleReconnect(connectToWhatsApp, {
@@ -364,7 +363,6 @@ const initializeApp = async () => {
     logger.debug('[ initializeApp ] Conexão com WhatsApp iniciada (ou agendada para reconexão).');
   } catch (error) {
     logger.error(`[ initializeApp ] Falha crítica durante a inicialização da aplicação: ${error.message}`, {
-      // Mantido como error por ser crítico
       stack: error.stack,
     });
     process.exit(1);
