@@ -12,28 +12,42 @@ const botController = require('../controllers/botController');
 
 const AUTH_STATE_PATH = path.join(__dirname, 'temp', 'auth_state');
 
-const RECONNECT_INITIAL_DELAY_MS = 1000;
-const RECONNECT_MAX_DELAY_MS = 60000;
-const MAX_RECONNECT_EXPONENT = 10;
-
 let reconnectAttempts = 0;
 let reconnectTimeout = null;
 
 let clientInstance = null;
 
-const scheduleReconnect = () => {
+const scheduleReconnect = (
+  connectFn,
+  options = {
+    initialDelay: 1000, // 1 segundo
+    maxDelay: 60000, // 60 segundos
+    maxExponent: 6, // até 2^6 = 64x multiplicação no máximo
+    label: 'scheduleReconnect',
+  },
+) => {
   if (reconnectTimeout) return;
 
-  reconnectAttempts++;
-  const exponent = Math.min(reconnectAttempts, MAX_RECONNECT_EXPONENT);
-  const delay = Math.min(RECONNECT_INITIAL_DELAY_MS * 2 ** exponent, RECONNECT_MAX_DELAY_MS);
+  // Incrementa, mas limita para evitar overflow ou números excessivamente grandes se maxExponent for pequeno
+  reconnectAttempts = Math.min(reconnectAttempts + 1, options.maxExponent + 10);
+  const exponent = Math.min(reconnectAttempts, options.maxExponent);
+  const delay = Math.min(options.initialDelay * 2 ** exponent, options.maxDelay);
 
-  logger.warn(`[ scheduleReconnect ] 🔌 Conexão perdida. Tentando reconectar em ${delay / 1000} segundos... (Tentativa ${reconnectAttempts})`);
+  logger.warn(`[ ${options.label} ] Conexão perdida. Tentando reconectar em ${delay / 1000}s... Tentativa: ${reconnectAttempts}`);
 
   reconnectTimeout = setTimeout(() => {
     reconnectTimeout = null;
-    connectToWhatsApp();
+    connectFn();
   }, delay);
+};
+
+const resetReconnectAttempts = (label = 'ConnectionLogic') => {
+  logger.info(`[ ${label} ] Resetando tentativas de reconexão.`);
+  reconnectAttempts = 0;
+  if (reconnectTimeout) {
+    clearTimeout(reconnectTimeout);
+    reconnectTimeout = null;
+  }
 };
 
 const handleConnectionUpdate = async (update) => {
@@ -42,14 +56,14 @@ const handleConnectionUpdate = async (update) => {
   if (qr) {
     logger.info('[ handleConnectionUpdate ] 📱 QR Code recebido, escaneie por favor.');
     reconnectAttempts = 0;
-    logger.info('[ handleConnectionUpdate ] 🔄 Contador de tentativas de reconexão resetado devido a novo QR.');
+    resetReconnectAttempts('handleConnectionUpdate-QR');
   }
 
   if (connection === 'connecting') {
     logger.info('[ handleConnectionUpdate ] ⏳ Conectando ao WhatsApp...');
   } else if (connection === 'open') {
     logger.info('[ handleConnectionUpdate ] ✅ Conexão aberta com sucesso. Bot disponível.');
-    reconnectAttempts = 0;
+    resetReconnectAttempts('handleConnectionUpdate-Open');
   } else if (connection === 'close') {
     const statusCode = lastDisconnect?.error?.output?.statusCode;
     const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
@@ -58,7 +72,12 @@ const handleConnectionUpdate = async (update) => {
 
     if (shouldReconnect) {
       logger.info('[ handleConnectionUpdate ] 🔄 Tentando reconectar...');
-      scheduleReconnect();
+      scheduleReconnect(connectToWhatsApp, {
+        initialDelay: 1000,
+        maxDelay: 60000,
+        maxExponent: 10, // Mantendo o valor original do MAX_RECONNECT_EXPONENT
+        label: 'WhatsAppConnection',
+      });
     } else {
       logger.error("[ handleConnectionUpdate ] 🚫 Não foi possível reconectar: Deslogado. Exclua a pasta 'temp/auth_state' e reinicie para gerar um novo QR Code.");
     }
@@ -180,7 +199,12 @@ const connectToWhatsApp = async () => {
     logger.error(`[ connectToWhatsApp ] 🔴 Erro crítico ao iniciar a conexão com o WhatsApp: ${error.message}`, {
       stack: error.stack,
     });
-    scheduleReconnect();
+    scheduleReconnect(connectToWhatsApp, {
+      initialDelay: 1500, // Pode ser um pouco diferente para o erro inicial
+      maxDelay: 60000,
+      maxExponent: 10,
+      label: 'WhatsAppInitialConnectFail',
+    });
     return null;
   }
 };
