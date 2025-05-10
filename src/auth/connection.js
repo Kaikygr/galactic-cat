@@ -23,6 +23,13 @@ const botController = require('../controllers/botController');
  */
 const AUTH_STATE_PATH = path.join(__dirname, 'temp', 'auth_state');
 
+// Constantes para configuração da lógica de reconexão
+// Podem ser sobrescritas por variáveis de ambiente
+const DEFAULT_INITIAL_RECONNECT_DELAY = parseInt(process.env.DEFAULT_INITIAL_RECONNECT_DELAY, 10) || 1000;
+const INITIAL_CONNECT_FAIL_DELAY = parseInt(process.env.INITIAL_CONNECT_FAIL_DELAY, 10) || 1500;
+const DEFAULT_MAX_RECONNECT_DELAY = parseInt(process.env.DEFAULT_MAX_RECONNECT_DELAY, 10) || 60000;
+const DEFAULT_RECONNECT_MAX_EXPONENT = parseInt(process.env.DEFAULT_RECONNECT_MAX_EXPONENT, 10) || 10;
+
 /**
  * @type {number}
  * @description Contador para as tentativas de reconexão atuais.
@@ -120,9 +127,9 @@ const handleConnectionUpdate = async (update) => {
     if (shouldReconnect) {
       logger.info('[ handleConnectionUpdate ] Tentando reconectar...');
       scheduleReconnect(connectToWhatsApp, {
-        initialDelay: 1000,
-        maxDelay: 60000,
-        maxExponent: 10,
+        initialDelay: DEFAULT_INITIAL_RECONNECT_DELAY,
+        maxDelay: DEFAULT_MAX_RECONNECT_DELAY,
+        maxExponent: DEFAULT_RECONNECT_MAX_EXPONENT,
         label: 'WhatsAppConnection',
       });
     } else {
@@ -228,7 +235,7 @@ const handleGroupsUpdate = async (updates, client) => {
   }
 
   if (!Array.isArray(updates)) {
-    logger.warn('[ handleGroupsUpdate ] Atualizações de grupo recebidas não são um array.');
+    logger.warn('[ handleGroupsUpdate ] Atualizações de grupo recebidas não são um array. Recebido:', typeof updates, updates);
     return;
   }
 
@@ -258,7 +265,7 @@ const handleGroupParticipantsUpdate = async (event, client) => {
   }
 
   if (!event || typeof event !== 'object' || !event.id || !Array.isArray(event.participants)) {
-    logger.warn('[ handleGroupParticipantsUpdate ] Evento de participantes inválido ou malformado.');
+    logger.warn('[ handleGroupParticipantsUpdate ] Evento de participantes inválido ou malformado. Recebido:', event);
     return;
   }
 
@@ -306,6 +313,7 @@ const connectToWhatsApp = async () => {
     logger.info(`[ connectToWhatsApp ] Usando diretório de estado de autenticação: ${AUTH_STATE_PATH}`);
     const { state, saveCreds } = await useMultiFileAuthState(AUTH_STATE_PATH);
     logger.debug('[ connectToWhatsApp ] Estado de autenticação carregado/criado.');
+    logger.debug(`[ connectToWhatsApp ] Configurações de ambiente relevantes: SYNC_FULL_HISTORY=${process.env.SYNC_FULL_HISTORY === 'true'}, DEBUG_BAILEYS=${process.env.DEBUG_BAILEYS === 'true'}`);
 
     logger.info('[ connectToWhatsApp ] Iniciando a conexão com o WhatsApp...');
 
@@ -331,9 +339,9 @@ const connectToWhatsApp = async () => {
       stack: error.stack,
     });
     scheduleReconnect(connectToWhatsApp, {
-      initialDelay: 1500,
-      maxDelay: 60000,
-      maxExponent: 10,
+      initialDelay: INITIAL_CONNECT_FAIL_DELAY,
+      maxDelay: DEFAULT_MAX_RECONNECT_DELAY,
+      maxExponent: DEFAULT_RECONNECT_MAX_EXPONENT,
       label: 'WhatsAppInitialConnectFail',
     });
     return null;
