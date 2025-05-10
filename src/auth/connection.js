@@ -20,15 +20,14 @@ let clientInstance = null;
 const scheduleReconnect = (
   connectFn,
   options = {
-    initialDelay: 1000, // 1 segundo
-    maxDelay: 60000, // 60 segundos
-    maxExponent: 6, // até 2^6 = 64x multiplicação no máximo
+    initialDelay: 1000,
+    maxDelay: 60000,
+    maxExponent: 6,
     label: 'scheduleReconnect',
   },
 ) => {
   if (reconnectTimeout) return;
 
-  // Incrementa, mas limita para evitar overflow ou números excessivamente grandes se maxExponent for pequeno
   reconnectAttempts = Math.min(reconnectAttempts + 1, options.maxExponent + 10);
   const exponent = Math.min(reconnectAttempts, options.maxExponent);
   const delay = Math.min(options.initialDelay * 2 ** exponent, options.maxDelay);
@@ -54,120 +53,141 @@ const handleConnectionUpdate = async (update) => {
   const { connection, lastDisconnect, qr } = update;
 
   if (qr) {
-    logger.info('[ handleConnectionUpdate ] 📱 QR Code recebido, escaneie por favor.');
+    logger.info('[ handleConnectionUpdate ] QR Code recebido, escaneie por favor.');
     reconnectAttempts = 0;
     resetReconnectAttempts('handleConnectionUpdate-QR');
   }
 
   if (connection === 'connecting') {
-    logger.info('[ handleConnectionUpdate ] ⏳ Conectando ao WhatsApp...');
+    logger.info('[ handleConnectionUpdate ] Conectando ao WhatsApp...');
   } else if (connection === 'open') {
-    logger.info('[ handleConnectionUpdate ] ✅ Conexão aberta com sucesso. Bot disponível.');
+    logger.info('[ handleConnectionUpdate ] Conexão aberta com sucesso. Bot disponível.');
     resetReconnectAttempts('handleConnectionUpdate-Open');
   } else if (connection === 'close') {
     const statusCode = lastDisconnect?.error?.output?.statusCode;
     const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
 
-    logger.error(`[ handleConnectionUpdate ] ❌ Conexão fechada. Razão: ${DisconnectReason[statusCode] || 'Desconhecida'} (Código: ${statusCode})`);
+    logger.error(`[ handleConnectionUpdate ] Conexão fechada. Razão: ${DisconnectReason[statusCode] || 'Desconhecida'} Código: ${statusCode}`);
 
     if (shouldReconnect) {
-      logger.info('[ handleConnectionUpdate ] 🔄 Tentando reconectar...');
+      logger.info('[ handleConnectionUpdate ] Tentando reconectar...');
       scheduleReconnect(connectToWhatsApp, {
         initialDelay: 1000,
         maxDelay: 60000,
-        maxExponent: 10, // Mantendo o valor original do MAX_RECONNECT_EXPONENT
+        maxExponent: 10,
         label: 'WhatsAppConnection',
       });
     } else {
-      logger.error("[ handleConnectionUpdate ] 🚫 Não foi possível reconectar: Deslogado. Exclua a pasta 'temp/auth_state' e reinicie para gerar um novo QR Code.");
+      logger.error("[ handleConnectionUpdate ]  Não foi possível reconectar: Deslogado. Exclua a pasta 'temp/auth_state' e reinicie para gerar um novo QR Code.");
     }
   }
 };
 
 const handleCredsUpdate = async (saveCreds) => {
+  if (typeof saveCreds !== 'function') {
+    logger.error('[ handleCredsUpdate ] saveCreds não é uma função válida.');
+    return;
+  }
+
   try {
     await saveCreds();
-    logger.info('[ handleCredsUpdate ] 🔒 Credenciais salvas com sucesso.');
+    logger.info('[ handleCredsUpdate ] Credenciais salvas com sucesso.');
   } catch (error) {
-    logger.error('[ handleCredsUpdate ] ❌ Erro ao salvar credenciais:', error);
+    logger.error('[ handleCredsUpdate ] Erro ao salvar credenciais:', {
+      message: error.message,
+      stack: error.stack,
+    });
   }
 };
 
 const handleMessagesUpsert = async (data, client) => {
   if (!client) {
-    logger.error('[ handleMessagesUpsert ] ❌ Erro interno: Instância do cliente inválida em handleMessagesUpsert.');
+    logger.error('[ handleMessagesUpsert ] Instância do cliente inválida.');
     return;
   }
 
   const msg = data.messages?.[0];
-
-  if (!msg || !msg.key || !msg.message) {
+  if (!msg?.key?.remoteJid || !msg.message) {
     return;
   }
-  setImmediate(
-    async (deferredData, deferredClient, deferredMsg) => {
-      const messageIdForLog = deferredMsg.key.id;
-      const remoteJidForLog = deferredMsg.key.remoteJid;
-      try {
-        try {
-          await processUserData(deferredData, deferredClient);
-        } catch (error) {
-          logger.error(`[ handleMessagesUpsert ] (Deferred:${messageIdForLog}) ❌ Erro ao processar dados do usuário/mensagem (processUserData) para ${remoteJidForLog}: ${error.message}`, { stack: error.stack });
-          return;
-        }
 
-        try {
-          await botController(deferredData, deferredClient);
-        } catch (error) {
-          const messageType = Object.keys(deferredMsg.message || {})[0] || 'tipo desconhecido';
-          logger.error(`[ handleMessagesUpsert ] (Deferred:${messageIdForLog}) ❌ Erro em botController ao lidar com mensagem tipo '${messageType}' no JID ${remoteJidForLog}: ${error.message}`, {
-            stack: error.stack,
-          });
-        }
-      } catch (outerError) {
-        logger.error(`[ handleMessagesUpsert ] (Deferred:${messageIdForLog}) 💥 Erro crítico inesperado no processamento agendado para ${remoteJidForLog}: ${outerError.message}`, { stack: outerError.stack });
-      } finally {
-      }
-    },
-    data,
-    client,
-    msg,
-  );
+  setImmediate(() => processMessage(data, client, msg));
+};
+
+const processMessage = async (data, client, msg) => {
+  const messageId = msg.key.id;
+  const remoteJid = msg.key.remoteJid;
+
+  try {
+    await processUserData(data, client);
+  } catch (err) {
+    logger.error(`[ processMessage ] ID:${messageId} Erro em processUserData para ${remoteJid}: ${err.message}`, {
+      stack: err.stack,
+    });
+    return;
+  }
+
+  try {
+    await botController(data, client);
+  } catch (err) {
+    const messageType = Object.keys(msg.message || {})[0] || 'tipo desconhecido';
+    logger.error(`[ processMessage ] ID:${messageId} ❌ Erro em botController com tipo '${messageType}' no JID ${remoteJid}: ${err.message}`, {
+      stack: err.stack,
+    });
+    return;
+  }
 };
 
 const handleGroupsUpdate = async (updates, client) => {
   if (!client) {
-    logger.error('[ handleGroupsUpdate ] ❌ Erro interno: Instância do cliente inválida em handleGroupsUpdate.');
+    logger.error('[ handleGroupsUpdate ] Instância do cliente inválida.');
     return;
   }
-  logger.info(`[ handleGroupsUpdate ] 🔄 Recebido ${updates.length} evento(s) de atualização de grupo.`);
 
-  for (const event of updates) {
-    const groupId = event.id;
-    if (groupId) {
-      logger.debug(`[ handleGroupsUpdate ] Evento de atualização para o grupo ${groupId}:`, event);
-    } else {
-      logger.warn('[ handleGroupsUpdate ] Recebido evento de atualização de grupo sem JID.');
-    }
+  if (!Array.isArray(updates)) {
+    logger.warn('[ handleGroupsUpdate ] Atualizações de grupo recebidas não são um array.');
+    return;
   }
+
+  logger.info(`[ handleGroupsUpdate ]  Recebido ${updates.length} evento(s) de atualização de grupo.`);
+
+  updates.forEach((groupUpdate) => {
+    const groupId = groupUpdate.id;
+    if (groupId) {
+      logger.debug(`[ handleGroupsUpdate ] Evento de atualização para o grupo ${groupId}:`, groupUpdate);
+    } else {
+      logger.warn('[ handleGroupsUpdate ] Evento de atualização de grupo sem JID.');
+    }
+  });
 };
 
 const handleGroupParticipantsUpdate = async (event, client) => {
   if (!client) {
-    logger.error('[ handleGroupParticipantsUpdate ] ❌ Erro interno: Instância do cliente inválida em handleGroupParticipantsUpdate.');
+    logger.error('[ handleGroupParticipantsUpdate ] Instância do cliente inválida.');
     return;
   }
+
+  if (!event || typeof event !== 'object' || !event.id || !Array.isArray(event.participants)) {
+    logger.warn('[ handleGroupParticipantsUpdate ] Evento de participantes inválido ou malformado.');
+    return;
+  }
+
   const groupId = event.id;
-  logger.info(`[ handleGroupParticipantsUpdate ] 👥 Evento recebido para grupo ${groupId}. Ação: ${event.action}. Participantes: ${event.participants.join(', ')}`);
+  const action = event.action || 'ação desconhecida';
+  const participants = event.participants.join(', ');
+
+  logger.info(`[ handleGroupParticipantsUpdate ] Evento recebido para grupo ${groupId}. Ação: ${action}. Participantes: ${participants}`);
+
   try {
     await processParticipantUpdate(event, client);
   } catch (error) {
-    logger.error(`[ handleGroupParticipantsUpdate ] ❌ Erro retornado pelo processador de evento (processParticipantUpdate) para ${groupId}: ${error.message}`, { stack: error.stack });
+    logger.error(`[ handleGroupParticipantsUpdate ] Erro ao processar evento para ${groupId}: ${error.message}`, {
+      stack: error.stack,
+    });
   }
 };
 
 const registerAllEventHandlers = (client, saveCreds) => {
-  // Evento de atualização do estado da conexão
   client.ev.on('connection.update', (update) => handleConnectionUpdate(update));
   client.ev.on('creds.update', () => handleCredsUpdate(saveCreds));
   client.ev.on('messages.upsert', (data) => handleMessagesUpsert(data, client));
@@ -200,7 +220,7 @@ const connectToWhatsApp = async () => {
       stack: error.stack,
     });
     scheduleReconnect(connectToWhatsApp, {
-      initialDelay: 1500, // Pode ser um pouco diferente para o erro inicial
+      initialDelay: 1500,
       maxDelay: 60000,
       maxExponent: 10,
       label: 'WhatsAppInitialConnectFail',
