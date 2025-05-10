@@ -8,11 +8,12 @@
 const { default: makeWASocket, Browsers, useMultiFileAuthState, DisconnectReason } = require('baileys');
 const pino = require('pino');
 const path = require('path');
+const fs = require('fs/promises');
 
 require('dotenv').config();
 
 const logger = require('../utils/logger');
-const { initDatabase } = require('./../database/processDatabase');
+const { initDatabase, closePool } = require('./../database/processDatabase');
 const { createTables, processUserData } = require('./../controllers/userDataController');
 const { processParticipantUpdate } = require('../controllers/groupEventsController');
 const botController = require('../controllers/botController');
@@ -182,7 +183,6 @@ const handleMessagesUpsert = async (data, client) => {
     return;
   }
 
-  // Process the message in the next tick to free up the event loop quickly.
   logger.debug(`[ handleMessagesUpsert ] Agendando processamento para mensagem ID: ${msg.key.id} de ${msg.key.remoteJid}`);
   setImmediate(() => processMessage(data, client, msg));
 };
@@ -377,7 +377,43 @@ const initializeApp = async () => {
   }
 };
 
-initializeApp();
+/**
+ * Encerra a aplicação de forma graciosa, fechando conexões.
+ * @param {string} signal - O sinal que acionou o desligamento (ex: 'SIGINT').
+ */
+const shutdownApp = async (signal) => {
+  logger.info(`[ shutdownApp ] Recebido sinal ${signal}. Iniciando desligamento...`);
+  if (reconnectTimeout) {
+    clearTimeout(reconnectTimeout);
+    reconnectTimeout = null;
+    logger.info('[ shutdownApp ] Timeout de reconexão cancelado.');
+  }
+
+  if (clientInstance) {
+    try {
+      logger.info('[ shutdownApp ] Fechando conexão com o WhatsApp...');
+      await clientInstance.logout('Desligamento da aplicação solicitado.');
+      logger.info('[ shutdownApp ] Conexão com o WhatsApp fechada.');
+    } catch (error) {
+      logger.error('[ shutdownApp ] Erro ao fechar a conexão com o WhatsApp:', error);
+    }
+  }
+
+  // Excluir a pasta de autenticação para forçar novo QR na próxima inicialização
+  try {
+    logger.info(`[ shutdownApp ] Removendo pasta de autenticação: ${AUTH_STATE_PATH}`);
+    await fs.rm(AUTH_STATE_PATH, { recursive: true, force: true });
+    logger.info('[ shutdownApp ] Pasta de autenticação removida com sucesso.');
+  } catch (error) {
+    logger.error(`[ shutdownApp ] Erro ao remover a pasta de autenticação ${AUTH_STATE_PATH}:`, error);
+    // Continuar o desligamento mesmo se a remoção da pasta falhar
+  }
+
+  await closePool(); // Chame a função real para fechar o pool do DB
+
+  logger.info('[ shutdownApp ] Desligamento concluído. Saindo.');
+  process.exit(0);
+};
 
 /**
  * @module connection
@@ -387,3 +423,10 @@ module.exports = {
   /** @returns {import('baileys').WASocket | null} A instância atual do cliente Baileys, ou nulo se não estiver conectado. */
   getClientInstance: () => clientInstance,
 };
+
+// Inicia a aplicação
+initializeApp();
+
+// Listeners para desligamento gracioso
+process.on('SIGINT', () => shutdownApp('SIGINT'));
+process.on('SIGTERM', () => shutdownApp('SIGTERM'));
