@@ -1,3 +1,10 @@
+/**
+ * @file Manages the WhatsApp connection, event handling, and reconnection logic using Baileys.
+ * This module is responsible for initializing the WhatsApp client, handling various
+ * events like connection updates, message receipts, group updates, and ensuring
+ * credentials are saved. It also implements an exponential backoff strategy for reconnections.
+ */
+
 const { default: makeWASocket, Browsers, useMultiFileAuthState, DisconnectReason } = require('baileys');
 const pino = require('pino');
 const path = require('path');
@@ -10,13 +17,38 @@ const { createTables, processUserData } = require('./../controllers/userDataCont
 const { processParticipantUpdate } = require('../controllers/groupEventsController');
 const botController = require('../controllers/botController');
 
+/**
+ * @constant {string} AUTH_STATE_PATH
+ * @description The file system path where authentication state (session files) will be stored.
+ */
 const AUTH_STATE_PATH = path.join(__dirname, 'temp', 'auth_state');
 
+/**
+ * @type {number}
+ * @description Counter for a_tual reconnection attempts.
+ */
 let reconnectAttempts = 0;
+/**
+ * @type {NodeJS.Timeout | null}
+ * @description Timeout ID for the scheduled reconnection. Null if no reconnection is scheduled.
+ */
 let reconnectTimeout = null;
 
+/**
+ * @type {import('baileys').WASocket | null}
+ * @description Holds the singleton instance of the Baileys WhatsApp client.
+ */
 let clientInstance = null;
 
+/**
+ * Schedules a reconnection attempt with an exponential backoff strategy.
+ * @param {() => Promise<void> | void} connectFn - The function to call to attempt reconnection.
+ * @param {object} [options] - Options for scheduling the reconnect.
+ * @param {number} [options.initialDelay=1000] - Initial delay in milliseconds.
+ * @param {number} [options.maxDelay=60000] - Maximum delay in milliseconds.
+ * @param {number} [options.maxExponent=6] - Maximum exponent for the backoff calculation.
+ * @param {string} [options.label='scheduleReconnect'] - A label for logging purposes.
+ */
 const scheduleReconnect = (
   connectFn,
   options = {
@@ -40,6 +72,11 @@ const scheduleReconnect = (
   }, delay);
 };
 
+/**
+ * Resets the reconnection attempt counter and clears any pending reconnection timeout.
+ * @param {string} [label='ConnectionLogic'] - A label for logging purposes to indicate
+ *                                             what triggered the reset.
+ */
 const resetReconnectAttempts = (label = 'ConnectionLogic') => {
   logger.info(`[ ${label} ] Resetando tentativas de reconexão.`);
   reconnectAttempts = 0;
@@ -49,6 +86,12 @@ const resetReconnectAttempts = (label = 'ConnectionLogic') => {
   }
 };
 
+/**
+ * Handles connection updates from the Baileys client.
+ * This includes QR code generation, connection status changes (connecting, open, close),
+ * and managing reconnection logic based on disconnection reasons.
+ * @param {Partial<import('baileys').ConnectionState>} update - The connection update object from Baileys.
+ */
 const handleConnectionUpdate = async (update) => {
   const { connection, lastDisconnect, qr } = update;
 
@@ -83,6 +126,11 @@ const handleConnectionUpdate = async (update) => {
   }
 };
 
+/**
+ * Handles credential updates from Baileys.
+ * Saves the updated credentials using the `saveCreds` function provided by `useMultiFileAuthState`.
+ * @param {() => Promise<void>} saveCreds - The function to save credentials.
+ */
 const handleCredsUpdate = async (saveCreds) => {
   if (typeof saveCreds !== 'function') {
     logger.error('[ handleCredsUpdate ] saveCreds não é uma função válida.');
@@ -100,6 +148,13 @@ const handleCredsUpdate = async (saveCreds) => {
   }
 };
 
+/**
+ * Handles incoming or updated messages ('messages.upsert' event).
+ * It ensures a valid client instance and message structure before delegating
+ * the processing to `processMessage` using `setImmediate` to avoid blocking the event loop.
+ * @param {import('baileys').BaileysEventMap['messages.upsert']} data - The message upsert data from Baileys.
+ * @param {import('baileys').WASocket} client - The Baileys client instance.
+ */
 const handleMessagesUpsert = async (data, client) => {
   if (!client) {
     logger.error('[ handleMessagesUpsert ] Instância do cliente inválida.');
@@ -111,9 +166,18 @@ const handleMessagesUpsert = async (data, client) => {
     return;
   }
 
+  // Process the message in the next tick to free up the event loop quickly.
   setImmediate(() => processMessage(data, client, msg));
 };
 
+/**
+ * Processes a single message.
+ * This function is responsible for calling `processUserData` to handle user-related data
+ * and then `botController` to execute bot-specific logic for the message.
+ * @param {import('baileys').BaileysEventMap['messages.upsert']} data - The raw message upsert data.
+ * @param {import('baileys').WASocket} client - The Baileys client instance.
+ * @param {import('baileys').WAMessage} msg - The specific message object to process.
+ */
 const processMessage = async (data, client, msg) => {
   const messageId = msg.key.id;
   const remoteJid = msg.key.remoteJid;
@@ -138,6 +202,11 @@ const processMessage = async (data, client, msg) => {
   }
 };
 
+/**
+ * Handles group metadata updates ('groups.update' event).
+ * @param {import('baileys').GroupMetadata[]} updates - An array of group update objects from Baileys.
+ * @param {import('baileys').WASocket} client - The Baileys client instance.
+ */
 const handleGroupsUpdate = async (updates, client) => {
   if (!client) {
     logger.error('[ handleGroupsUpdate ] Instância do cliente inválida.');
@@ -161,6 +230,12 @@ const handleGroupsUpdate = async (updates, client) => {
   });
 };
 
+/**
+ * Handles group participant updates ('group-participants.update' event).
+ * This includes events like users joining, leaving, being promoted, or demoted in a group.
+ * @param {import('baileys').GroupParticipantsUpdateData} event - The group participant update event data.
+ * @param {import('baileys').WASocket} client - The Baileys client instance.
+ */
 const handleGroupParticipantsUpdate = async (event, client) => {
   if (!client) {
     logger.error('[ handleGroupParticipantsUpdate ] Instância do cliente inválida.');
@@ -187,6 +262,12 @@ const handleGroupParticipantsUpdate = async (event, client) => {
   }
 };
 
+/**
+ * Registers all Baileys event handlers to their respective handler functions.
+ * @param {import('baileys').WASocket} client - The Baileys client instance.
+ * @param {() => Promise<void>} saveCreds - The function to save credentials,
+ *                                         passed to `handleCredsUpdate`.
+ */
 const registerAllEventHandlers = (client, saveCreds) => {
   client.ev.on('connection.update', (update) => handleConnectionUpdate(update));
   client.ev.on('creds.update', () => handleCredsUpdate(saveCreds));
@@ -195,12 +276,19 @@ const registerAllEventHandlers = (client, saveCreds) => {
   client.ev.on('group-participants.update', (event) => handleGroupParticipantsUpdate(event, client));
 };
 
+/**
+ * Initializes and connects the Baileys WhatsApp client.
+ * It sets up multi-file authentication, configures the socket with appropriate options,
+ * registers event handlers, and handles initial connection errors by scheduling reconnections.
+ * @async
+ * @returns {Promise<import('baileys').WASocket | null>} A promise that resolves to the Baileys client instance, or null if a critical error occurs during initial setup.
+ */
 const connectToWhatsApp = async () => {
   try {
-    logger.info(`[ connectToWhatsApp ] 🔒 Usando diretório de estado de autenticação: ${AUTH_STATE_PATH}`);
+    logger.info(`[ connectToWhatsApp ] Usando diretório de estado de autenticação: ${AUTH_STATE_PATH}`);
     const { state, saveCreds } = await useMultiFileAuthState(AUTH_STATE_PATH);
 
-    logger.info('[ connectToWhatsApp ] 🌐 Iniciando a conexão com o WhatsApp...');
+    logger.info('[ connectToWhatsApp ] Iniciando a conexão com o WhatsApp...');
 
     clientInstance = makeWASocket({
       auth: state,
@@ -216,7 +304,7 @@ const connectToWhatsApp = async () => {
 
     return clientInstance;
   } catch (error) {
-    logger.error(`[ connectToWhatsApp ] 🔴 Erro crítico ao iniciar a conexão com o WhatsApp: ${error.message}`, {
+    logger.error(`[ connectToWhatsApp ] Erro crítico ao iniciar a conexão com o WhatsApp: ${error.message}`, {
       stack: error.stack,
     });
     scheduleReconnect(connectToWhatsApp, {
@@ -229,19 +317,25 @@ const connectToWhatsApp = async () => {
   }
 };
 
+/**
+ * Initializes the application.
+ * This function orchestrates the setup of the database, creation/verification of tables,
+ * and then initiates the connection to WhatsApp.
+ * @async
+ */
 const initializeApp = async () => {
   try {
-    logger.info('[ initializeApp ] 🚀 Iniciando a aplicação...');
+    logger.info('[ initializeApp ] Iniciando a aplicação...');
 
     await initDatabase();
-    logger.info('[ initializeApp ] 💾 Pool de conexões do banco de dados inicializado.');
+    logger.info('[ initializeApp ] Pool de conexões do banco de dados inicializado.');
 
     await createTables();
-    logger.info('[ initializeApp ] 📊 Tabelas do banco de dados verificadas/criadas.');
+    logger.info('[ initializeApp ] Tabelas do banco de dados verificadas/criadas.');
 
     await connectToWhatsApp();
   } catch (error) {
-    logger.error(`[ initializeApp ] 💥 Falha crítica durante a inicialização da aplicação: ${error.message}`, {
+    logger.error(`[ initializeApp ] Falha crítica durante a inicialização da aplicação: ${error.message}`, {
       stack: error.stack,
     });
     process.exit(1);
@@ -250,6 +344,11 @@ const initializeApp = async () => {
 
 initializeApp();
 
+/**
+ * @module connection
+ * @description Provides access to the Baileys WhatsApp client instance.
+ */
 module.exports = {
+  /** @returns {import('baileys').WASocket | null} The current Baileys client instance, or null if not connected. */
   getClientInstance: () => clientInstance,
 };
