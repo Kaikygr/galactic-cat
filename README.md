@@ -41,12 +41,12 @@ O Galactic-Cat oferece um conjunto abrangente de funcionalidades:
 
     - Autenticação via QR Code.
     - Persistência do estado da sessão para reconexões rápidas (`src/auth/temp/`).
-    - Lógica robusta de reconexão automática com backoff exponencial em caso de desconexões inesperadas (exceto logout).
+    - Lógica robusta de reconexão automática com backoff exponencial em caso de desconexões inesperadas (exceto logout), configurável via variáveis de ambiente.
     - Utilização da biblioteca `baileys` para comunicação direta com a API do WhatsApp (`src/auth/connection.js`).
 
 2.  **Processamento Inteligente de Mensagens:**
 
-    - Detecção e parsing de comandos baseados em prefixos configuráveis (`src/controllers/messageTypeController.js`, `src/config/options.json`).
+    - Detecção e parsing de comandos baseados em um prefixo global configurável via variável de ambiente (`BOT_GLOBAL_PREFIX` no arquivo `.env`) e processado em `src/controllers/messageTypeController.js`.
     - Extração de corpo de mensagem de diversos tipos (texto, legendas de mídia, respostas a botões/listas).
     - Identificação de tipos de mídia (imagem, vídeo, áudio, documento, sticker).
     - Verificação e extração de informações de mensagens citadas (quoted messages).
@@ -124,12 +124,12 @@ O Galactic-Cat oferece um conjunto abrangente de funcionalidades:
 
 ## Arquitetura do Projeto
 
-O projeto segue uma estrutura modular para facilitar a organização e manutenção:
+O projeto segue uma estrutura modular para facilitar a organização, manutenção e escalabilidade:
 
 - **`src/auth`:** Contém a lógica de conexão, autenticação e gerenciamento da sessão com o WhatsApp (`connection.js`). Armazena temporariamente os dados da sessão em `src/auth/temp/`.
 - **`src/controllers`:** Responsáveis pela orquestração principal do bot, processamento de eventos e delegação de tarefas para módulos específicos (ex: `botController.js`, `userDataController.js`, `rateLimitController.js`, `groupEventsController.js`, `InteractionController.js`).
 - **`src/database`:** Gerencia a interação com o banco de dados MySQL, incluindo inicialização, execução de queries e criação de tabelas (`processDatabase.js`, `processUserPremium.js`).
-- **`src/modules`:** Contém a lógica específica de cada funcionalidade principal do bot (ex: `stickerModule`, `geminiModule`, `groupsModule`). Cada módulo pode ter seus próprios subdiretórios para processamento, comandos, dados, etc.
+- **`src/modules`:** Contém a lógica específica de cada funcionalidade principal do bot (ex: `stickerModule`, `geminiModule`, `groupsModule`). Cada módulo pode ter seus próprios subdiretórios para processamento, comandos, dados, etc. O prefixo dos comandos é definido globalmente via variável de ambiente.
 - **`src/utils`:** Utilitários reutilizáveis, como o logger (`logger.js`) e funções para download de mídia (`getFileBuffer.js`).
 - **`src/config`:** Arquivos de configuração estática, como `options.json`, que define limites de comandos, mensagens padrão, etc.
 - **Raiz do Projeto:** Arquivos de configuração como `package.json`, `.env` (a ser criado), `ecosystem.config.js` (PM2), `nodemon.json`.
@@ -137,6 +137,54 @@ O projeto segue uma estrutura modular para facilitar a organização e manutenç
 ## Estrutura do Banco de Dados
 
 O Galactic-Cat utiliza um banco de dados MySQL para persistir dados essenciais. As tabelas são criadas automaticamente na primeira inicialização se não existirem. Os nomes exatos das tabelas são definidos em `src/config/options.json -> database.tables`.
+
+Abaixo, um diagrama ASCII representando a estrutura e as principais relações entre as tabelas:
+
+```text
+                               +---------------------+
+                               |        users        |
+                               |---------------------|
+                               | PK sender           |
+                               | pushName            |
+                               | isPremium           |
+                               | ...                 |
+                               +---------------------+
+                                   ^   |        |   |
+                                   |   |        |   | (user_id FK)
+      (sender_id FK) .-------------+   |        |   +----------------------------.
+                     |                 |        |                                |
+                     v                 v        v                                v
+    +-------------------------+  +-----------------------+  +-------------------------+  +-----------------------+
+    |        messages         |  |     command_usage     |  |   command_analytics     |  | interaction_history   |
+    |-------------------------|  |-----------------------|  |-------------------------|  |-----------------------|
+    | PK message_id           |  | PK user_id (FK)       |  | PK id (AI)              |  | PK id (AI)            |
+    | PK sender_id (FK)       |  | PK command_name       |  | FK user_id              |  | FK user_id            |
+    | PK group_id (FK) -------+  | usage_count_window    |  | FK group_id (NULLABLE) ---+  | timestamp           |
+    | messageType             |  | ...                   |  | command_name            |  | interaction_type      |
+    | ...                     |  +-----------------------+  | ...                     |  | ...                   |
+    +-------------------------+                             +-------------------------+  +-----------------------+
+        |                                                              |
+        | (group_id FK)                                                | (group_id FK, NULLABLE)
+        |                                                              |
+        |               +-------------------------+                    |
+        +-------------->|         groups          |<-------------------+
+                        |-------------------------|
+                        | PK id                   |
+                        | name                    |
+                        | is_welcome              |
+                        | ...                     |
+                        +-------------------------+
+                            ^
+                            | (group_id FK)
+                            |
+            +-------------------------+
+            |  group_participants     |
+            |-------------------------|
+            | PK group_id (FK)        |
+            | PK participant          |
+            | isAdmin                 |
+            +-------------------------+
+```
 
 ### Tabelas e Relações
 
@@ -217,7 +265,7 @@ _Nota: As chaves estrangeiras (FK) garantem a integridade referencial entre as t
 
 Antes de iniciar, crie um arquivo chamado `.env` na raiz do projeto. Este arquivo armazena configurações sensíveis e específicas do seu ambiente. Copie e cole o exemplo abaixo, substituindo os valores pelos seus.
 
-```markdown
+```bash
 # ==================================
 
 # CREDENCIAIS DO BANCO DE DADOS
@@ -317,7 +365,7 @@ SEND_WELCOME_MESSAGES=true
 O arquivo `src/config/options.json` contém configurações não sensíveis que definem o comportamento do bot:
 
 - **`bot.onboarding.firstInteractionMessage`**: Template da mensagem de boas-vindas inicial. Use placeholders como `{userName}`, `{ownerName}`, `{prefix}`, `{ownerWhatsappLink}`.
-- **`bot.globalSettings.prefix`**: Lista de prefixos que o bot reconhecerá para comandos (ex: `["/", "!"]`).
+- **`bot.globalSettings.prefix`**: _(Esta configuração foi movida para a variável de ambiente `BOT_GLOBAL_PREFIX` no arquivo `.env` para maior flexibilidade. O valor aqui pode ser considerado um fallback ou ser removido em futuras atualizações se não mais utilizado pelo código.)_
 - **`owner`**: Detalhes do proprietário do bot para exibição e contato.
 - **`database.tables`**: Mapeamento dos nomes lógicos das tabelas para os nomes físicos no banco de dados.
 - **`defaults`**: Valores padrão para dados de usuários e grupos caso não sejam encontrados no DB.
