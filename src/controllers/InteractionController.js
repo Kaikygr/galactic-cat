@@ -32,3 +32,7 @@ async function sendWelcomeMessage(userId, userName, client, from, info, expirati
     logger.error(`[sendWelcomeMessage] ❌ Erro ao enviar para ${userId}: ${error.message}`, { stack: error.stack });
   }
 }
+
+module.exports = {
+  sendWelcomeMessage,
+};

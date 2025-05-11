@@ -8,7 +8,6 @@
 const { default: makeWASocket, Browsers, useMultiFileAuthState, DisconnectReason } = require('baileys');
 const pino = require('pino');
 const path = require('path');
-const fs = require('fs/promises');
 
 require('dotenv').config();
 
@@ -25,7 +24,6 @@ const botController = require('../controllers/botController');
 const AUTH_STATE_PATH = path.join(__dirname, 'temp', 'auth_state');
 
 // Constantes para configuração da lógica de reconexão
-// Podem ser sobrescritas por variáveis de ambiente
 const DEFAULT_INITIAL_RECONNECT_DELAY = parseInt(process.env.DEFAULT_INITIAL_RECONNECT_DELAY, 10) || 1000;
 const INITIAL_CONNECT_FAIL_DELAY = parseInt(process.env.INITIAL_CONNECT_FAIL_DELAY, 10) || 1500;
 const DEFAULT_MAX_RECONNECT_DELAY = parseInt(process.env.DEFAULT_MAX_RECONNECT_DELAY, 10) || 60000;
@@ -54,10 +52,7 @@ class ConnectionManager {
     this.clientInstance = null;
     this.reconnectAttempts = 0;
     this.reconnectTimeout = null;
-
-    // Bind methods
     this.handleConnectionUpdate = this.handleConnectionUpdate.bind(this);
-    // handleCredsUpdate é chamado com saveCreds, então o bind direto de saveCreds acontece em registerAllEventHandlers
     this.handleMessagesUpsert = this.handleMessagesUpsert.bind(this);
     this.handleGroupsUpdate = this.handleGroupsUpdate.bind(this);
     this.handleGroupParticipantsUpdate = this.handleGroupParticipantsUpdate.bind(this);
@@ -337,37 +332,6 @@ class ConnectionManager {
     }
   }
 
-  async shutdown(signal) {
-    this.logger.info(`[ ConnectionManager.shutdown ] Recebido sinal ${signal}. Iniciando desligamento...`);
-    if (this.reconnectTimeout) {
-      clearTimeout(this.reconnectTimeout);
-      this.reconnectTimeout = null;
-      this.logger.info('[ ConnectionManager.shutdown ] Timeout de reconexão cancelado.');
-    }
-
-    if (this.clientInstance) {
-      try {
-        this.logger.info('[ ConnectionManager.shutdown ] Fechando conexão com o WhatsApp...');
-        await this.clientInstance.logout('Desligamento da aplicação solicitado.');
-        this.logger.info('[ ConnectionManager.shutdown ] Conexão com o WhatsApp fechada.');
-      } catch (error) {
-        this.logger.error('[ ConnectionManager.shutdown ] Erro ao fechar a conexão com o WhatsApp:', error);
-      }
-    }
-
-    try {
-      this.logger.info(`[ ConnectionManager.shutdown ] Removendo pasta de autenticação: ${this.AUTH_STATE_PATH}`);
-      await fs.rm(this.AUTH_STATE_PATH, { recursive: true, force: true });
-      this.logger.info('[ ConnectionManager.shutdown ] Pasta de autenticação removida com sucesso.');
-    } catch (error) {
-      this.logger.error(`[ ConnectionManager.shutdown ] Erro ao remover a pasta de autenticação ${this.AUTH_STATE_PATH}:`, error);
-    }
-
-    await this.db.closePool();
-    this.logger.info('[ ConnectionManager.shutdown ] Desligamento concluído. Saindo.');
-    process.exit(0);
-  }
-
   /**
    * @returns {import('baileys').WASocket | null} A instância atual do cliente Baileys.
    */
@@ -395,7 +359,3 @@ module.exports = {
 
 // Inicia a aplicação
 connectionManager.initialize();
-
-// Listeners para desligamento gracioso
-process.on('SIGINT', () => connectionManager.shutdown('SIGINT'));
-process.on('SIGTERM', () => connectionManager.shutdown('SIGTERM'));
