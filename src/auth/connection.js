@@ -52,10 +52,7 @@ class ConnectionManager {
     this.clientInstance = null;
     this.reconnectAttempts = 0;
     this.reconnectTimeout = null;
-
-    // Bind methods
     this.handleConnectionUpdate = this.handleConnectionUpdate.bind(this);
-    // handleCredsUpdate é chamado com saveCreds, então o bind direto de saveCreds acontece em registerAllEventHandlers
     this.handleMessagesUpsert = this.handleMessagesUpsert.bind(this);
     this.handleGroupsUpdate = this.handleGroupsUpdate.bind(this);
     this.handleGroupParticipantsUpdate = this.handleGroupParticipantsUpdate.bind(this);
