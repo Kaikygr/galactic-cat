@@ -24,7 +24,6 @@ const botController = require('../controllers/botController');
 const AUTH_STATE_PATH = path.join(__dirname, 'temp', 'auth_state');
 
 // Constantes para configuração da lógica de reconexão
-// Podem ser sobrescritas por variáveis de ambiente
 const DEFAULT_INITIAL_RECONNECT_DELAY = parseInt(process.env.DEFAULT_INITIAL_RECONNECT_DELAY, 10) || 1000;
 const INITIAL_CONNECT_FAIL_DELAY = parseInt(process.env.INITIAL_CONNECT_FAIL_DELAY, 10) || 1500;
 const DEFAULT_MAX_RECONNECT_DELAY = parseInt(process.env.DEFAULT_MAX_RECONNECT_DELAY, 10) || 60000;
