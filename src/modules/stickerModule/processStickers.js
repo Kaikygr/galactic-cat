@@ -42,7 +42,7 @@ async function processSticker(client, info, expirationMessage, sender, from, tex
       await client.sendMessage(from, { react: { text: '⚠️', key: info.key } });
       const noMediaHelpText =
         '⚠️ *Nenhuma Mídia Detectada para Sticker*\n\n' +
-        'Para criar um sticker, por favor, envie uma imagem/vídeo ou responda a uma mensagem contendo a mídia desejada utilizando o comando `.sticker`.\n\n' +
+        'Para criar um sticker, por favor, envie uma imagem/vídeo ou responda a uma mensagem contendo a mídia desejada utilizando o comando `.s`.\n\n' +
         'ℹ️ *Dicas e Informações Adicionais:*\n\n' +
         '🔹 *Tipos de Mídia Suportados:*\n' +
         '  - Imagens (JPG, PNG, etc.)\n' +
@@ -56,8 +56,8 @@ async function processSticker(client, info, expirationMessage, sender, from, tex
         '  - Todas as mídias são convertidas para o formato WebP e redimensionadas para 512x512 pixels.\n\n' +
         '📝 *Personalização de Nome do Pacote e Autor:*\n' +
         '  - Você pode definir o nome do pacote de stickers e o nome do autor que aparecerão nas informações do sticker.\n' +
-        '  - Use o comando: `.sticker Nome do Pacote | Nome do Autor`\n' +
-        '  - *Exemplo:* `.sticker Meus Gatinhos | Por #nome`\n' +
+        '  - Use o comando: `.s Nome do Pacote | Nome do Autor`\n' +
+        '  - *Exemplo:* `.s Meus Gatinhos | Por #nome`\n' +
         '  - Se apenas um texto for fornecido (sem o `|`), ele será usado como "Nome do Pacote".\n' +
         '  - *Variáveis dinâmicas:* `#nome` (seu nome de usuário no WhatsApp), `#id` (seu número de telefone), `#data` (data atual).\n' +
         '  - Suas preferências de nome e autor são salvas e reutilizadas para stickers futuros. Enviar um novo texto com o comando atualizará essas preferências.\n\n' +
