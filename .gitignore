@@ -5,3 +5,5 @@ src/auth/temp
 /logs
 src/modules/stickerModule/temp/
 src/modules/geminiModule/chat_history/
+src/modules/stickerModule/temp/
+src/modules/stickerModule/data/
