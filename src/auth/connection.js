@@ -323,16 +323,27 @@ class ConnectionManager {
 
       return this.clientInstance;
     } catch (error) {
-      this.logger.error(`[ connectToWhatsApp ] Erro crítico ao iniciar a conexão com o WhatsApp: ${error.message}`, {
+      this.logger.error(`[ connectToWhatsApp ] Erro ao iniciar a conexão com o WhatsApp: ${error.message}`, {
+        code: error.code,
         stack: error.stack,
       });
-      this.scheduleReconnect(this.connectToWhatsApp, {
-        initialDelay: INITIAL_CONNECT_FAIL_DELAY,
-        maxDelay: DEFAULT_MAX_RECONNECT_DELAY,
-        maxExponent: DEFAULT_RECONNECT_MAX_EXPONENT,
-        label: 'WhatsAppInitialConnectFail',
-      });
-      return null;
+
+      const isLikelyAuthStateError = (error.message && (error.message.includes(this.AUTH_STATE_PATH) || error.message.toLowerCase().includes('auth') || error.message.toLowerCase().includes('creds'))) || (error.code && ['ENOENT', 'EACCES', 'EBADF', 'EPERM', 'EISDIR', 'ENOTDIR'].includes(error.code));
+
+      if (isLikelyAuthStateError) {
+        const fatalMessage = `[ connectToWhatsApp ] Erro crítico e possivelmente irrecuperável relacionado ao estado de autenticação em ${this.AUTH_STATE_PATH}. Verifique as permissões, a integridade da pasta ou se o caminho é válido. Não será tentada a reconexão automática. Detalhes: ${error.message}`;
+        this.logger.fatal(fatalMessage);
+        throw new Error(fatalMessage, { cause: error });
+      } else {
+        this.logger.warn(`[ connectToWhatsApp ] Agendando reconexão devido a erro não relacionado ao estado de autenticação: ${error.message}`);
+        this.scheduleReconnect(this.connectToWhatsApp, {
+          initialDelay: INITIAL_CONNECT_FAIL_DELAY,
+          maxDelay: DEFAULT_MAX_RECONNECT_DELAY,
+          maxExponent: DEFAULT_RECONNECT_MAX_EXPONENT,
+          label: 'WhatsAppConnectFail_Retry',
+        });
+        return null;
+      }
     }
   }
 
@@ -353,7 +364,7 @@ class ConnectionManager {
       this.logger.debug('[ ConnectionManager.initialize ] Conexão com WhatsApp iniciada (ou agendada para reconexão).');
     } catch (error) {
       this.logger.error(`[ ConnectionManager.initialize ] Falha crítica durante a inicialização da aplicação: ${error.message}`, {
-        stack: error.stack,
+        stack: error.cause?.stack || error.stack,
       });
       process.exit(1);
     }
