@@ -9,15 +9,25 @@ const { default: makeWASocket, Browsers, useMultiFileAuthState, DisconnectReason
 const pino = require('pino');
 const path = require('path');
 const qrcode = require('qrcode-terminal');
+const { cleanEnv, str, num, bool } = require('envalid');
 
 require('dotenv').config();
+
+// Validação de variáveis de ambiente
+const env = cleanEnv(process.env, {
+  DEFAULT_INITIAL_RECONNECT_DELAY: num({ default: 1000, desc: 'Atraso inicial padrão para reconexão em ms.' }),
+  INITIAL_CONNECT_FAIL_DELAY: num({ default: 1500, desc: 'Atraso para reconexão em caso de falha na conexão inicial em ms.' }),
+  DEFAULT_MAX_RECONNECT_DELAY: num({ default: 60000, desc: 'Atraso máximo padrão para reconexão em ms.' }),
+  DEFAULT_RECONNECT_MAX_EXPONENT: num({ default: 10, desc: 'Expoente máximo padrão para o cálculo do backoff de reconexão.' }),
+  SYNC_FULL_HISTORY: bool({ default: false, desc: 'Sincronizar histórico completo de mensagens.' }),
+  DEBUG_BAILEYS: bool({ default: false, desc: 'Habilitar logs de debug do Baileys.' }),
+});
 
 const logger = require('../utils/logger');
 const { initDatabase, closePool } = require('./../database/processDatabase');
 const { createTables, processUserData } = require('./../controllers/userDataController');
 const { processParticipantUpdate } = require('../controllers/groupEventsController');
 const botController = require('../controllers/botController');
-
 /**
  * @constant {string} AUTH_STATE_PATH
  * @description O caminho no sistema de arquivos onde o estado de autenticação (arquivos de sessão) será armazenado.
@@ -25,10 +35,10 @@ const botController = require('../controllers/botController');
 const AUTH_STATE_PATH = path.join(__dirname, 'temp', 'auth_state');
 
 // Constantes para configuração da lógica de reconexão
-const DEFAULT_INITIAL_RECONNECT_DELAY = parseInt(process.env.DEFAULT_INITIAL_RECONNECT_DELAY, 10) || 1000;
-const INITIAL_CONNECT_FAIL_DELAY = parseInt(process.env.INITIAL_CONNECT_FAIL_DELAY, 10) || 1500;
-const DEFAULT_MAX_RECONNECT_DELAY = parseInt(process.env.DEFAULT_MAX_RECONNECT_DELAY, 10) || 60000;
-const DEFAULT_RECONNECT_MAX_EXPONENT = parseInt(process.env.DEFAULT_RECONNECT_MAX_EXPONENT, 10) || 10;
+const DEFAULT_INITIAL_RECONNECT_DELAY = env.DEFAULT_INITIAL_RECONNECT_DELAY;
+const INITIAL_CONNECT_FAIL_DELAY = env.INITIAL_CONNECT_FAIL_DELAY;
+const DEFAULT_MAX_RECONNECT_DELAY = env.DEFAULT_MAX_RECONNECT_DELAY;
+const DEFAULT_RECONNECT_MAX_EXPONENT = env.DEFAULT_RECONNECT_MAX_EXPONENT;
 
 class ConnectionManager {
   /**
@@ -276,16 +286,16 @@ class ConnectionManager {
       this.logger.info(`[ connectToWhatsApp ] Usando diretório de estado de autenticação: ${this.AUTH_STATE_PATH}`);
       const { state, saveCreds } = await useMultiFileAuthState(this.AUTH_STATE_PATH);
       this.logger.debug('[ connectToWhatsApp ] Estado de autenticação carregado/criado.');
-      this.logger.debug(`[ connectToWhatsApp ] Configurações de ambiente relevantes: SYNC_FULL_HISTORY=${process.env.SYNC_FULL_HISTORY === 'true'}, DEBUG_BAILEYS=${process.env.DEBUG_BAILEYS === 'true'}`);
+      this.logger.debug(`[ connectToWhatsApp ] Configurações de ambiente relevantes: SYNC_FULL_HISTORY=${env.SYNC_FULL_HISTORY}, DEBUG_BAILEYS=${env.DEBUG_BAILEYS}`);
 
       this.logger.info('[ connectToWhatsApp ] Iniciando a conexão com o WhatsApp...');
 
       const socketConfig = {
         auth: state,
-        logger: pino({ level: process.env.DEBUG_BAILEYS === 'true' ? 'debug' : 'silent' }),
+        logger: pino({ level: env.DEBUG_BAILEYS ? 'debug' : 'silent' }),
         mobile: false,
         browser: Browsers.macOS('Desktop'),
-        syncFullHistory: process.env.SYNC_FULL_HISTORY === 'true',
+        syncFullHistory: env.SYNC_FULL_HISTORY,
         msgRetryCounterMap: {},
       };
       this.logger.debug('[ connectToWhatsApp ] Configurações do socket:', socketConfig);
