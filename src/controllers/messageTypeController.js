@@ -26,26 +26,20 @@ function preProcessMessage(info) {
  *
  **/
 function isCommand(body) {
-  /* Define o prefixo a ser usado (via variável de ambiente ou padrão ".") */
   const prefix = process.env.BOT_GLOBAL_PREFIX || '.';
 
-  /* Se não houver conteúdo ou o texto não começar com o prefixo, não é um comando */
   if (!body || !body.startsWith(prefix)) return { isCommand: false };
 
-  /* Remove o prefixo da mensagem e remove espaços em branco extras */
   const withoutPrefix = body.slice(prefix.length).trim();
 
-  /* Divide o conteúdo apenas uma vez: comando e o restante */
   const spaceIndex = withoutPrefix.indexOf(' ');
 
   let command, args;
 
   if (spaceIndex === -1) {
-    /* Caso não haja espaço, a mensagem tem apenas o comando */
     command = withoutPrefix.toLowerCase();
     args = '';
   } else {
-    /* Se houver espaço, separamos o comando e o resto como string */
     command = withoutPrefix.slice(0, spaceIndex).toLowerCase();
     args = withoutPrefix.slice(spaceIndex + 1).trim();
   }

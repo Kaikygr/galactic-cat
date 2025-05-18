@@ -114,7 +114,7 @@ class ConnectionManager {
 
     if (qr) {
       this.logger.info('[ handleConnectionUpdate ] QR Code recebido, escaneie por favor.');
-      qrcode.generate(qr, { small: true }); // Exibe o QR code no terminal
+      qrcode.generate(qr, { small: true });
       this.resetReconnectAttempts('handleConnectionUpdate-QR');
     }
 
