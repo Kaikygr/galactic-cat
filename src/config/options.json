@@ -1,7 +1,7 @@
 {
     "bot": {
         "onboarding": {
-            "firstInteractionMessage": "Olá, {userName}! 😄 Seja muito bem-vindo(a)!\n\nSou seu assistente virtual, pronto pra te ajudar em tudo que precisar por aqui. 🤖✨\n\n🔸 *Quer explorar tudo o que posso fazer?* Digite `{prefix}menu` e descubra os comandos disponíveis.\n🔸 *Dúvidas, sugestões ou só quer dar um oi?* Fale direto com meu criador, o Kaiky: {ownerWhatsappLink} 💬\n\nFique à vontade! Estou aqui pra tornar sua experiência incrível. 🚀"
+            "firstInteractionMessage": "Olá {userName}! 👋\n\n📱 *Bem-vindo(a) ao {botName}*\n\n💫 *Recursos Disponíveis*:\n▸ Stickers\n▸ Inteligência Artificial\n▸ Gerenciamento de Grupos\n▸ E muito mais!\n\n📌 *Como Usar*:\nDigite {prefix}menu para ver comandos\n\n💬 *Precisa de Ajuda?*\nContato: {ownerWhatsappLink}\n\nAproveite! ✨"
         }
     },
     "owner": {

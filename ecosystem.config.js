@@ -9,7 +9,6 @@ module.exports = {
       instances: 1,
       watch: false,
       max_memory_restart: '500M',
-      merge_logs: true,
       env: {
         NODE_ENV: 'development',
       },
