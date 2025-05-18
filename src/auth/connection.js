@@ -118,40 +118,56 @@ class ConnectionManager {
     }
   }
 
+  _handleQRCode(qr) {
+    this.logger.info('[ _handleQRCode ] QR Code recebido, escaneie por favor.');
+    qrcode.generate(qr, { small: true });
+    this.resetReconnectAttempts('handleConnectionUpdate-QR');
+  }
+
+  _logConnectionStatus(connection) {
+    if (connection === 'connecting') {
+      this.logger.info('[ _logConnectionStatus ] Conectando ao WhatsApp...');
+    } else if (connection === 'open') {
+      this.logger.info('[ _logConnectionStatus ] Conexão aberta com sucesso. Bot disponível.');
+      this.resetReconnectAttempts('handleConnectionUpdate-Open');
+    }
+  }
+
+  _handleDisconnection(lastDisconnect) {
+    const statusCode = lastDisconnect?.error?.output?.statusCode;
+    const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+
+    this.logger.debug('[ _handleDisconnection ] Detalhes da desconexão:', { error: lastDisconnect?.error, statusCode, shouldReconnect });
+    this.logger.error(`[ _handleDisconnection ] Conexão fechada. Razão: ${DisconnectReason[statusCode] || 'Desconhecida'} Código: ${statusCode}`);
+
+    if (shouldReconnect) {
+      this.logger.info('[ _handleDisconnection ] Tentando reconectar...');
+      this.scheduleReconnect(this.connectToWhatsApp, {
+        initialDelay: DEFAULT_INITIAL_RECONNECT_DELAY,
+        maxDelay: DEFAULT_MAX_RECONNECT_DELAY,
+        maxExponent: DEFAULT_RECONNECT_MAX_EXPONENT,
+        label: 'WhatsAppConnection',
+      });
+    } else {
+      this.logger.warn('[ _handleDisconnection ] Reconexão não será tentada devido ao DisconnectReason.loggedOut.');
+      this.logger.error("[ _handleDisconnection ]  Não foi possível reconectar: Deslogado. Exclua a pasta 'temp/auth_state' e reinicie para gerar um novo QR Code.");
+    }
+  }
+
   async handleConnectionUpdate(update) {
     const { connection, lastDisconnect, qr } = update;
     this.logger.debug('[ handleConnectionUpdate ] Recebida atualização de conexão:', update);
 
     if (qr) {
-      this.logger.info('[ handleConnectionUpdate ] QR Code recebido, escaneie por favor.');
-      qrcode.generate(qr, { small: true });
-      this.resetReconnectAttempts('handleConnectionUpdate-QR');
+      this._handleQRCode(qr);
     }
 
-    if (connection === 'connecting') {
-      this.logger.info('[ handleConnectionUpdate ] Conectando ao WhatsApp...');
-    } else if (connection === 'open') {
-      this.logger.info('[ handleConnectionUpdate ] Conexão aberta com sucesso. Bot disponível.');
-      this.resetReconnectAttempts('handleConnectionUpdate-Open');
-    } else if (connection === 'close') {
-      const statusCode = lastDisconnect?.error?.output?.statusCode;
-      const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-      this.logger.debug('[ handleConnectionUpdate ] Detalhes da desconexão:', { error: lastDisconnect?.error, statusCode, shouldReconnect });
+    if (connection === 'connecting' || connection === 'open') {
+      this._logConnectionStatus(connection);
+    }
 
-      this.logger.error(`[ handleConnectionUpdate ] Conexão fechada. Razão: ${DisconnectReason[statusCode] || 'Desconhecida'} Código: ${statusCode}`);
-
-      if (shouldReconnect) {
-        this.logger.info('[ handleConnectionUpdate ] Tentando reconectar...');
-        this.scheduleReconnect(this.connectToWhatsApp, {
-          initialDelay: DEFAULT_INITIAL_RECONNECT_DELAY,
-          maxDelay: DEFAULT_MAX_RECONNECT_DELAY,
-          maxExponent: DEFAULT_RECONNECT_MAX_EXPONENT,
-          label: 'WhatsAppConnection',
-        });
-      } else {
-        this.logger.warn('[ handleConnectionUpdate ] Reconexão não será tentada devido ao DisconnectReason.loggedOut.');
-        this.logger.error("[ handleConnectionUpdate ]  Não foi possível reconectar: Deslogado. Exclua a pasta 'temp/auth_state' e reinicie para gerar um novo QR Code.");
-      }
+    if (connection === 'close') {
+      this._handleDisconnection(lastDisconnect);
     }
   }
 
