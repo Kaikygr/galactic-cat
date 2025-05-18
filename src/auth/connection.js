@@ -8,6 +8,7 @@
 const { default: makeWASocket, Browsers, useMultiFileAuthState, DisconnectReason } = require('baileys');
 const pino = require('pino');
 const path = require('path');
+const qrcode = require('qrcode-terminal');
 
 require('dotenv').config();
 
@@ -113,6 +114,7 @@ class ConnectionManager {
 
     if (qr) {
       this.logger.info('[ handleConnectionUpdate ] QR Code recebido, escaneie por favor.');
+      qrcode.generate(qr, { small: true });
       this.resetReconnectAttempts('handleConnectionUpdate-QR');
     }
 
@@ -281,7 +283,6 @@ class ConnectionManager {
       const socketConfig = {
         auth: state,
         logger: pino({ level: process.env.DEBUG_BAILEYS === 'true' ? 'debug' : 'silent' }),
-        printQRInTerminal: true,
         mobile: false,
         browser: Browsers.macOS('Desktop'),
         syncFullHistory: process.env.SYNC_FULL_HISTORY === 'true',
