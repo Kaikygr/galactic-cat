@@ -82,6 +82,40 @@ class ConnectionManager {
    * @param {import('pino').Logger} options.loggerInstance - Instância do logger (Pino) para registrar eventos e depuração.
    */
   constructor(options) {
+    // Validação das opções e dependências essenciais
+    if (!options || typeof options !== 'object') {
+      throw new TypeError('Opções de configuração para ConnectionManager são obrigatórias e devem ser um objeto.');
+    }
+
+    // Validação do loggerInstance primeiro, pois é usado para logar outros erros
+    if (!options.loggerInstance || typeof options.loggerInstance.info !== 'function' || typeof options.loggerInstance.error !== 'function' || typeof options.loggerInstance.debug !== 'function') {
+      // Não podemos usar this.logger aqui, pois ele ainda não foi definido.
+      // eslint-disable-next-line no-console
+      console.error('[ConnectionManager.constructor] loggerInstance inválida ou não fornecida. Deve ser uma instância de logger compatível (ex: Pino).');
+      throw new TypeError('loggerInstance inválida ou não fornecida.');
+    }
+    /** @type {import('pino').Logger} Instância do logger. */
+    this.logger = options.loggerInstance;
+
+    if (!options.authStatePath || typeof options.authStatePath !== 'string') {
+      this.logger.error('[ConnectionManager.constructor] authStatePath é obrigatório e deve ser uma string.');
+      throw new TypeError('authStatePath é obrigatório e deve ser uma string.');
+    }
+
+    const requiredDbFunctions = ['initDatabase', 'closePool'];
+    if (!options.dbFunctions || typeof options.dbFunctions !== 'object' || !requiredDbFunctions.every((fnName) => typeof options.dbFunctions[fnName] === 'function')) {
+      this.logger.error(`[ConnectionManager.constructor] dbFunctions inválido ou funções obrigatórias (${requiredDbFunctions.join(', ')}) ausentes/não são funções.`);
+      throw new TypeError(`dbFunctions inválido ou funções obrigatórias (${requiredDbFunctions.join(', ')}) ausentes/não são funções.`);
+    }
+
+    const requiredControllerFunctions = ['createTables', 'processUserData', 'processParticipantUpdate', 'botController'];
+    if (!options.controllerFunctions || typeof options.controllerFunctions !== 'object' || !requiredControllerFunctions.every((fnName) => typeof options.controllerFunctions[fnName] === 'function')) {
+      this.logger.error(`[ConnectionManager.constructor] controllerFunctions inválido ou funções obrigatórias (${requiredControllerFunctions.join(', ')}) ausentes/não são funções.`);
+      throw new TypeError(`controllerFunctions inválido ou funções obrigatórias (${requiredControllerFunctions.join(', ')}) ausentes/não são funções.`);
+    }
+
+    this.logger.debug('[ConnectionManager.constructor] Opções e dependências validadas com sucesso.');
+
     /** @type {string} Caminho para armazenar o estado de autenticação. */
     this.AUTH_STATE_PATH = options.authStatePath;
     /** @type {object} Funções relacionadas ao banco de dados. */
@@ -89,8 +123,6 @@ class ConnectionManager {
     /** @type {object} Funções de controller. */
     this.controllers = options.controllerFunctions;
     /** @type {import('pino').Logger} Instância do logger. */
-    this.logger = options.loggerInstance;
-
     /** @type {import('baileys').WASocket | null} Instância do cliente WhatsApp (Baileys). */
     this.clientInstance = null;
     /** @type {number} Contador de tentativas de reconexão. */
