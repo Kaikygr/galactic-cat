@@ -277,7 +277,17 @@ class ConnectionManager {
     }
 
     this.logger.debug(`[ handleMessagesUpsert ] Agendando processamento para mensagem ID: ${msg.key.id} de ${msg.key.remoteJid}`);
-    setImmediate(() => this.processMessage(data, msg));
+    setImmediate(async () => {
+      try {
+        await this.processMessage(data, msg);
+      } catch (error) {
+        this.logger.error(`[ handleMessagesUpsert.setImmediate ] Erro não capturado ao processar mensagem ID: ${msg?.key?.id} de ${msg?.key?.remoteJid}. Isso indica um erro inesperado dentro de processMessage não tratado pelos try/catch internos.`, {
+          message: error.message,
+          stack: error.stack,
+          originalData: data, // Logar os dados originais pode ajudar na depuração
+        });
+      }
+    });
   }
 
   /**
