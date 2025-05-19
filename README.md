@@ -21,8 +21,10 @@
   - [Configurações Adicionais (options.json)](#configurações-adicionais-optionsjson)
 - [Instalação](#instalação)
 - [Como Rodar o Projeto](#como-rodar-o-projeto)
-  - [Modo de Produção](#modo-de-produção)
-  - [Modo de Desenvolvimento](#modo-de-desenvolvimento)
+  - [Iniciando o Bot com PM2](#iniciando-o-bot-com-pm2)
+- [Lista Detalhada de Comandos](#lista-detalhada-de-comandos)
+- [Solução de Problemas Comuns (Troubleshooting)](#solução-de-problemas-comuns-troubleshooting)
+- [Como Atualizar o Bot](#como-atualizar-o-bot)
 - [Contribuições](#contribuições)
 - [Licença](#licença)
 - [Autor](#autor)
@@ -132,7 +134,7 @@ O projeto segue uma estrutura modular para facilitar a organização, manutenç�
 - **`src/modules`:** Contém a lógica específica de cada funcionalidade principal do bot (ex: `stickerModule`, `geminiModule`, `groupsModule`). Cada módulo pode ter seus próprios subdiretórios para processamento, comandos, dados, etc. O prefixo dos comandos é definido globalmente via variável de ambiente.
 - **`src/utils`:** Utilitários reutilizáveis, como o logger (`logger.js`) e funções para download de mídia (`getFileBuffer.js`).
 - **`src/config`:** Arquivos de configuração estática, como `options.json`, que define limites de comandos, mensagens padrão, etc.
-- **Raiz do Projeto:** Arquivos de configuração como `package.json`, `.env` (a ser criado), `ecosystem.config.js` (PM2), `nodemon.json`.
+- **Raiz do Projeto:** Arquivos de configuração como `package.json`, `.env` (a ser criado), `ecosystem.config.js` (PM2).
 
 ## Estrutura do Banco de Dados
 
@@ -330,6 +332,11 @@ ECOSYSTEM_NAME=galactic-cat-prod
 
 LOG_LEVEL=info
 
+# Prefixo global para os comandos do bot (Recomendado)
+# Define o caractere que antecede todos os comandos (ex: !, /, .)
+# Se não definido, o bot pode tentar usar um prefixo de fallback de options.json ou um padrão interno.
+BOT_GLOBAL_PREFIX=!
+
 # Envia mensagem de boas-vindas na primeira interação? (Opcional, padrão: false)
 
 # Defina como 'true' para ativar.
@@ -366,6 +373,7 @@ O arquivo `src/config/options.json` contém configurações não sensíveis que 
 
 - **`bot.onboarding.firstInteractionMessage`**: Template da mensagem de boas-vindas inicial. Use placeholders como `{userName}`, `{ownerName}`, `{prefix}`, `{ownerWhatsappLink}`.
 - **`bot.globalSettings.prefix`**: _(Esta configuração foi movida para a variável de ambiente `BOT_GLOBAL_PREFIX` no arquivo `.env` para maior flexibilidade. O valor aqui pode ser considerado um fallback ou ser removido em futuras atualizações se não mais utilizado pelo código.)_
+- **`bot.globalSettings.prefix`**: _(Legado/Fallback) Prefixo global para comandos. **Recomenda-se usar a variável de ambiente `BOT_GLOBAL_PREFIX` (definida no arquivo `.env`) que tem prioridade sobre esta configuração.** Este valor em `options.json` pode ser usado como fallback se `BOT_GLOBAL_PREFIX` não estiver definida, ou pode ser descontinuado em futuras versões._
 - **`owner`**: Detalhes do proprietário do bot para exibição e contato.
 - **`database.tables`**: Mapeamento dos nomes lógicos das tabelas para os nomes físicos no banco de dados.
 - **`defaults`**: Valores padrão para dados de usuários e grupos caso não sejam encontrados no DB.
@@ -389,11 +397,11 @@ Após configurar os pré-requisitos e o ambiente:
 
 ## Como Rodar o Projeto
 
-O projeto utiliza **[PM2](https://pm2.keymetrics.io/)** para gerenciamento robusto de processos. Os scripts no `package.json` e o arquivo `ecosystem.config.js` facilitam a inicialização.
+O projeto utiliza **[PM2](https://pm2.keymetrics.io/)** para gerenciamento robusto de processos. Os scripts no `package.json` e o arquivo `ecosystem.config.js` facilitam a inicialização. O PM2 será usado tanto para desenvolvimento quanto para produção, utilizando as configurações definidas no `ecosystem.config.js`.
 
-### Modo de Produção
+### Iniciando o Bot com PM2
 
-Recomendado para uso contínuo. Utiliza as configurações definidas em `env_production` no `ecosystem.config.js`.
+Para iniciar o bot (seja para desenvolvimento ou produção):
 
 ```bash
 npm start
@@ -422,11 +430,86 @@ O terminal exibirá os logs diretamente. Pressione `Ctrl+C` para parar. As confi
 
 **Primeira Execução (Ambos os Modos):**
 
-1.  Ao iniciar pela primeira vez (ou após limpar a pasta `src/auth/temp/`), um **QR Code** será exibido no terminal.
+1.  Ao iniciar pela primeira vez (ou após limpar a pasta `src/auth/temp/`), um **QR Code** será exibido no terminal. **Nota Importante:** Se você planeja usar o PM2 imediatamente (com `npm start`), pode ser mais fácil obter o QR Code primeiro executando o script de conexão diretamente uma vez. Abra um terminal na raiz do projeto e execute: `node ./src/auth/connection.js` Após escanear o QR Code e a sessão ser salva, você pode parar este processo (Ctrl+C) e então iniciar com `npm start` ou `npm run dev`.
 2.  Abra o WhatsApp no seu celular.
 3.  Vá para **Configurações \> Aparelhos conectados \> Conectar um aparelho**.
 4.  Escaneie o QR Code exibido no terminal.
 5.  Aguarde a mensagem de conexão estabelecida nos logs. A sessão será salva em `src/auth/temp/` para futuras inicializações.
+
+## Contribuições
+
+## Lista Detalhada de Comandos
+
+O Galactic-Cat possui diversos comandos para interagir com os usuários e gerenciar o bot. O prefixo padrão para os comandos é `!` (configurável via `BOT_GLOBAL_PREFIX` no `.env`).
+
+Para obter uma lista completa e atualizada de comandos diretamente no chat, utilize o comando:
+
+```
+/menu
+```
+
+As descrições, permissões e limites de uso de cada comando são definidos no arquivo `src/config/options.json` na seção `commandLimits`. Abaixo, um exemplo de como um comando pode ser estruturado:
+
+**Exemplo de Comando:**
+
+- **Comando:** `/s [parâmetros]`
+- **Descrição:** Cria um sticker a partir de uma imagem, vídeo curto ou GIF enviado ou citado.
+- **Permissão:** Todos os usuários (sujeito a rate limits).
+- **Parâmetros:**
+  - `pack <nome_pacote>`: Define o nome do pacote do sticker.
+  - `author <nome_autor>`: Define o nome do autor do sticker.
+  - `circle`: Cria um sticker circular (apenas para imagens).
+- **Exemplo de Uso:**
+  - Envie uma imagem e responda com `/s`
+  - Envie uma imagem e responda com `/s pack MeuPacote author MeuNome`
+- **Observações:**
+  - Vídeos são convertidos para GIFs animados.
+  - Limites de tamanho e duração de mídia se aplicam.
+
+Consulte o comando `/menu` no bot e o arquivo `options.json` para a lista completa e detalhes de todos os comandos disponíveis, como `/cat` (IA), `/p` (premium), `/welcome` (gerenciamento de boas-vindas), entre outros.
+
+## Solução de Problemas Comuns (Troubleshooting)
+
+Encontrou algum problema? Aqui estão algumas dicas para as questões mais comuns:
+
+1.  **QR Code não aparece ou não funciona:**
+
+    - Verifique sua conexão com a internet.
+    - Certifique-se de que não há outro processo do bot rodando e tentando gerar um QR Code.
+    - Tente limpar a pasta `src/auth/temp/` e reiniciar o bot.
+    - Se estiver usando Docker ou uma VM, verifique as configurações de rede e se o terminal pode exibir QR codes corretamente.
+
+2.  **Erro de conexão com o banco de dados MySQL:**
+
+    - Confirme se as credenciais (`MYSQL_LOGIN_USER`, `MYSQL_LOGIN_PASSWORD`, `MYSQL_HOST`, `MYSQL_DATABASE`) no seu arquivo `.env` estão corretas.
+    - Verifique se o servidor MySQL está em execução e acessível a partir de onde o bot está rodando.
+    - Certifique-se de que o usuário MySQL tem as permissões necessárias (pelo menos `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `CREATE` para o banco de dados especificado).
+
+3.  **Comando `/s` (sticker) não funciona:**
+
+    - **`ffmpeg` não encontrado:** Certifique-se de que o `ffmpeg` está instalado corretamente no seu sistema e que o executável está no PATH do ambiente onde o bot roda. Teste no terminal com `ffmpeg -version`.
+    - **`webpmux` não encontrado:** Certifique-se de que as `libwebp-tools` (que incluem `webpmux`) estão instaladas. Teste no terminal com `webpmux -version`.
+    - **Mídia muito grande ou formato inválido:** Verifique os logs para erros relacionados ao tamanho ou tipo de arquivo.
+
+4.  **Bot desconectando frequentemente:**
+
+    - Verifique sua conexão com a internet.
+    - Pode ser uma instabilidade temporária do WhatsApp.
+    - Verifique os logs do bot (`pm2 logs <ECOSYSTEM_NAME>`) para mensagens de erro específicas.
+
+5.  **Como verificar os logs para encontrar erros?**
+    - Use `pm2 logs` ou `pm2 logs <ECOSYSTEM_NAME>` para ver os logs em tempo real.
+    - Os arquivos de log são salvos na pasta `logs/` na raiz do projeto, separados por data e nível (ex: `error-YYYY-MM-DD.log`).
+
+## Como Atualizar o Bot
+
+Para atualizar sua instância do Galactic-Cat para a versão mais recente do repositório:
+
+1.  Navegue até o diretório do projeto: `cd /caminho/para/galactic-cat`
+2.  Pare o bot se estiver rodando com PM2: `pm2 stop <ECOSYSTEM_NAME>` (substitua `<ECOSYSTEM_NAME>` pelo nome do seu processo).
+3.  Busque as últimas alterações do repositório: `git pull origin main` (ou o nome da sua branch principal, se diferente).
+4.  Instale/atualize quaisquer dependências novas ou modificadas: `npm install`
+5.  Reinicie o bot com PM2: `pm2 restart <ECOSYSTEM_NAME>`
 
 ## Contribuições
 
