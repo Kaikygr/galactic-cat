@@ -5,13 +5,11 @@ const ConfigfilePath = path.join(__dirname, '../config/options.json');
 const config = require(ConfigfilePath);
 const logger = require('../utils/logger');
 
-// --- Module Imports ---
 const welcomeHandlers = require('../modules/groupsModule/welcome/welcomeCommands');
 const { processSticker } = require(path.join(__dirname, '../modules/stickerModule/processStickers'));
 const { processPremiumStatus } = require('../database/processUserPremium');
 const { processGeminiCommand, processSetPromptCommand } = require('../modules/geminiModule/geminiCommand');
 
-// --- Utility and Controller Imports ---
 const { getFileBuffer } = require(path.join(__dirname, '../utils/getFileBuffer'));
 const { preProcessMessage, isCommand, processQuotedChecks, getExpiration } = require(path.join(__dirname, './messageTypeController'));
 const { checkRateLimit, isUserPremium } = require('../controllers/rateLimitController');
@@ -22,16 +20,18 @@ const { sendWelcomeMessage } = require('./InteractionController');
 async function handleWhatsAppUpdate(upsert, client) {
   for (const info of upsert?.messages || []) {
     if (!info.key || !info.message) {
+      logger.debug('Mensagem ignorada: sem key ou message');
       continue;
     }
     if (info.key.fromMe) {
+      logger.debug('Mensagem ignorada: enviada pelo bot');
       continue;
     }
 
     const from = info.key.remoteJid;
     if (!from) {
-      logger.warn('[handleWhatsAppUpdate] Skipping update: Could not determine remote JID.', {
-        key: info.key,
+      logger.warn('Mensagem ignorada: JID remoto indeterminado', {
+        messageKey: info.key,
       });
       continue;
     }
@@ -39,52 +39,61 @@ async function handleWhatsAppUpdate(upsert, client) {
     const isGroup = from.endsWith('@g.us');
     const sender = isGroup ? info.key.participant : info.key.remoteJid;
     if (!sender) {
-      logger.warn('[handleWhatsAppUpdate] Skipping update: Could not determine sender JID.', {
-        key: info.key,
+      logger.warn('Mensagem ignorada: JID do remetente indeterminado', {
+        messageKey: info.key,
+        groupId: isGroup ? from : null,
       });
       continue;
     }
+
+    logger.debug('Processando mensagem', {
+      sender,
+      isGroup,
+      groupId: isGroup ? from : null,
+      messageType: info.message ? Object.keys(info.message)[0] : null,
+    });
 
     const userName = info.pushName || 'Desconhecido';
     const expirationMessage = getExpiration(info);
 
     const { type, body, isMedia } = preProcessMessage(info);
 
-    /* ------- inicio das definiçoes de comandos e prefix ------- */
     const processCommand = isCommand(body);
-    logger.debug('[ processCommand ]', processCommand);
+    logger.debug('Comando detectado', {
+      isCommand: processCommand.isCommand,
+      command: processCommand.command,
+      args: processCommand.args,
+    });
 
-    /* Boolean indicando se é comando */
     const isCmd = processCommand.isCommand;
-
-    /* Nome do comando, ou undefined se não for comando */
     const command = processCommand.command;
-
-    /* Texto após o comando, como string (pode ser "") */
     const args = processCommand.args ?? '';
-
-    /* Você pode usar `args` diretamente ou definir `text` como alias sem risco */
     const text = args;
-    /* ------- fim das definiçoes de comandos e prefix ------- */
 
-    // --- Owner Information ---
     const isOwner = sender === config.owner.number;
     const ownerPhoneNumber = config.owner.number;
     const ownerName = config.owner.name;
 
-    // --- Rate Limiting & Analytics (Applied ONLY to Commands) ---
-    let rateLimitResult = { status: 'allowed', isPremium: false, limit: 0, currentCount: 0 }; // Default for non-commands or allowed commands
+    let rateLimitResult = { status: 'allowed', isPremium: false, limit: 0, currentCount: 0 };
 
     if (isCmd) {
       if (!isOwner) {
+        logger.debug('Verificando rate limit', {
+          sender,
+          command,
+          isOwner: false,
+        });
         rateLimitResult = await checkRateLimit(sender, command);
       } else {
-        logger.info(`[handleWhatsAppUpdate] Owner ${sender} bypassed rate limit check for command ${command}.`);
+        logger.debug('Rate limit ignorado para owner', {
+          sender,
+          command,
+        });
+
         rateLimitResult.isPremium = await isUserPremium(sender);
         rateLimitResult.limit = -1;
       }
 
-      // --- Log Command Analytics Attempt ---
       try {
         await logCommandAnalytics({
           userId: sender,
@@ -96,12 +105,21 @@ async function handleWhatsAppUpdate(upsert, client) {
           rateLimitLimitAtExecution: rateLimitResult.limit,
         });
       } catch (analyticsError) {
-        logger.error(`[handleWhatsAppUpdate] Critical error trying to log command analytics: ${analyticsError.message}`);
+        logger.error('Falha ao registrar analytics do comando', {
+          error: analyticsError.message,
+          sender,
+          command,
+          stack: analyticsError.stack,
+        });
       }
 
-      // --- Handle Rate Limit Result (Block if not allowed) ---
       if (rateLimitResult.status !== 'allowed') {
-        logger.info(`[handleWhatsAppUpdate] Command '!${command}' from ${sender} blocked. Status: ${rateLimitResult.status}`);
+        logger.info('Comando bloqueado por rate limit', {
+          command,
+          sender,
+          status: rateLimitResult.status,
+          message: rateLimitResult.message,
+        });
         if (rateLimitResult.message) {
           await client.sendMessage(from, { react: { text: '⏱️', key: info.key } });
           await client.sendMessage(from, { text: rateLimitResult.message }, { quoted: info, ephemeralExpiration: expirationMessage });
@@ -161,7 +179,7 @@ async function handleWhatsAppUpdate(upsert, client) {
           case 'menu': {
             logger.info(`[handleWhatsAppUpdate] Menu command executed by ${sender}.`);
             const commandList = Object.entries(config.commandLimits || {});
-            const prefix = config.bot.globalSettings.prefix || '/';
+            const prefix = process.env.BOT_GLOBAL_PREFIX || '.';
 
             if (commandList.length === 0) {
               await client.sendMessage(from, { text: 'ℹ️ Nenhum comando configurado encontrado.' }, { quoted: info, ephemeralExpiration: expirationMessage });
@@ -184,7 +202,8 @@ async function handleWhatsAppUpdate(upsert, client) {
             break;
           }
 
-          case 's': {
+          case 's':
+          case 'sticker': {
             await processSticker(client, info, expirationMessage, sender, from, text, isMedia, isQuotedVideo, isQuotedImage, config, getFileBuffer);
             break;
           }
@@ -200,7 +219,7 @@ async function handleWhatsAppUpdate(upsert, client) {
             break;
 
           case 'welcome':
-            await welcomeHandlers.handleWelcomeToggleCommand(client, info, sender, from, text, expirationMessage, isGroup, isGroupAdmin); // Pass isGroupAdmin for potential internal use
+            await welcomeHandlers.handleWelcomeToggleCommand(client, info, sender, from, text, expirationMessage, isGroup, isGroupAdmin);
             break;
           case 'setwelcome':
             await welcomeHandlers.handleSetWelcomeMessageCommand(client, info, sender, from, text, expirationMessage, isGroup, isGroupAdmin);
@@ -215,83 +234,13 @@ async function handleWhatsAppUpdate(upsert, client) {
             await welcomeHandlers.handleSetExitMediaCommand(client, info, sender, from, text, expirationMessage, isGroup, isGroupAdmin);
             break;
 
-          case 'teste':
-            client.sendMessage(from, { text: text }, { quoted: info, ephemeralExpiration: expirationMessage });
-            break;
-
-          case 'p': {
-            if (!isOwner) {
-              logger.warn(`[handleWhatsAppUpdate] Non-owner ${sender} attempted owner command 'p'.`);
-              await client.sendMessage(from, { text: '❌ Apenas o dono do bot pode executar este comando.' }, { quoted: info, ephemeralExpiration: expirationMessage });
-              break;
-            }
-
-            const parts = text.trim().split(/\s+/);
-            let potentialNumber = '';
-            let duration = '';
-            let targetUserJid = null;
-
-            if (mentionedJids.length > 0) {
-              targetUserJid = mentionedJids[0];
-              duration = parts.length > 0 ? parts[parts.length - 1] : '';
-              logger.info(`[handleWhatsAppUpdate] 'p' command target identified via mention: ${targetUserJid}`);
-            } else if (quotedParticipant) {
-              targetUserJid = quotedParticipant;
-              duration = parts.length > 0 ? parts[parts.length - 1] : '';
-              logger.info(`[handleWhatsAppUpdate] 'p' command target identified via quote: ${targetUserJid}`);
-            } else {
-              potentialNumber = parts.slice(0, -1).join(' ').trim();
-              duration = parts.length > 0 ? parts[parts.length - 1] : '';
-              if (potentialNumber) {
-                let cleanNumber = potentialNumber.replace(/[^0-9+]/g, '');
-                if (!cleanNumber.includes('@s.whatsapp.net')) {
-                  if (cleanNumber.startsWith('+') && cleanNumber.length > 10) {
-                    targetUserJid = `${cleanNumber}@s.whatsapp.net`;
-                  } else if (cleanNumber.length >= 10 && cleanNumber.length <= 13) {
-                    targetUserJid = `55${cleanNumber}@s.whatsapp.net`;
-                  }
-                } else {
-                  targetUserJid = cleanNumber;
-                }
-                logger.info(`[handleWhatsAppUpdate] 'p' command target identified via text input: ${targetUserJid}`);
-              }
-            }
-
-            const durationMatch = duration.toLowerCase().match(/^(\d+)\s*(d|h|m|days?|horas?|minutos?)$/);
-
-            if (!targetUserJid || !duration || !durationMatch) {
-              logger.warn(`[handleWhatsAppUpdate] Invalid format for 'p' command by ${sender}. Target: ${targetUserJid}, Duration: "${duration}"`);
-              await client.sendMessage(
-                from,
-                {
-                  text: '❌ Formato inválido!\nUso: `!p <@mention/número> <duração>`\nEx: `!p @user 30d` ou `!p 55119... 7days`\n\nDuração: `30d` (dias), `24h` (horas), `60m` (minutos)',
-                },
-                { quoted: info, ephemeralExpiration: expirationMessage },
-              );
-              break;
-            }
-
-            const durationString = durationMatch[0];
-
-            try {
-              await processPremiumStatus(targetUserJid, durationString, client, info, from, expirationMessage);
-            } catch (error) {
-              logger.error(`[handleWhatsAppUpdate] Error processing premium status for ${targetUserJid}:`, error);
-              await client.sendMessage(from, { text: `❌ Erro ao processar status premium: ${error.message}` }, { quoted: info, ephemeralExpiration: expirationMessage });
-            }
-            break;
-          }
-
           default:
             logger.info(`[handleWhatsAppUpdate] Comando desconhecido '!${command}' recebido de ${sender}.`);
-            // Optional: Send "unknown command" message
             // await client.sendMessage(from, { text: `❓ Comando \`!${command}\` não reconhecido.` }, { quoted: info, ephemeralExpiration: expirationMessage });
-            break; // Break from default case
+            break;
         }
       } catch (commandError) {
-        // --- Catch Errors During Command Execution ---
         logger.error(`[handleWhatsAppUpdate] ❌ Error executing command '!${command}' for user ${sender}: ${commandError.message}`, { stack: commandError.stack });
-        // Notify user of the internal error
         try {
           await client.sendMessage(
             from,
@@ -303,10 +252,9 @@ async function handleWhatsAppUpdate(upsert, client) {
         } catch (replyError) {
           logger.error(`[handleWhatsAppUpdate] ❌ Failed to send error reply to user ${sender}: ${replyError.message}`);
         }
-        // Note: Analytics already logged 'allowed'. Updating to 'error' here is complex.
       }
-    } // --- End of Command Processing Block (if isCmd) ---
-  } // --- End of loop through messages ---
+    }
+  }
 }
 
 module.exports = handleWhatsAppUpdate;

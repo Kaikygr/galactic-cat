@@ -5,31 +5,68 @@ require('dotenv').config();
 async function sendWelcomeMessage(userId, userName, client, from, info, expirationMessage, ownerName, ownerNumber) {
   const shouldSendWelcome = process.env.SEND_WELCOME_MESSAGES === 'true';
   if (!shouldSendWelcome) {
-    logger.info(`[ sendWelcomeMessage ] Skipping welcome message for ${userId} due to config.`);
+    logger.info('Pulando mensagem de boas-vindas devido à configuração', {
+      label: 'sendWelcomeMessage',
+      userId,
+      userName,
+      reason: 'SEND_WELCOME_MESSAGES não está true',
+    });
     return;
   }
 
-  logger.info(`[ sendWelcomeMessage ] Sending welcome message to ${userId} (${userName}).`);
+  logger.debug('Iniciando processo de envio de mensagem de boas-vindas', {
+    label: 'sendWelcomeMessage',
+    userId,
+    userName,
+  });
 
   try {
     const botConfig = config?.bot || {};
     const onboarding = botConfig.onboarding || {};
-    const global = botConfig.globalSettings || {};
     const ownerWhatsappLink = config?.owner?.whatsapp || '';
+    const botName = botConfig.name || 'Assistente Virtual';
 
-    const template = onboarding.firstInteractionMessage || '👋 Bem-vindo(a)! Use `{prefix}menu` para descobrir o que posso fazer.';
-    const prefix = global?.prefix?.[0] || '.';
+    logger.debug('Configurações carregadas para mensagem de boas-vindas', {
+      label: 'sendWelcomeMessage',
+      botName,
+      hasOnboarding: !!onboarding.firstInteractionMessage,
+    });
+
+    const defaultTemplate = `Olá {userName}! 👋\n\n📱 *Bem-vindo(a) ao ${botName}*\n\n💫 *Recursos Disponíveis*:\n▸ Stickers\n▸ Inteligência Artificial\n▸ Gerenciamento de Grupos\n▸ E muito mais!\n\n📌 *Como Usar*:\nDigite {prefix}menu para ver comandos\n\n💬 *Precisa de Ajuda?*\nContato: {ownerWhatsappLink}\n\nAproveite! ✨`;
+
+    const template = onboarding.firstInteractionMessage || defaultTemplate;
+    const prefix = process.env.BOT_GLOBAL_PREFIX;
 
     const welcomeMessage = template
       .replace(/{userName}/g, userName?.trim() || 'usuário')
       .replace(/{ownerName}/g, ownerName || 'o desenvolvedor')
       .replace(/{prefix}/g, prefix)
-      .replace(/{ownerWhatsappLink}/g, ownerWhatsappLink);
+      .replace(/{ownerWhatsappLink}/g, ownerWhatsappLink)
+      .replace(/{botName}/g, botName);
 
-    await client.sendMessage(userId, { text: welcomeMessage }, { quoted: info, ephemeralExpiration: expirationMessage });
-    logger.info(`[sendWelcomeMessage] ✅ Mensagem enviada para ${userId}.`);
+    logger.debug('Mensagem de boas-vindas preparada, iniciando envio', {
+      label: 'sendWelcomeMessage',
+      userId,
+      userName,
+      messageLength: welcomeMessage.length,
+    });
+
+    await client.sendMessage(from, { text: welcomeMessage }, { quoted: info, ephemeralExpiration: expirationMessage });
+
+    logger.info('Mensagem de boas-vindas enviada com sucesso', {
+      label: 'sendWelcomeMessage',
+      userId,
+      userName,
+      success: true,
+    });
   } catch (error) {
-    logger.error(`[sendWelcomeMessage] ❌ Erro ao enviar para ${userId}: ${error.message}`, { stack: error.stack });
+    logger.error('Erro ao enviar mensagem de boas-vindas', {
+      label: 'sendWelcomeMessage',
+      userId,
+      userName,
+      error: error.message,
+      stack: error.stack,
+    });
   }
 }
 
