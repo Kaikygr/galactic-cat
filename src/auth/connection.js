@@ -34,8 +34,6 @@ const env = cleanEnv(process.env, {
   DEFAULT_RECONNECT_MAX_EXPONENT: num({ default: 10, desc: 'Expoente máximo padrão para o cálculo do backoff de reconexão.' }),
   SYNC_FULL_HISTORY: bool({ default: false, desc: 'Sincronizar histórico completo de mensagens.' }),
   DEBUG_BAILEYS: bool({ default: false, desc: 'Habilitar logs de debug do Baileys.' }),
-  // Exemplo de como adicionar uma variável obrigatória:
-  // REQUIRED_ENV_VAR: str({ desc: 'Esta variável é obrigatória e não tem valor padrão.' }),
 });
 
 const logger = require('../utils/logger');
@@ -82,15 +80,11 @@ class ConnectionManager {
    * @param {import('pino').Logger} options.loggerInstance - Instância do logger (Pino) para registrar eventos e depuração.
    */
   constructor(options) {
-    // Validação das opções e dependências essenciais
     if (!options || typeof options !== 'object') {
       throw new TypeError('Opções de configuração para ConnectionManager são obrigatórias e devem ser um objeto.');
     }
 
-    // Validação do loggerInstance primeiro, pois é usado para logar outros erros
     if (!options.loggerInstance || typeof options.loggerInstance.info !== 'function' || typeof options.loggerInstance.error !== 'function' || typeof options.loggerInstance.debug !== 'function') {
-      // Não podemos usar this.logger aqui, pois ele ainda não foi definido.
-      // eslint-disable-next-line no-console
       console.error('[ConnectionManager.constructor] loggerInstance inválida ou não fornecida. Deve ser uma instância de logger compatível (ex: Pino).');
       throw new TypeError('loggerInstance inválida ou não fornecida.');
     }
@@ -153,7 +147,7 @@ class ConnectionManager {
     options = {
       initialDelay: 1000,
       maxDelay: 60000,
-      maxExponent: DEFAULT_RECONNECT_MAX_EXPONENT, // Usar o valor padrão configurado
+      maxExponent: DEFAULT_RECONNECT_MAX_EXPONENT,
       label: 'scheduleReconnect',
     },
   ) {
@@ -272,7 +266,6 @@ class ConnectionManager {
    * @returns {Promise<void>}
    */
   async handleCredsUpdate(saveCreds) {
-    // saveCreds é uma função específica do useMultiFileAuthState
     this.logger.debug('[ handleCredsUpdate ] Chamada para atualizar credenciais.');
     if (typeof saveCreds !== 'function') {
       this.logger.error('[ handleCredsUpdate ] saveCreds não é uma função válida.');
@@ -296,7 +289,6 @@ class ConnectionManager {
    * @returns {Promise<void>}
    */
   async handleMessagesUpsert(data) {
-    // data é do tipo BaileysEventMap['messages.upsert']
     this.logger.debug('[ handleMessagesUpsert ] Recebido evento messages.upsert:', { messageCount: data.messages?.length, type: data.type });
     if (!this.clientInstance) {
       this.logger.error('[ handleMessagesUpsert ] Instância do cliente inválida.');
@@ -317,7 +309,7 @@ class ConnectionManager {
         this.logger.error(`[ handleMessagesUpsert.setImmediate ] Erro não capturado ao processar mensagem ID: ${msg?.key?.id} de ${msg?.key?.remoteJid}. Isso indica um erro inesperado dentro de processMessage não tratado pelos try/catch internos.`, {
           message: error.message,
           stack: error.stack,
-          originalData: data, // Logar os dados originais pode ajudar na depuração
+          originalData: data,
         });
       }
     });
@@ -332,7 +324,6 @@ class ConnectionManager {
    * @returns {Promise<void>}
    */
   async processMessage(data, msg) {
-    // msg é do tipo WAMessage
     const messageId = msg.key.id;
     const remoteJid = msg.key.remoteJid;
     this.logger.debug(`[ processMessage ] Iniciando processamento da mensagem ID: ${messageId} de ${remoteJid}`);
@@ -366,7 +357,6 @@ class ConnectionManager {
    * @returns {Promise<void>}
    */
   async handleGroupsUpdate(updates) {
-    // updates é Array<Partial<GroupMetadata>>
     this.logger.debug('[ handleGroupsUpdate ] Recebido evento groups.update:', updates);
     if (!this.clientInstance) {
       this.logger.error('[ handleGroupsUpdate ] Instância do cliente inválida.');
@@ -396,7 +386,6 @@ class ConnectionManager {
    * @returns {Promise<void>}
    */
   async handleGroupParticipantsUpdate(event) {
-    // event é do tipo GroupParticipantsUpdate
     this.logger.debug('[ handleGroupParticipantsUpdate ] Recebido evento group-participants.update:', event);
     if (!this.clientInstance) {
       this.logger.error('[ handleGroupParticipantsUpdate ] Instância do cliente inválida.');
@@ -432,7 +421,6 @@ class ConnectionManager {
    * @returns {void}
    */
   registerAllEventHandlers(saveCreds) {
-    // saveCreds é uma função
     this.logger.debug('[ registerAllEventHandlers ] Registrando manipuladores de eventos Baileys.');
     if (!this.clientInstance) {
       this.logger.error('[ registerAllEventHandlers ] Tentativa de registrar handlers sem instância de cliente.');
@@ -454,7 +442,6 @@ class ConnectionManager {
   async connectToWhatsApp() {
     this.logger.info('[ connectToWhatsApp ] Tentando conectar ao WhatsApp...');
     try {
-      // Garante que o diretório para o estado de autenticação exista
       if (!fs.existsSync(this.AUTH_STATE_PATH)) {
         this.logger.info(`[ connectToWhatsApp ] Diretório de estado de autenticação não encontrado em ${this.AUTH_STATE_PATH}. Criando...`);
         try {
@@ -462,7 +449,7 @@ class ConnectionManager {
           this.logger.info(`[ connectToWhatsApp ] Diretório ${this.AUTH_STATE_PATH} criado com sucesso.`);
         } catch (mkdirError) {
           this.logger.error(`[ connectToWhatsApp ] Falha ao criar o diretório ${this.AUTH_STATE_PATH}: ${mkdirError.message}`, { stack: mkdirError.stack });
-          throw mkdirError; // Relança o erro para ser tratado pelo catch principal de connectToWhatsApp
+          throw mkdirError;
         }
       }
 
@@ -478,7 +465,7 @@ class ConnectionManager {
         logger: pino({ level: env.DEBUG_BAILEYS ? 'debug' : 'silent' }),
         mobile: false,
         browser: Browsers.macOS('Desktop'),
-        syncFullHistory: env.SYNC_FULL_HISTORY, // Sincroniza todo o histórico de mensagens
+        syncFullHistory: env.SYNC_FULL_HISTORY,
         msgRetryCounterMap: {},
       };
       this.logger.debug('[ connectToWhatsApp ] Configurações do socket:', socketConfig);
