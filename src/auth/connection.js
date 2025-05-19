@@ -11,6 +11,7 @@ const { default: makeWASocket, Browsers, useMultiFileAuthState, DisconnectReason
 const pino = require('pino');
 const path = require('path');
 const qrcode = require('qrcode-terminal');
+const fs = require('fs');
 const { cleanEnv, str, num, bool } = require('envalid');
 
 require('dotenv').config();
@@ -421,6 +422,18 @@ class ConnectionManager {
   async connectToWhatsApp() {
     this.logger.info('[ connectToWhatsApp ] Tentando conectar ao WhatsApp...');
     try {
+      // Garante que o diretório para o estado de autenticação exista
+      if (!fs.existsSync(this.AUTH_STATE_PATH)) {
+        this.logger.info(`[ connectToWhatsApp ] Diretório de estado de autenticação não encontrado em ${this.AUTH_STATE_PATH}. Criando...`);
+        try {
+          fs.mkdirSync(this.AUTH_STATE_PATH, { recursive: true });
+          this.logger.info(`[ connectToWhatsApp ] Diretório ${this.AUTH_STATE_PATH} criado com sucesso.`);
+        } catch (mkdirError) {
+          this.logger.error(`[ connectToWhatsApp ] Falha ao criar o diretório ${this.AUTH_STATE_PATH}: ${mkdirError.message}`, { stack: mkdirError.stack });
+          throw mkdirError; // Relança o erro para ser tratado pelo catch principal de connectToWhatsApp
+        }
+      }
+
       this.logger.info(`[ connectToWhatsApp ] Usando diretório de estado de autenticação: ${this.AUTH_STATE_PATH}`);
       const { state, saveCreds } = await useMultiFileAuthState(this.AUTH_STATE_PATH);
       this.logger.debug('[ connectToWhatsApp ] Estado de autenticação carregado/criado.');
