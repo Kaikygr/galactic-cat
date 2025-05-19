@@ -1,8 +1,10 @@
 /**
  * @file Gerencia a conexão com o WhatsApp, o tratamento de eventos e a lógica de reconexão usando Baileys.
  * Este módulo é responsável por inicializar o cliente WhatsApp, lidar com diversos
- * eventos como atualizações de conexão, recebimento de mensagens, atualizações de grupos e garantir
- * que as credenciais sejam salvas. Ele também implementa uma estratégia de backoff exponencial para reconexões.
+ * eventos (atualizações de conexão, recebimento de mensagens, atualizações de grupos, etc.),
+ * e garantir que as credenciais de autenticação sejam salvas de forma persistente.
+ * Implementa uma estratégia de backoff exponencial para tentativas de reconexão automática.
+ * @see {@link https://github.com/WhiskeySockets/Baileys |Baileys WASocket} para detalhes da API do cliente.
  */
 
 const { default: makeWASocket, Browsers, useMultiFileAuthState, DisconnectReason } = require('baileys');
@@ -13,7 +15,17 @@ const { cleanEnv, str, num, bool } = require('envalid');
 
 require('dotenv').config();
 
-// Validação de variáveis de ambiente
+/**
+ * Objeto contendo as variáveis de ambiente validadas e tipadas, prontas para uso.
+ * Utiliza `envalid` para garantir que as configurações essenciais estejam presentes e corretas.
+ * @property {number} DEFAULT_INITIAL_RECONNECT_DELAY - Atraso inicial padrão para reconexão em ms.
+ * @property {number} INITIAL_CONNECT_FAIL_DELAY - Atraso para reconexão em caso de falha na conexão inicial em ms.
+ * @property {number} DEFAULT_MAX_RECONNECT_DELAY - Atraso máximo padrão para reconexão em ms.
+ * @property {number} DEFAULT_RECONNECT_MAX_EXPONENT - Expoente máximo padrão para o cálculo do backoff de reconexão.
+ * @property {boolean} SYNC_FULL_HISTORY - Define se o histórico completo de mensagens deve ser sincronizado ao conectar.
+ * @property {boolean} DEBUG_BAILEYS - Habilita logs de debug detalhados da biblioteca Baileys.
+ * @see {@link https://github.com/af/envalid|envalid} para mais informações sobre validação de variáveis de ambiente.
+ */
 const env = cleanEnv(process.env, {
   DEFAULT_INITIAL_RECONNECT_DELAY: num({ default: 1000, desc: 'Atraso inicial padrão para reconexão em ms.' }),
   INITIAL_CONNECT_FAIL_DELAY: num({ default: 1500, desc: 'Atraso para reconexão em caso de falha na conexão inicial em ms.' }),
@@ -21,6 +33,8 @@ const env = cleanEnv(process.env, {
   DEFAULT_RECONNECT_MAX_EXPONENT: num({ default: 10, desc: 'Expoente máximo padrão para o cálculo do backoff de reconexão.' }),
   SYNC_FULL_HISTORY: bool({ default: false, desc: 'Sincronizar histórico completo de mensagens.' }),
   DEBUG_BAILEYS: bool({ default: false, desc: 'Habilitar logs de debug do Baileys.' }),
+  // Exemplo de como adicionar uma variável obrigatória:
+  // REQUIRED_ENV_VAR: str({ desc: 'Esta variável é obrigatória e não tem valor padrão.' }),
 });
 
 const logger = require('../utils/logger');
@@ -28,6 +42,7 @@ const { initDatabase, closePool } = require('./../database/processDatabase');
 const { createTables, processUserData } = require('./../controllers/userDataController');
 const { processParticipantUpdate } = require('../controllers/groupEventsController');
 const botController = require('../controllers/botController');
+
 /**
  * @constant {string} AUTH_STATE_PATH
  * @description O caminho no sistema de arquivos onde o estado de autenticação (arquivos de sessão) será armazenado.
@@ -35,34 +50,54 @@ const botController = require('../controllers/botController');
 const AUTH_STATE_PATH = path.join(__dirname, 'temp', 'auth_state');
 
 // Constantes para configuração da lógica de reconexão
+/** @constant {number} Atraso inicial padrão para reconexão em milissegundos. */
 const DEFAULT_INITIAL_RECONNECT_DELAY = env.DEFAULT_INITIAL_RECONNECT_DELAY;
+/** @constant {number} Atraso para reconexão em caso de falha na conexão inicial em milissegundos. */
 const INITIAL_CONNECT_FAIL_DELAY = env.INITIAL_CONNECT_FAIL_DELAY;
+/** @constant {number} Atraso máximo padrão para reconexão em milissegundos. */
 const DEFAULT_MAX_RECONNECT_DELAY = env.DEFAULT_MAX_RECONNECT_DELAY;
+/** @constant {number} Expoente máximo padrão para o cálculo do backoff de reconexão. */
 const DEFAULT_RECONNECT_MAX_EXPONENT = env.DEFAULT_RECONNECT_MAX_EXPONENT;
 
+/**
+ * @class ConnectionManager
+ * @description Gerencia a conexão com o WhatsApp, incluindo autenticação,
+ * tratamento de eventos de conexão, mensagens, grupos e lógica de reconexão.
+ * Orquestra a inicialização de dependências como banco de dados e tabelas.
+ */
 class ConnectionManager {
   /**
-   * @param {object} options - Opções para o ConnectionManager.
-   * @param {string} options.authStatePath - Caminho para armazenar o estado de autenticação.
-   * @param {object} options.dbFunctions - Funções relacionadas ao banco de dados.
-   * @param {() => Promise<void>} options.dbFunctions.initDatabase - Função para inicializar o DB.
-   * @param {() => Promise<void>} options.dbFunctions.closePool - Função para fechar o pool do DB.
-   * @param {object} options.controllerFunctions - Funções de controller.
-   * @param {() => Promise<void>} options.controllerFunctions.createTables - Função para criar tabelas.
-   * @param {(data: any, client: any) => Promise<void>} options.controllerFunctions.processUserData - Função para processar dados do usuário.
-   * @param {(event: any, client: any) => Promise<void>} options.controllerFunctions.processParticipantUpdate - Função para processar atualização de participantes.
-   * @param {(data: any, client: any) => Promise<void>} options.controllerFunctions.botController - Função principal do controller do bot.
-   * @param {import('pino').Logger} options.loggerInstance - Instância do logger.
+   * Cria uma instância de ConnectionManager.
+   * @param {object} options - Opções de configuração para o ConnectionManager.
+   * @param {string} options.authStatePath - Caminho no sistema de arquivos para armazenar o estado de autenticação (sessão).
+   * @param {object} options.dbFunctions - Objeto contendo funções para interagir com o banco de dados.
+   * @param {() => Promise<void>} options.dbFunctions.initDatabase - Função assíncrona para inicializar a conexão com o banco de dados.
+   * @param {() => Promise<void>} options.dbFunctions.closePool - Função assíncrona para fechar o pool de conexões do banco de dados.
+   * @param {object} options.controllerFunctions - Objeto contendo funções de lógica de negócio (controllers).
+   * @param {() => Promise<void>} options.controllerFunctions.createTables - Função assíncrona para criar/verificar as tabelas necessárias no banco de dados.
+   * @param {(data: import('baileys').BaileysEventMap['messages.upsert'], client: import('baileys').WASocket) => Promise<void>} options.controllerFunctions.processUserData - Função para processar dados de mensagens recebidas e informações de usuários/grupos.
+   * @param {(event: import('baileys').GroupParticipantsUpdate, client: import('baileys').WASocket) => Promise<void>} options.controllerFunctions.processParticipantUpdate - Função para processar eventos de atualização de participantes em grupos.
+   * @param {(data: import('baileys').BaileysEventMap['messages.upsert'], client: import('baileys').WASocket) => Promise<void>} options.controllerFunctions.botController - Função principal do controller do bot, responsável por interpretar comandos e interações.
+   * @param {import('pino').Logger} options.loggerInstance - Instância do logger (Pino) para registrar eventos e depuração.
    */
   constructor(options) {
+    /** @type {string} Caminho para armazenar o estado de autenticação. */
     this.AUTH_STATE_PATH = options.authStatePath;
+    /** @type {object} Funções relacionadas ao banco de dados. */
     this.db = options.dbFunctions;
+    /** @type {object} Funções de controller. */
     this.controllers = options.controllerFunctions;
+    /** @type {import('pino').Logger} Instância do logger. */
     this.logger = options.loggerInstance;
 
+    /** @type {import('baileys').WASocket | null} Instância do cliente WhatsApp (Baileys). */
     this.clientInstance = null;
+    /** @type {number} Contador de tentativas de reconexão. */
     this.reconnectAttempts = 0;
+    /** @type {NodeJS.Timeout | null} Identificador do timeout para a próxima tentativa de reconexão. */
     this.reconnectTimeout = null;
+
+    // Bind dos métodos para garantir o 'this' correto quando usados como event handlers.
     this.handleConnectionUpdate = this.handleConnectionUpdate.bind(this);
     this.handleMessagesUpsert = this.handleMessagesUpsert.bind(this);
     this.handleGroupsUpdate = this.handleGroupsUpdate.bind(this);
@@ -72,11 +107,12 @@ class ConnectionManager {
 
   /**
    * Agenda uma tentativa de reconexão com uma estratégia de backoff exponencial.
+   * Se já houver uma reconexão agendada, esta chamada é ignorada.
    * @param {() => Promise<void> | void} connectFn - A função a ser chamada para tentar a reconexão.
    * @param {object} [options] - Opções para agendar a reconexão.
-   * @param {number} [options.initialDelay=1000] - Atraso inicial em milissegundos.
-   * @param {number} [options.maxDelay=60000] - Atraso máximo em milissegundos.
-   * @param {number} [options.maxExponent=6] - Expoente máximo para o cálculo do backoff.
+   * @param {number} [options.initialDelay=DEFAULT_INITIAL_RECONNECT_DELAY] - Atraso inicial em milissegundos.
+   * @param {number} [options.maxDelay=DEFAULT_MAX_RECONNECT_DELAY] - Atraso máximo em milissegundos.
+   * @param {number} [options.maxExponent=DEFAULT_RECONNECT_MAX_EXPONENT] - Expoente máximo para o cálculo do backoff (limita o crescimento do delay).
    * @param {string} [options.label='scheduleReconnect'] - Um rótulo para fins de log.
    */
   scheduleReconnect(
@@ -84,7 +120,7 @@ class ConnectionManager {
     options = {
       initialDelay: 1000,
       maxDelay: 60000,
-      maxExponent: 6,
+      maxExponent: DEFAULT_RECONNECT_MAX_EXPONENT, // Usar o valor padrão configurado
       label: 'scheduleReconnect',
     },
   ) {
@@ -106,7 +142,8 @@ class ConnectionManager {
 
   /**
    * Reseta o contador de tentativas de reconexão e limpa qualquer timeout de reconexão pendente.
-   * @param {string} [label='ConnectionLogic'] - Um rótulo para fins de log.
+   * Chamado quando a conexão é bem-sucedida ou quando um QR code é recebido.
+   * @param {string} [label='ConnectionLogic'] - Um rótulo para fins de log, indicando o contexto do reset.
    */
   resetReconnectAttempts(label = 'ConnectionLogic') {
     this.logger.debug(`[ ${label} ] Chamada para resetar tentativas de reconexão.`);
@@ -118,12 +155,23 @@ class ConnectionManager {
     }
   }
 
+  /**
+   * Manipula a exibição do QR code para autenticação.
+   * @private
+   * @param {string} qr - A string do QR code recebida do Baileys.
+   * @returns {void}
+   */
   _handleQRCode(qr) {
     this.logger.info('[ _handleQRCode ] QR Code recebido, escaneie por favor.');
     qrcode.generate(qr, { small: true });
     this.resetReconnectAttempts('handleConnectionUpdate-QR');
   }
 
+  /**
+   * Loga o status da conexão ('connecting', 'open').
+   * @private
+   * @param {import('baileys').ConnectionState['connection']} connection - O estado atual da conexão.
+   */
   _logConnectionStatus(connection) {
     if (connection === 'connecting') {
       this.logger.info('[ _logConnectionStatus ] Conectando ao WhatsApp...');
@@ -133,6 +181,12 @@ class ConnectionManager {
     }
   }
 
+  /**
+   * Manipula eventos de desconexão, decidindo se deve tentar reconectar.
+   * @private
+   * @param {Error | import('baileys').Boom} lastDisconnect - O objeto de erro da última desconexão.
+   * @returns {void}
+   */
   _handleDisconnection(lastDisconnect) {
     const statusCode = lastDisconnect?.error?.output?.statusCode;
     const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
@@ -154,6 +208,14 @@ class ConnectionManager {
     }
   }
 
+  /**
+   * Manipulador principal para o evento 'connection.update' do Baileys.
+   * Delega para métodos auxiliares com base no estado da conexão.
+   * @param {Partial<import('baileys').ConnectionState>} update - O objeto de atualização do estado da conexão.
+   *   Contém `connection` (o novo estado), `lastDisconnect` (informações sobre a última desconexão)
+   *   e `qr` (o QR code, se aplicável).
+   * @returns {Promise<void>}
+   */
   async handleConnectionUpdate(update) {
     const { connection, lastDisconnect, qr } = update;
     this.logger.debug('[ handleConnectionUpdate ] Recebida atualização de conexão:', update);
@@ -171,7 +233,13 @@ class ConnectionManager {
     }
   }
 
+  /**
+   * Manipula o evento 'creds.update' do Baileys, salvando as credenciais de autenticação.
+   * @param {() => Promise<void>} saveCreds - A função fornecida por `useMultiFileAuthState` para salvar as credenciais.
+   * @returns {Promise<void>}
+   */
   async handleCredsUpdate(saveCreds) {
+    // saveCreds é uma função específica do useMultiFileAuthState
     this.logger.debug('[ handleCredsUpdate ] Chamada para atualizar credenciais.');
     if (typeof saveCreds !== 'function') {
       this.logger.error('[ handleCredsUpdate ] saveCreds não é uma função válida.');
@@ -188,7 +256,14 @@ class ConnectionManager {
     }
   }
 
+  /**
+   * Manipula o evento 'messages.upsert' do Baileys, que ocorre ao receber novas mensagens.
+   * Filtra mensagens inválidas e agenda o processamento assíncrono da mensagem.
+   * @param {import('baileys').BaileysEventMap['messages.upsert']} data - Dados do evento, contendo as mensagens e o tipo de notificação.
+   * @returns {Promise<void>}
+   */
   async handleMessagesUpsert(data) {
+    // data é do tipo BaileysEventMap['messages.upsert']
     this.logger.debug('[ handleMessagesUpsert ] Recebido evento messages.upsert:', { messageCount: data.messages?.length, type: data.type });
     if (!this.clientInstance) {
       this.logger.error('[ handleMessagesUpsert ] Instância do cliente inválida.');
@@ -205,7 +280,16 @@ class ConnectionManager {
     setImmediate(() => this.processMessage(data, msg));
   }
 
+  /**
+   * Processa uma mensagem individual recebida.
+   * Chama os controllers para processar dados do usuário/grupo e a lógica do bot.
+   * @private
+   * @param {import('baileys').BaileysEventMap['messages.upsert']} data - O objeto completo do evento 'messages.upsert'.
+   * @param {import('baileys').WAMessage} msg - A mensagem específica a ser processada.
+   * @returns {Promise<void>}
+   */
   async processMessage(data, msg) {
+    // msg é do tipo WAMessage
     const messageId = msg.key.id;
     const remoteJid = msg.key.remoteJid;
     this.logger.debug(`[ processMessage ] Iniciando processamento da mensagem ID: ${messageId} de ${remoteJid}`);
@@ -232,7 +316,14 @@ class ConnectionManager {
     }
   }
 
+  /**
+   * Manipula o evento 'groups.update' do Baileys, que ocorre quando há atualizações nos metadados de grupos.
+   * (Ex: mudança de nome, descrição, etc.)
+   * @param {Array<Partial<import('baileys').GroupMetadata>>} updates - Um array de objetos contendo as atualizações dos grupos.
+   * @returns {Promise<void>}
+   */
   async handleGroupsUpdate(updates) {
+    // updates é Array<Partial<GroupMetadata>>
     this.logger.debug('[ handleGroupsUpdate ] Recebido evento groups.update:', updates);
     if (!this.clientInstance) {
       this.logger.error('[ handleGroupsUpdate ] Instância do cliente inválida.');
@@ -255,7 +346,14 @@ class ConnectionManager {
     });
   }
 
+  /**
+   * Manipula o evento 'group-participants.update' do Baileys.
+   * Ocorre quando participantes entram, saem, são promovidos ou rebaixados em um grupo.
+   * @param {import('baileys').GroupParticipantsUpdate} event - O objeto do evento de atualização de participantes.
+   * @returns {Promise<void>}
+   */
   async handleGroupParticipantsUpdate(event) {
+    // event é do tipo GroupParticipantsUpdate
     this.logger.debug('[ handleGroupParticipantsUpdate ] Recebido evento group-participants.update:', event);
     if (!this.clientInstance) {
       this.logger.error('[ handleGroupParticipantsUpdate ] Instância do cliente inválida.');
@@ -284,7 +382,14 @@ class ConnectionManager {
     }
   }
 
+  /**
+   * Registra todos os manipuladores de eventos necessários na instância do cliente Baileys.
+   * @private
+   * @param {() => Promise<void>} saveCreds - A função para salvar credenciais, passada para `handleCredsUpdate`.
+   * @returns {void}
+   */
   registerAllEventHandlers(saveCreds) {
+    // saveCreds é uma função
     this.logger.debug('[ registerAllEventHandlers ] Registrando manipuladores de eventos Baileys.');
     if (!this.clientInstance) {
       this.logger.error('[ registerAllEventHandlers ] Tentativa de registrar handlers sem instância de cliente.');
@@ -297,7 +402,14 @@ class ConnectionManager {
     this.clientInstance.ev.on('group-participants.update', this.handleGroupParticipantsUpdate);
   }
 
+  /**
+   * Estabelece a conexão com o WhatsApp usando Baileys.
+   * Configura o socket, carrega/salva o estado de autenticação e registra os manipuladores de eventos.
+   * @returns {Promise<import('baileys').WASocket | null>} A instância do cliente Baileys conectada, ou `null` se a conexão falhar e uma reconexão for agendada.
+   * @throws {Error} Lança um erro se ocorrer uma falha crítica irrecuperável durante a conexão (ex: problema no `authStatePath`).
+   */
   async connectToWhatsApp() {
+    this.logger.info('[ connectToWhatsApp ] Tentando conectar ao WhatsApp...');
     try {
       this.logger.info(`[ connectToWhatsApp ] Usando diretório de estado de autenticação: ${this.AUTH_STATE_PATH}`);
       const { state, saveCreds } = await useMultiFileAuthState(this.AUTH_STATE_PATH);
@@ -311,7 +423,7 @@ class ConnectionManager {
         logger: pino({ level: env.DEBUG_BAILEYS ? 'debug' : 'silent' }),
         mobile: false,
         browser: Browsers.macOS('Desktop'),
-        syncFullHistory: env.SYNC_FULL_HISTORY,
+        syncFullHistory: env.SYNC_FULL_HISTORY, // Sincroniza todo o histórico de mensagens
         msgRetryCounterMap: {},
       };
       this.logger.debug('[ connectToWhatsApp ] Configurações do socket:', socketConfig);
@@ -347,6 +459,12 @@ class ConnectionManager {
     }
   }
 
+  /**
+   * Inicializa o ConnectionManager e, por extensão, a aplicação.
+   * Este método orquestra a inicialização do banco de dados, a criação de tabelas
+   * e o início da conexão com o WhatsApp.
+   * @returns {Promise<void>}
+   */
   async initialize() {
     try {
       this.logger.info('[ ConnectionManager.initialize ] Iniciando a aplicação...');
@@ -371,7 +489,9 @@ class ConnectionManager {
   }
 
   /**
-   * @returns {import('baileys').WASocket | null} A instância atual do cliente Baileys.
+   * Retorna a instância atual do cliente Baileys (WASocket).
+   * @public
+   * @returns {import('baileys').WASocket | null} A instância do cliente, ou `null` se não estiver inicializada/conectada.
    */
   getClient() {
     return this.clientInstance;
@@ -379,10 +499,10 @@ class ConnectionManager {
 }
 
 /**
- * @module connection
- * @description Fornece acesso à instância do cliente WhatsApp Baileys.
+ * Instância singleton do ConnectionManager.
+ * Configurada com os caminhos, funções de banco de dados, controllers e logger necessários.
+ * @type {ConnectionManager}
  */
-
 const connectionManager = new ConnectionManager({
   authStatePath: AUTH_STATE_PATH,
   dbFunctions: { initDatabase, closePool },
@@ -390,10 +510,23 @@ const connectionManager = new ConnectionManager({
   loggerInstance: logger,
 });
 
+/**
+ * @module ConnectionService
+ * @description Ponto de entrada para interagir com o serviço de conexão do WhatsApp.
+ * Expõe uma forma de obter a instância do cliente Baileys.
+ */
 module.exports = {
-  /** @returns {import('baileys').WASocket | null} A instância atual do cliente Baileys, ou nulo se não estiver conectado. */
+  /**
+   * @function getClientInstance
+   * @description Retorna a instância ativa do cliente WhatsApp (Baileys).
+   * @returns {import('baileys').WASocket | null} A instância do cliente Baileys, ou `null` se não estiver conectado/inicializado.
+   * @example
+   * const client = getClientInstance();
+   * if (client) {
+   *   client.sendMessage(...);
+   * }
+   */
   getClientInstance: () => connectionManager.getClient(),
 };
 
-// Inicia a aplicação
 connectionManager.initialize();
