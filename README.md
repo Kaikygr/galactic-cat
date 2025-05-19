@@ -42,7 +42,7 @@ O Galactic-Cat oferece um conjunto abrangente de funcionalidades:
 1.  **Conexão e Gerenciamento de Sessão:**
 
     - Autenticação via QR Code.
-    - Persistência do estado da sessão para reconexões rápidas (`src/auth/temp/`).
+    - Persistência do estado da sessão para reconexões rápidas (`src/auth/temp/auth_state/`).
     - Lógica robusta de reconexão automática com backoff exponencial em caso de desconexões inesperadas (exceto logout), configurável via variáveis de ambiente.
     - Utilização da biblioteca `baileys` para comunicação direta com a API do WhatsApp (`src/auth/connection.js`).
 
@@ -128,13 +128,126 @@ O Galactic-Cat oferece um conjunto abrangente de funcionalidades:
 
 O projeto segue uma estrutura modular para facilitar a organização, manutenção e escalabilidade:
 
-- **`src/auth`:** Contém a lógica de conexão, autenticação e gerenciamento da sessão com o WhatsApp (`connection.js`). Armazena temporariamente os dados da sessão em `src/auth/temp/`.
+- **`src/auth`:** Contém a lógica de conexão, autenticação e gerenciamento da sessão com o WhatsApp (`connection.js`). Armazena os dados da sessão em `src/auth/temp/auth_state/`.
 - **`src/controllers`:** Responsáveis pela orquestração principal do bot, processamento de eventos e delegação de tarefas para módulos específicos (ex: `botController.js`, `userDataController.js`, `rateLimitController.js`, `groupEventsController.js`, `InteractionController.js`).
 - **`src/database`:** Gerencia a interação com o banco de dados MySQL, incluindo inicialização, execução de queries e criação de tabelas (`processDatabase.js`, `processUserPremium.js`).
 - **`src/modules`:** Contém a lógica específica de cada funcionalidade principal do bot (ex: `stickerModule`, `geminiModule`, `groupsModule`). Cada módulo pode ter seus próprios subdiretórios para processamento, comandos, dados, etc. O prefixo dos comandos é definido globalmente via variável de ambiente.
 - **`src/utils`:** Utilitários reutilizáveis, como o logger (`logger.js`) e funções para download de mídia (`getFileBuffer.js`).
 - **`src/config`:** Arquivos de configuração estática, como `options.json`, que define limites de comandos, mensagens padrão, etc.
 - **Raiz do Projeto:** Arquivos de configuração como `package.json`, `.env` (a ser criado), `ecosystem.config.js` (PM2).
+
+### O Guardião dos Dados: `src/controllers/userDataController.js`
+
+O arquivo `src/controllers/userDataController.js` é o módulo central para o gerenciamento e persistência de dados relacionados a usuários, grupos e mensagens no Galactic-Cat. Ele interage diretamente com o banco de dados MySQL e implementa um sistema de cache para otimizar o acesso a metadados de grupos.
+
+**Principais Responsabilidades:**
+
+1.  **Inicialização e Manutenção do Banco de Dados:**
+
+    - **`createTables()`**: Função crucial chamada durante a inicialização do bot (via `connection.js`). Ela verifica a existência de todas as tabelas necessárias (`users`, `groups`, `messages`, `group_participants`, `command_usage`, `command_analytics`, `interaction_history`) e as cria utilizando `CREATE TABLE IF NOT EXISTS` se não existirem. As definições das tabelas incluem chaves primárias, estrangeiras e índices para garantir a integridade e performance.
+    - **`ensureUserInteractionColumns()`**: Garante que colunas específicas para rastrear interações (`first_interaction_at`, `last_interaction_at`, `has_interacted`) existam na tabela `users`, adicionando-as dinamicamente se necessário.
+
+2.  **Processamento de Dados de Mensagens Recebidas (`processUserData`):**
+
+    - Esta é a função principal exportada que é chamada pelo `connection.js` quando novas mensagens (`messages.upsert`) são recebidas.
+    - Itera sobre as mensagens válidas, chamando `processIncomingMessageData` para cada uma.
+
+3.  **Lógica de Processamento Individual de Mensagem (`processIncomingMessageData`):**
+
+    - **Validação (`validateIncomingInfo`)**: Verifica se a mensagem possui os dados essenciais (chave, JID remoto) e não é uma mensagem do próprio bot.
+    - **Usuário (`saveUserToDatabase`)**: Insere ou atualiza o registro do remetente na tabela `users`, incluindo seu `pushName`.
+    - **Grupo (`ensureGroupExists`, `handleGroupMetadataUpdate`)**: Se a mensagem for de um grupo:
+      - Garante que o grupo exista na tabela `groups`, criando uma entrada mínima com dados padrão se necessário.
+      - Chama `handleGroupMetadataUpdate` para buscar (da API ou cache) e salvar/atualizar os metadados completos do grupo e seus participantes.
+    - **Mensagem (`saveMessageToDatabase`)**: Salva os detalhes da mensagem (ID, remetente, grupo, tipo, conteúdo, timestamp) na tabela `messages`. O conteúdo da mensagem é geralmente o objeto Baileys serializado como JSON.
+
+4.  **Gerenciamento de Metadados de Grupo (`handleGroupMetadataUpdate`):**
+
+    - Utiliza uma instância de `GroupMetadataCache` para armazenar e recuperar metadados de grupos, reduzindo chamadas à API do WhatsApp.
+    - Se os dados não estiverem no cache ou estiverem expirados, busca-os usando `client.groupMetadata(groupId)`.
+    - Busca configurações personalizadas do grupo (como status premium, mensagens de boas-vindas) da tabela `groups` no DB (`getGroupSettingsFromDB`).
+    - Mescla os dados da API com os do DB e salva o resultado consolidado na tabela `groups` (`saveGroupToDatabase`).
+    - Salva a lista de participantes e seus status de admin na tabela `group_participants` (`saveGroupParticipantsToDatabase`).
+
+5.  **Cache de Metadados de Grupo (`GroupMetadataCache`):**
+
+    - Uma classe interna que implementa um cache simples baseado em `Map` com tempo de expiração configurável (via `options.json -> cache.groupMetadataExpiryMs`).
+    - Possui métodos para `set`, `get`, `has`, `delete`, `clear` e um `startAutoCleanup` para remover entradas expiradas periodicamente.
+
+6.  **Registro de Interações (`logInteraction`):**
+
+    - Chamado por outros controllers (como `InteractionController.js`) para registrar quando um usuário interage com o bot.
+    - Atualiza os campos `first_interaction_at`, `last_interaction_at` e `has_interacted` na tabela `users`.
+    - Insere um registro na tabela `interaction_history` detalhando o tipo de interação (mensagem privada, comando em grupo, etc.).
+    - Determina se a interação é a "primeira interação elegível" do usuário, relevante para o sistema de onboarding.
+
+7.  **Configuração e Utilitários:**
+    - Carrega configurações do arquivo `src/config/options.json`, como nomes de tabelas, valores padrão para dados de usuário/grupo e tempo de expiração do cache.
+    - Utiliza funções utilitárias como `sanitizeData` (para tratar valores nulos/undefined) e `formatTimestampForDB` (para converter datas para o formato do MySQL).
+
+**Fluxo Típico de Dados:**
+
+1.  `connection.js` recebe um evento `messages.upsert`.
+2.  Chama `userDataController.processUserData(data, client)`.
+3.  `processUserData` itera e chama `processIncomingMessageData(info)` para cada mensagem.
+4.  `processIncomingMessageData` valida, salva/atualiza usuário, garante/atualiza grupo (se aplicável, chamando `handleGroupMetadataUpdate`), e salva a mensagem.
+5.  `handleGroupMetadataUpdate` usa o cache ou a API para obter metadados do grupo, mescla com dados do DB e persiste tudo.
+
+Em essência, `userDataController.js` assegura que todos os dados relevantes sobre as interações, usuários e grupos sejam corretamente armazenados e mantidos atualizados no banco de dados, servindo como a fonte da verdade para muitas outras partes do sistema.
+
+### O Coração da Conexão: `src/auth/connection.js`
+
+O arquivo `src/auth/connection.js` é fundamental para o funcionamento do Galactic-Cat, sendo responsável por toda a comunicação com a API do WhatsApp através da biblioteca Baileys. Ele encapsula a lógica de conexão, autenticação, gerenciamento de sessão, tratamento de eventos e reconexão automática.
+
+**Principais Responsabilidades:**
+
+1.  **Gerenciamento da Conexão com Baileys:**
+
+    - Utiliza `makeWASocket` da biblioteca Baileys para estabelecer e manter a conexão com o WhatsApp.
+    - Configura o socket com opções como o tipo de navegador simulado (`Browsers.macOS('Desktop')`), sincronização de histórico (`SYNC_FULL_HISTORY` via `.env`) e logging interno do Baileys (`DEBUG_BAILEYS` via `.env`).
+
+2.  **Autenticação e Sessão:**
+
+    - Emprega `useMultiFileAuthState` para carregar e salvar o estado de autenticação (credenciais da sessão).
+    - Os arquivos da sessão são armazenados no diretório `src/auth/temp/auth_state/`. É esta pasta que precisa ser limpa caso seja necessário gerar um novo QR Code.
+    - Quando uma nova sessão é necessária (ou a anterior é invalidada), o script exibe um QR Code no terminal usando `qrcode-terminal` para que o usuário possa escanear com o WhatsApp Web no celular.
+    - As credenciais são salvas automaticamente (`creds.update`) para permitir reconexões rápidas sem a necessidade de escanear o QR Code toda vez.
+
+3.  **Tratamento de Eventos:**
+
+    - Registra e manipula diversos eventos emitidos pela instância do Baileys:
+      - `connection.update`: Monitora o estado da conexão (conectando, aberto, fechado, QR code recebido).
+      - `messages.upsert`: Processa mensagens recebidas, delegando para os controllers (`botController.js`, `userDataController.js`).
+      - `groups.update`: Lida com atualizações nos metadados dos grupos.
+      - `group-participants.update`: Processa eventos de entrada, saída, promoção ou rebaixamento de participantes em grupos, delegando para `groupEventsController.js`.
+
+4.  **Lógica de Reconexão Robusta:**
+
+    - Implementa uma estratégia de _backoff exponencial_ para tentativas de reconexão automática em caso de desconexões inesperadas (que não sejam `DisconnectReason.loggedOut`).
+    - Os parâmetros dessa lógica (atraso inicial, atraso máximo, expoente máximo) são configuráveis através de variáveis de ambiente (ex: `DEFAULT_INITIAL_RECONNECT_DELAY`, `DEFAULT_MAX_RECONNECT_DELAY`).
+    - Se a desconexão for devido a um logout (`DisconnectReason.loggedOut`), o bot não tentará reconectar e informará o usuário para limpar a pasta de sessão e gerar um novo QR Code.
+
+5.  **Orquestração e Inicialização:**
+
+    - A classe principal `ConnectionManager` é instanciada como um singleton.
+    - No método `initialize()`, o `ConnectionManager` primeiro inicializa a conexão com o banco de dados (`initDatabase`) e garante que as tabelas necessárias existam (`createTables`) antes de tentar se conectar ao WhatsApp.
+    - Isso assegura que o bot só comece a processar eventos do WhatsApp quando suas dependências (como o banco de dados) estiverem prontas.
+
+6.  **Logging:**
+
+    - Utiliza a instância de logger global (`src/utils/logger.js`) para registrar eventos importantes, erros e informações de depuração relacionadas à conexão e aos eventos do Baileys.
+    - O nível de log do Baileys pode ser controlado pela variável de ambiente `DEBUG_BAILEYS`.
+
+7.  **Interface com o Restante do Sistema:**
+    - O módulo exporta a função `getClientInstance()`, que permite que outros módulos (principalmente os controllers) obtenham a instância ativa do cliente Baileys para enviar mensagens, buscar metadados, etc.
+
+**Variáveis de Ambiente Relevantes (controlam `connection.js`):**
+
+- `SYNC_FULL_HISTORY`: Define se o histórico completo de mensagens deve ser sincronizado.
+- `DEBUG_BAILEYS`: Habilita logs de debug detalhados da biblioteca Baileys.
+- `DEFAULT_INITIAL_RECONNECT_DELAY`, `INITIAL_CONNECT_FAIL_DELAY`, `DEFAULT_MAX_RECONNECT_DELAY`, `DEFAULT_RECONNECT_MAX_EXPONENT`: Controlam o comportamento da reconexão automática.
+
+Em resumo, `connection.js` é o motor que mantém o Galactic-Cat online e reativo, gerenciando a complexidade da comunicação com o WhatsApp e fornecendo uma base estável para todas as outras funcionalidades do bot.
 
 ## Estrutura do Banco de Dados
 
@@ -430,11 +543,11 @@ O terminal exibirá os logs diretamente. Pressione `Ctrl+C` para parar. As confi
 
 **Primeira Execução (Ambos os Modos):**
 
-1.  Ao iniciar pela primeira vez (ou após limpar a pasta `src/auth/temp/`), um **QR Code** será exibido no terminal. **Nota Importante:** Se você planeja usar o PM2 imediatamente (com `npm start`), pode ser mais fácil obter o QR Code primeiro executando o script de conexão diretamente uma vez. Abra um terminal na raiz do projeto e execute: `node ./src/auth/connection.js` Após escanear o QR Code e a sessão ser salva, você pode parar este processo (Ctrl+C) e então iniciar com `npm start` ou `npm run dev`.
+1.  Ao iniciar pela primeira vez (ou após limpar a pasta `src/auth/temp/auth_state/`), um **QR Code** será exibido no terminal. **Nota Importante:** Se você planeja usar o PM2 imediatamente (com `npm start`), pode ser mais fácil obter o QR Code primeiro executando o script de conexão diretamente uma vez. Abra um terminal na raiz do projeto e execute: `node ./src/auth/connection.js` Após escanear o QR Code e a sessão ser salva, você pode parar este processo (Ctrl+C) e então iniciar com `npm start` ou `npm run dev`.
 2.  Abra o WhatsApp no seu celular.
 3.  Vá para **Configurações \> Aparelhos conectados \> Conectar um aparelho**.
 4.  Escaneie o QR Code exibido no terminal.
-5.  Aguarde a mensagem de conexão estabelecida nos logs. A sessão será salva em `src/auth/temp/` para futuras inicializações.
+5.  Aguarde a mensagem de conexão estabelecida nos logs. A sessão será salva em `src/auth/temp/auth_state/` para futuras inicializações.
 
 ## Contribuições
 
@@ -476,7 +589,7 @@ Encontrou algum problema? Aqui estão algumas dicas para as questões mais comun
 
     - Verifique sua conexão com a internet.
     - Certifique-se de que não há outro processo do bot rodando e tentando gerar um QR Code.
-    - Tente limpar a pasta `src/auth/temp/` e reiniciar o bot.
+    - Tente limpar a pasta `src/auth/temp/auth_state/` e reiniciar o bot.
     - Se estiver usando Docker ou uma VM, verifique as configurações de rede e se o terminal pode exibir QR codes corretamente.
 
 2.  **Erro de conexão com o banco de dados MySQL:**
