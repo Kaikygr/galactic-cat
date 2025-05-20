@@ -44,8 +44,19 @@
         "s": {
             "description": "Cria figurinhas a partir de imagens, vídeos ou GIFs.",
             "nonPremium": {
-                "limit": 10,
+                "limit": 15,
+                "windowMinutes": 30
+            },
+            "premium": {
+                "limit": 50,
                 "windowMinutes": 60
+            }
+        },
+        "sticker": {
+            "description": "Cria figurinhas a partir de imagens, vídeos ou GIFs.",
+            "nonPremium": {
+                "limit": 15,
+                "windowMinutes": 30
             },
             "premium": {
                 "limit": 50,
