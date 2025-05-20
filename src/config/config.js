@@ -10,7 +10,7 @@ const commandPrefix = makeValidator((input) => {
   }
   return input;
 });
-
+//a
 try {
   env = cleanEnv(process.env, {
     BOT_GLOBAL_PREFIX: commandPrefix(),
