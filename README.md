@@ -21,7 +21,6 @@
   - [Configurações Adicionais (options.json)](#configurações-adicionais-optionsjson)
 - [Instalação](#instalação)
 - [Como Rodar o Projeto](#como-rodar-o-projeto)
-  - [Iniciando o Bot com PM2](#iniciando-o-bot-com-pm2)
 - [Lista Detalhada de Comandos](#lista-detalhada-de-comandos)
 - [Solução de Problemas Comuns (Troubleshooting)](#solução-de-problemas-comuns-troubleshooting)
 - [Como Atualizar o Bot](#como-atualizar-o-bot)
@@ -44,7 +43,7 @@ O Galactic-Cat oferece um conjunto abrangente de funcionalidades:
     - Autenticação via QR Code.
     - Persistência do estado da sessão para reconexões rápidas (`src/auth/temp/auth_state/`).
     - Lógica robusta de reconexão automática com backoff exponencial em caso de desconexões inesperadas (exceto logout), configurável via variáveis de ambiente.
-    - Utilização da biblioteca `baileys` para comunicação direta com a API do WhatsApp (`src/auth/connection.js`).
+    - Utilização da biblioteca `baileys` para comunicação direta com a API do WhatsApp (`src/auth/connection.js` - o ponto de entrada da aplicação).
 
 2.  **Processamento Inteligente de Mensagens:**
 
@@ -104,7 +103,7 @@ O Galactic-Cat oferece um conjunto abrangente de funcionalidades:
     - Logs separados por nível (info, warn, error) e com rotação diária para a pasta `logs/`.
     - Formato de log configurável para console e arquivos, incluindo timestamps, níveis, metadados e stack traces de erro.
     - Redação automática de dados sensíveis (senhas, tokens) nos logs.
-    - Configuração via variáveis de ambiente (`LOG_LEVEL`, `ECOSYSTEM_NAME`).
+    - Configuração via variáveis de ambiente (`LOG_LEVEL`, `ECOSYSTEM_NAME` - usado pelo logger).
 
 10. **Mensagem de Primeira Interação (Onboarding):**
     - Envio automático de uma mensagem de boas-vindas configurável (`src/config/options.json`) na primeira interação elegível de um novo usuário com o bot (`src/controllers/InteractionController.js`).
@@ -116,7 +115,6 @@ O Galactic-Cat oferece um conjunto abrangente de funcionalidades:
 - **Comunicação WhatsApp:** `baileys`
 - **Banco de Dados:** MySQL (`mysql2`)
 - **Inteligência Artificial:** `@google/generative-ai`
-- **Gerenciamento de Processos:** PM2 (`pm2`)
 - **Processamento de Mídia:** `fluent-ffmpeg`, `node-webpmux`
 - **Logging:** `winston`, `winston-daily-rotate-file`
 - **Configuração:** `dotenv`, `envalid`
@@ -134,7 +132,7 @@ O projeto segue uma estrutura modular para facilitar a organização, manutenç�
 - **`src/modules`:** Contém a lógica específica de cada funcionalidade principal do bot (ex: `stickerModule`, `geminiModule`, `groupsModule`). Cada módulo pode ter seus próprios subdiretórios para processamento, comandos, dados, etc. O prefixo dos comandos é definido globalmente via variável de ambiente.
 - **`src/utils`:** Utilitários reutilizáveis, como o logger (`logger.js`) e funções para download de mídia (`getFileBuffer.js`).
 - **`src/config`:** Arquivos de configuração estática, como `options.json`, que define limites de comandos, mensagens padrão, etc.
-- **Raiz do Projeto:** Arquivos de configuração como `package.json`, `.env` (a ser criado), `ecosystem.config.js` (PM2).
+- **Raiz do Projeto:** Arquivos de configuração como `package.json`, `.env` (a ser criado), `run.sh` (script de inicialização).
 
 ### O Guardião dos Dados: `src/controllers/userDataController.js`
 
@@ -435,7 +433,7 @@ GEMINI_APIKEY=SUA_GOOGLE_GEMINI_API_KEY_AQUI
 
 # ==================================
 
-# Nome do serviço/instância (Usado em logs e PM2) (Opcional, padrão: bot-system)
+# Nome do serviço/instância (Usado em logs) (Opcional, padrão: bot-system)
 
 ECOSYSTEM_NAME=galactic-cat-prod
 
@@ -510,44 +508,43 @@ Após configurar os pré-requisitos e o ambiente:
 
 ## Como Rodar o Projeto
 
-O projeto utiliza **[PM2](https://pm2.keymetrics.io/)** para gerenciamento robusto de processos. Os scripts no `package.json` e o arquivo `ecosystem.config.js` facilitam a inicialização. O PM2 será usado tanto para desenvolvimento quanto para produção, utilizando as configurações definidas no `ecosystem.config.js`.
+O projeto é iniciado através de um script shell (`run.sh`) que configura o ambiente e executa o bot diretamente com Node.js. Os scripts definidos no `package.json` (`npm start` e `npm run dev`) utilizam este script para iniciar a aplicação em diferentes ambientes.
 
-### Iniciando o Bot com PM2
+### Iniciando o Bot
 
-Para iniciar o bot (seja para desenvolvimento ou produção):
+**Para produção:**
 
 ```bash
 npm start
 ```
 
-**Gerenciando com PM2:**
+Isso iniciará o bot em modo produção, com otimizações e configurações apropriadas para um ambiente de produção.
 
-- **Listar processos:** `pm2 list`
-- **Ver logs em tempo real:** `pm2 logs` (ou `pm2 logs <ECOSYSTEM_NAME>`)
-- **Ver status detalhado:** `pm2 show <ECOSYSTEM_NAME>`
-- **Parar o bot:** `pm2 stop <ECOSYSTEM_NAME>`
-- **Reiniciar o bot:** `pm2 restart <ECOSYSTEM_NAME>`
-- **Parar e remover da lista:** `pm2 delete <ECOSYSTEM_NAME>`
-
-_(Substitua `<ECOSYSTEM_NAME>` pelo valor definido no seu `.env` ou o padrão `bot-system`)._
-
-### Modo de Desenvolvimento
-
-Ideal para desenvolvimento e testes. Utiliza `nodemon` para reiniciar automaticamente o bot após alterações no código. Usa as configurações `env` (development) do `ecosystem.config.js`.
+**Para desenvolvimento:**
 
 ```bash
 npm run dev
 ```
 
-O terminal exibirá os logs diretamente. Pressione `Ctrl+C` para parar. As configurações de quais arquivos observar e ignorar estão em `nodemon.json`.
+Modo ideal para desenvolvimento e testes, com logs mais detalhados.
 
-**Primeira Execução (Ambos os Modos):**
+### Gerenciando o Bot
 
-1.  Ao iniciar pela primeira vez (ou após limpar a pasta `src/auth/temp/auth_state/`), um **QR Code** será exibido no terminal. **Nota Importante:** Se você planeja usar o PM2 imediatamente (com `npm start`), pode ser mais fácil obter o QR Code primeiro executando o script de conexão diretamente uma vez. Abra um terminal na raiz do projeto e execute: `node ./src/auth/connection.js` Após escanear o QR Code e a sessão ser salva, você pode parar este processo (Ctrl+C) e então iniciar com `npm start` ou `npm run dev`.
-2.  Abra o WhatsApp no seu celular.
-3.  Vá para **Configurações \> Aparelhos conectados \> Conectar um aparelho**.
-4.  Escaneie o QR Code exibido no terminal.
-5.  Aguarde a mensagem de conexão estabelecida nos logs. A sessão será salva em `src/auth/temp/auth_state/` para futuras inicializações.
+O bot pode ser gerenciado através dos seguintes comandos:
+
+- **Iniciar em produção:** `npm start`
+- **Iniciar em desenvolvimento:** `npm run dev`
+- **Parar o bot:** `Ctrl+C` no terminal onde o bot está rodando
+- **Ver logs:** Os logs são salvos na pasta `logs/` e também são exibidos no terminal
+
+### Primeira Execução
+
+1. Ao iniciar pela primeira vez (ou após limpar a pasta `src/auth/temp/auth_state/`), um QR Code será exibido no terminal.
+2. Abra o WhatsApp no seu celular.
+3. Vá para **Configurações > Aparelhos conectados > Conectar um aparelho**.
+4. Escaneie o QR Code exibido no terminal.
+5. Aguarde a mensagem de conexão estabelecida nos logs.
+6. A sessão será salva em `src/auth/temp/auth_state/` para futuras inicializações.
 
 ## Contribuições
 
@@ -608,21 +605,21 @@ Encontrou algum problema? Aqui estão algumas dicas para as questões mais comun
 
     - Verifique sua conexão com a internet.
     - Pode ser uma instabilidade temporária do WhatsApp.
-    - Verifique os logs do bot (`pm2 logs <ECOSYSTEM_NAME>`) para mensagens de erro específicas.
+    - Verifique os logs do bot exibidos no terminal ou nos arquivos na pasta `logs/` para mensagens de erro específicas.
 
 5.  **Como verificar os logs para encontrar erros?**
-    - Use `pm2 logs` ou `pm2 logs <ECOSYSTEM_NAME>` para ver os logs em tempo real.
-    - Os arquivos de log são salvos na pasta `logs/` na raiz do projeto, separados por data e nível (ex: `error-YYYY-MM-DD.log`).
+    - Os logs são exibidos diretamente no terminal onde o bot foi iniciado (`npm start` ou `npm run dev`).
+    - Adicionalmente, os arquivos de log são salvos na pasta `logs/` na raiz do projeto, separados por data e nível (ex: `error-YYYY-MM-DD.log`), conforme configurado pelo sistema de logging `winston`.
 
 ## Como Atualizar o Bot
 
 Para atualizar sua instância do Galactic-Cat para a versão mais recente do repositório:
 
 1.  Navegue até o diretório do projeto: `cd /caminho/para/galactic-cat`
-2.  Pare o bot se estiver rodando com PM2: `pm2 stop <ECOSYSTEM_NAME>` (substitua `<ECOSYSTEM_NAME>` pelo nome do seu processo).
+2.  Pare o bot se estiver rodando: Pressione `Ctrl+C` no terminal onde o bot está sendo executado.
 3.  Busque as últimas alterações do repositório: `git pull origin main` (ou o nome da sua branch principal, se diferente).
 4.  Instale/atualize quaisquer dependências novas ou modificadas: `npm install`
-5.  Reinicie o bot com PM2: `pm2 restart <ECOSYSTEM_NAME>`
+5.  Reinicie o bot: Use `npm start` (para produção) ou `npm run dev` (para desenvolvimento).
 
 ## Contribuições
 
