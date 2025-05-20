@@ -1,3 +1,4 @@
+/* eslint-disable no-undef */
 /**
  * @file Gerencia a conexão com o WhatsApp, o tratamento de eventos e a lógica de reconexão usando Baileys.
  * Este módulo é responsável por inicializar o cliente WhatsApp, lidar com diversos
@@ -12,7 +13,7 @@ const pino = require('pino');
 const path = require('path');
 const qrcode = require('qrcode-terminal');
 const fs = require('fs');
-const { cleanEnv, str, num, bool } = require('envalid');
+const { cleanEnv, num, bool } = require('envalid');
 
 require('dotenv').config();
 
