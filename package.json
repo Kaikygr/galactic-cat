@@ -5,13 +5,8 @@
   "main": "./src/auth/connection.js",
   "private": true,
   "scripts": {
-    "start": "pm2 start ecosystem.config.js --env production",
-    "dev": "pm2 start ecosystem.config.js --env development",
-    "stop": "pm2 stop ecosystem.config.js",
-    "restart": "pm2 restart ecosystem.config.js",
-    "logs": "pm2 logs",
-    "flush": "pm2 flush",
-    "delete": "pm2 delete ecosystem.config.js",
+    "start": "chmod +x ./run.sh && ./run.sh production",
+    "dev": "chmod +x ./run.sh && ./run.sh development",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": {
@@ -37,7 +32,6 @@
     "node-webpmux": "3.2.0",
     "nodemon": "^3.1.10",
     "pino": "9.6.0",
-    "pm2": "^6.0.5",
     "qrcode-terminal": "^0.12.0",
     "winston": "^3.17.0",
     "winston-daily-rotate-file": "^5.0.0"
