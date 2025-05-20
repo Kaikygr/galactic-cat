@@ -32,6 +32,7 @@ async function sendErrorReactionAndMessage(client, from, key, expirationMessage,
   await client.sendMessage(from, { text: userMessageText }, { quoted: originalInfo, ephemeralExpiration: expirationMessage });
   logger.error(logMessage, error);
 
+  // Notifica o proprietário se configurado
   if (config.owner?.number && originalInfo) {
     const senderId = originalInfo.sender ? originalInfo.sender.split('@')[0] : 'Desconhecido';
     await client.sendMessage(
@@ -41,6 +42,7 @@ async function sendErrorReactionAndMessage(client, from, key, expirationMessage,
       },
       { quoted: originalInfo, ephemeralExpiration: expirationMessage },
     );
+    logger.info(`[sendErrorReactionAndMessage] Notificação de erro enviada ao proprietário para o usuário ${senderId}.`);
   }
 }
 
@@ -52,6 +54,7 @@ async function sendErrorReactionAndMessage(client, from, key, expirationMessage,
  * @property {object} encmedia - O objeto da mensagem de mídia.
  */
 function extractMediaDetails(info) {
+  logger.debug('[ extractMediaDetails ] Iniciando extração de detalhes da mídia.');
   const caminhosPossiveis = {
     image: [info.message?.imageMessage, info.message?.extendedTextMessage?.contextInfo?.quotedMessage?.imageMessage, info.message?.extendedTextMessage?.contextInfo?.quotedMessage?.viewOnceMessage?.message?.imageMessage],
     video: [info.message?.videoMessage, info.message?.extendedTextMessage?.contextInfo?.quotedMessage?.videoMessage, info.message?.extendedTextMessage?.contextInfo?.quotedMessage?.viewOnceMessage?.message?.videoMessage],
@@ -61,10 +64,12 @@ function extractMediaDetails(info) {
   for (const [tipo, caminhos] of Object.entries(caminhosPossiveis)) {
     for (const caminho of caminhos) {
       if (caminho) {
+        logger.info(`[ extractMediaDetails ] Mídia encontrada. Tipo: ${tipo}.`);
         return { tipoMidia: tipo, encmedia: caminho };
       }
     }
   }
+  logger.debug('[ extractMediaDetails ] Nenhuma mídia encontrada.');
   return null;
 }
 
@@ -78,6 +83,7 @@ function extractMediaDetails(info) {
  * @param {number} expirationMessage - O tempo de expiração da mensagem.
  */
 async function handleNoMedia(client, from, info, expirationMessage) {
+  logger.info(`[ handleNoMedia ] Nenhuma mídia detectada para ${info.key.remoteJid}. Enviando mensagem de ajuda.`);
   await client.sendMessage(from, { react: { text: '⚠️', key: info.key } });
   const noMediaHelpText =
     `⚠️ *Ops! Nenhuma mídia encontrada para criar o sticker.*\n\n` +
@@ -112,7 +118,7 @@ async function handleNoMedia(client, from, info, expirationMessage) {
       { quoted: info, ephemeralExpiration: expirationMessage },
     );
   } catch (imgError) {
-    logger.error('Erro ao enviar imagem de ajuda em handleNoMedia:', imgError);
+    logger.error('[ handleNoMedia ] Erro ao enviar imagem de ajuda:', imgError);
   }
 }
 
@@ -128,6 +134,7 @@ async function handleNoMedia(client, from, info, expirationMessage) {
  * @returns {Promise<boolean>} True se o tamanho for aceitável, false caso contrário.
  */
 async function checkMediaSize(client, from, info, expirationMessage, tipoMidia, encmedia) {
+  logger.debug(`[ checkMediaSize ] Verificando tamanho da mídia. Tipo: ${tipoMidia}, FileLength: ${encmedia?.fileLength}`);
   const fileLength = encmedia?.fileLength || 0;
   const maxFileSize = 1.5 * 1024 * 1024; // 1.5 MB
 
@@ -140,8 +147,10 @@ async function checkMediaSize(client, from, info, expirationMessage, tipoMidia, 
       },
       { quoted: info, ephemeralExpiration: expirationMessage },
     );
+    logger.warn(`[ checkMediaSize ] Mídia muito grande para ${info.key.remoteJid}. Tipo: ${tipoMidia}, Tamanho: ${fileLength} bytes.`);
     return false;
   }
+  logger.debug('[ checkMediaSize ] Tamanho da mídia aceitável.');
   return true;
 }
 
@@ -170,6 +179,7 @@ class MediaDecryptionError extends Error {
  * @throws {Error} Se ocorrer outro erro durante o download ou salvamento.
  */
 async function downloadAndSaveTempMedia(encmedia, tipoMidia) {
+  logger.info(`[ downloadAndSaveTempMedia ] Iniciando download e salvamento de mídia temporária. Tipo: ${tipoMidia}`);
   let mediaBuffer;
   try {
     mediaBuffer = await getFileBuffer(encmedia, tipoMidia);
@@ -199,8 +209,9 @@ async function downloadAndSaveTempMedia(encmedia, tipoMidia) {
   const mediaPath = path.join(tempDir, `temp_file_${Date.now()}${mediaExtension}`);
   fs.writeFileSync(mediaPath, mediaBuffer);
 
+  logger.debug(`[ downloadAndSaveTempMedia ] Mídia salva temporariamente em: ${mediaPath}`);
   if (!fs.existsSync(mediaPath)) {
-    logger.error(`Falha ao criar o arquivo de mídia temporário em: ${mediaPath}`);
+    logger.error(`[ downloadAndSaveTempMedia ] Falha ao criar o arquivo de mídia temporário em: ${mediaPath}`);
     throw new Error('Falha ao criar arquivo de mídia temporário.');
   }
   return { mediaPath, processWithFfmpeg, tipoMidia };
@@ -215,6 +226,7 @@ async function downloadAndSaveTempMedia(encmedia, tipoMidia) {
  * @returns {Promise<string>} O caminho para o arquivo WebP convertido.
  */
 async function convertToWebp(mediaPath, tipoMidiaMedia, processWithFfmpegFlag) {
+  logger.info(`[ convertToWebp ] Iniciando conversão para WebP. Path: ${mediaPath}, Processar com FFmpeg: ${processWithFfmpegFlag}`);
   const outputPath = path.join(tempDir, `sticker_${Date.now()}.webp`);
   if (processWithFfmpegFlag) {
     const filtro = tipoMidiaMedia === 'video' ? 'fps=10,scale=512:512' : 'scale=512:512';
@@ -222,6 +234,7 @@ async function convertToWebp(mediaPath, tipoMidiaMedia, processWithFfmpegFlag) {
   } else {
     fs.copyFileSync(mediaPath, outputPath);
   }
+  logger.info(`[ convertToWebp ] Mídia convertida para WebP: ${outputPath}`);
   return outputPath;
 }
 
@@ -235,12 +248,14 @@ async function convertToWebp(mediaPath, tipoMidiaMedia, processWithFfmpegFlag) {
  * @property {string} stickerPackPublisher - O nome do autor do pacote de stickers.
  */
 function getStickerPackInfo(text, sender, pushName) {
+  logger.debug(`[ getStickerPackInfo ] Obtendo informações do pacote de sticker para: ${sender}. Texto: "${text}"`);
   const formattedSender = sender.replace(/@s\.whatsapp\.net$/, '');
   const prefsPath = path.join(__dirname, 'data', 'stickerPrefs.json');
   let stickerPrefs = {};
   if (fs.existsSync(prefsPath)) {
     try {
       stickerPrefs = JSON.parse(fs.readFileSync(prefsPath, 'utf-8'));
+      logger.debug(`[ getStickerPackInfo ] Preferências de sticker carregadas de ${prefsPath}`);
     } catch (err) {
       logger.warn('Erro ao ler stickerPrefs.json, usando objeto vazio.', err);
       stickerPrefs = {};
@@ -283,6 +298,7 @@ function getStickerPackInfo(text, sender, pushName) {
       fs.mkdirSync(prefsDir, { recursive: true });
     }
     fs.writeFileSync(prefsPath, JSON.stringify(stickerPrefs, null, 2));
+    logger.info(`[ getStickerPackInfo ] Preferências de sticker salvas para ${key} em ${prefsPath}`);
   } else {
     stickerPackNameForCurrentSticker = storedName;
     stickerPackPublisherForCurrentSticker = storedPublisher;
@@ -290,7 +306,7 @@ function getStickerPackInfo(text, sender, pushName) {
 
   const replacedName = stickerPackNameForCurrentSticker.replace(/#nome/g, pushName).replace(/#id/g, formattedSender).replace(/#data/g, new Date().toLocaleDateString('pt-BR'));
   const replacedPublisher = stickerPackPublisherForCurrentSticker.replace(/#nome/g, pushName).replace(/#id/g, formattedSender).replace(/#data/g, new Date().toLocaleDateString('pt-BR'));
-
+  logger.debug(`[ getStickerPackInfo ] Nome do pacote final: "${replacedName}", Autor: "${replacedPublisher}"`);
   return {
     stickerPackName: replacedName,
     stickerPackPublisher: replacedPublisher,
@@ -305,6 +321,7 @@ function getStickerPackInfo(text, sender, pushName) {
  * @param {string} packPublisher - O nome do autor do pacote de stickers.
  */
 async function applyStickerMetadata(stickerPath, packName, packPublisher) {
+  logger.info(`[ applyStickerMetadata ] Aplicando metadados ao sticker: ${stickerPath}. Pacote: "${packName}", Autor: "${packPublisher}"`);
   const json = {
     'sticker-pack-name': packName,
     'sticker-pack-publisher': packPublisher,
@@ -320,9 +337,11 @@ async function applyStickerMetadata(stickerPath, packName, packPublisher) {
   try {
     const webpmuxPath = (await execProm('which webpmux')).stdout.trim();
     await execProm(`"${webpmuxPath}" -set exif "${metaPath}" "${stickerPath}" -o "${stickerPath}"`);
+    logger.info(`[ applyStickerMetadata ] Metadados aplicados com sucesso usando webpmux.`);
   } finally {
     if (fs.existsSync(metaPath)) {
       fs.unlinkSync(metaPath);
+      logger.debug(`[ applyStickerMetadata ] Arquivo de metadados temporário ${metaPath} removido.`);
     }
   }
 }
@@ -339,12 +358,14 @@ async function applyStickerMetadata(stickerPath, packName, packPublisher) {
  * @returns {Promise<void>}
  */
 async function processSticker(client, info, expirationMessage, sender, from, text) {
+  logger.info(`[ processSticker ] Iniciando processamento de sticker para: ${sender} em ${from}. Texto: "${text}"`);
   let tempMediaPath = null;
   let finalStickerPath = null;
 
   try {
     const mediaDetails = extractMediaDetails(info);
     if (!mediaDetails) {
+      logger.info(`[ processSticker ] Nenhuma mídia encontrada para ${sender}. Chamando handleNoMedia.`);
       await handleNoMedia(client, from, info, expirationMessage);
       return;
     }
@@ -354,14 +375,17 @@ async function processSticker(client, info, expirationMessage, sender, from, tex
     await client.sendMessage(from, { text: '⚙️ Processando sua solicitação de sticker. Aguarde um momento...' }, { quoted: info, ephemeralExpiration: expirationMessage });
 
     if (!(await checkMediaSize(client, from, info, expirationMessage, tipoMidia, encmedia))) {
+      logger.warn(`[ processSticker ] Verificação de tamanho da mídia falhou para ${sender}.`);
       return;
     }
 
+    logger.info(`[ processSticker ] Iniciando download e conversão para ${sender}. Tipo de mídia: ${tipoMidia}`);
     try {
       const downloaded = await downloadAndSaveTempMedia(encmedia, tipoMidia);
       tempMediaPath = downloaded.mediaPath;
       finalStickerPath = await convertToWebp(tempMediaPath, downloaded.tipoMidia, downloaded.processWithFfmpeg);
     } catch (error) {
+      logger.error(`[ processSticker ] Erro durante download/conversão para ${sender}: ${error.message}`);
       if (error instanceof MediaDecryptionError) {
         await sendErrorReactionAndMessage(client, from, info.key, expirationMessage, '❌ *Erro ao Acessar Mídia Criptografada*\n\n' + 'Não foi possível processar a mídia enviada devido a um erro de descriptografia. ' + 'Isso geralmente acontece com mídias que foram encaminhadas muitas vezes, mídias "ver uma vez" que já expiraram, ou arquivos corrompidos.\n\n' + 'Por favor, tente as seguintes opções:\n' + '- Envie a mídia original novamente (não encaminhada).\n' + '- Peça ao remetente original para enviar a mídia diretamente para você.\n' + '- Tente com um arquivo de mídia diferente.', 'Erro de descriptografia de mídia', error, info);
       } else if (error.message.includes('Falha ao criar arquivo de mídia temporário')) {
@@ -373,33 +397,42 @@ async function processSticker(client, info, expirationMessage, sender, from, tex
     }
 
     if (!fs.existsSync(finalStickerPath)) {
+      logger.error(`[ processSticker ] Arquivo de sticker final não encontrado após conversão: ${finalStickerPath}`);
       throw new Error(`Arquivo de sticker não encontrado (${finalStickerPath}) após conversão.`);
     }
+    logger.info(`[ processSticker ] Sticker convertido com sucesso: ${finalStickerPath} para ${sender}.`);
 
     const { stickerPackName, stickerPackPublisher } = getStickerPackInfo(text, sender, info.pushName);
 
     await applyStickerMetadata(finalStickerPath, stickerPackName, stickerPackPublisher);
     if (!fs.existsSync(finalStickerPath)) {
+      logger.error(`[ processSticker ] Arquivo de sticker final não encontrado após aplicação de metadados: ${finalStickerPath}`);
       throw new Error(`Arquivo de sticker não encontrado (${finalStickerPath}) após webpmux.`);
     }
+    logger.info(`[ processSticker ] Metadados aplicados ao sticker para ${sender}.`);
 
     await client.sendMessage(from, { react: { text: '🐈‍⬛', key: info.key } });
     await client.sendMessage(from, { sticker: fs.readFileSync(finalStickerPath) }, { quoted: info, ephemeralExpiration: expirationMessage });
+    logger.info(`[ processSticker ] Sticker enviado com sucesso para ${sender} em ${from}.`);
   } catch (error) {
+    logger.error(`[ processSticker ] Erro GERAL no processamento do sticker para ${sender}: ${error.message}`, { stack: error.stack });
     await sendErrorReactionAndMessage(client, from, info.key, expirationMessage, '❌ *Falha Inesperada no Processamento do Sticker*\n\n' + 'Lamentamos, mas um erro inesperado ocorreu enquanto seu sticker estava sendo criado. ' + 'Isso pode ser devido a um problema com o formato da mídia que não foi detectado anteriormente, ou uma instabilidade momentânea no sistema de processamento.\n\n' + 'Recomendamos verificar se a mídia está em um formato padrão (JPG, PNG para imagens; MP4 para vídeos curtos) e tentar novamente. ' + 'Se o erro continuar, por favor, aguarde um pouco antes de uma nova tentativa ou contate o suporte se disponível.', 'Erro genérico ao processar sticker', error, info);
   } finally {
+    logger.debug(`[ processSticker ] Iniciando limpeza de arquivos temporários para ${sender}.`);
     if (tempMediaPath && fs.existsSync(tempMediaPath)) {
       try {
         fs.unlinkSync(tempMediaPath);
+        logger.debug(`[ processSticker ] Arquivo temporário de mídia ${tempMediaPath} removido.`);
       } catch (unlinkError) {
-        logger.error(`Erro ao deletar arquivo temporário de mídia: ${tempMediaPath}`, unlinkError);
+        logger.error(`[ processSticker ] Erro ao deletar arquivo temporário de mídia ${tempMediaPath}:`, unlinkError);
       }
     }
     if (finalStickerPath && fs.existsSync(finalStickerPath)) {
       try {
         fs.unlinkSync(finalStickerPath);
+        logger.debug(`[ processSticker ] Arquivo final de sticker ${finalStickerPath} removido.`);
       } catch (unlinkError) {
-        logger.error(`Erro ao deletar arquivo final de sticker: ${finalStickerPath}`, unlinkError);
+        logger.error(`[ processSticker ] Erro ao deletar arquivo final de sticker ${finalStickerPath}:`, unlinkError);
       }
     }
   }

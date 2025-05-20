@@ -204,7 +204,7 @@ async function handleWhatsAppUpdate(upsert, client) {
 
           case 's':
           case 'sticker': {
-            await processSticker(client, info, expirationMessage, sender, from, text, isMedia, isQuotedVideo, isQuotedImage, config, getFileBuffer);
+            await processSticker(client, info, expirationMessage, sender, from, text);
             break;
           }
 
