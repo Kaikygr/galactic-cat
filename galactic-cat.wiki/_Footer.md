@@ -1,6 +1,0 @@
-- 👤 **Owner (@kaikygr):**
-  - Instagram: [@kaikygr](https://www.instagram.com/kaikygr/)
-  - GitHub: [@kaikygr](https://github.com/kaikygr)
-- 🐾 **Projeto (Galactic Cat):**
-  - Instagram: [@cat_openbot](https://www.instagram.com/cat_openbot)
-  - GitHub: [galactic-cat](https://github.com/kaikygr/galactic-cat)
