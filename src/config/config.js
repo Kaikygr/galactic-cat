@@ -4,7 +4,7 @@ let env;
 
 // validação do prefixo do bot
 const commandPrefix = makeValidator((input) => {
-  if (!/^[!@#$%^&*\/]$/.test(input)) {
+  if (!/^[.!@#$%^&*\/]$/.test(input)) {
     throw new Error('BOT_GLOBAL_PREFIX deve ser um único caractere especial (ex: /, !, #)');
   }
   return input;
