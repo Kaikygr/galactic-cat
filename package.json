@@ -62,7 +62,6 @@
     "gemini",
     "mysql",
     "sticker",
-    "pm2",
     "winston"
   ],
   "bugs": {

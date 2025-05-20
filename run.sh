@@ -106,6 +106,7 @@ while true; do
   printf "  ${CYAN}1)${NC} ${BOLD}Production${NC}  - Inicia a aplicação em modo de produção (otimizado).\n"
   printf "  ${CYAN}2)${NC} ${BOLD}Development${NC} - Inicia a aplicação em modo de desenvolvimento (com mais logs/debug).\n"
   printf "  ${CYAN}3)${NC} ${BOLD}Limpar${NC}      - Apaga os dados temporários de conexão da pasta 'src/auth/temp'.\n"
+  printf "  ${CYAN}4)${NC} ${BOLD}Atualizar${NC}   - Atualiza o projeto com as últimas alterações do repositório (git pull).\n"
   printf "${YELLOW}Digite o número da opção desejada: ${NC}"
   read -r user_choice
 
@@ -152,10 +153,27 @@ while true; do
       fi
       continue # Volta ao início do loop para perguntar novamente
       ;;
+    4 | atualizar) # Aceita '4' ou 'atualizar'
+      # shellcheck disable=SC2059
+      printf "${CYAN}Tentando atualizar o projeto via 'git pull'...${NC}\n"
+      if [ -d "$SCRIPT_DIR/.git" ]; then
+        if git -C "$SCRIPT_DIR" pull; then
+          # shellcheck disable=SC2059
+          printf "${GREEN}Projeto atualizado com sucesso!${NC}\n\n"
+        else
+          # shellcheck disable=SC2059
+          printf "${RED}Falha ao atualizar o projeto. Verifique se há conflitos ou problemas de conexão.${NC}\n\n" >&2
+        fi
+      else
+        # shellcheck disable=SC2059
+        printf "${YELLOW}Este não parece ser um repositório git (pasta .git não encontrada em '%s'). Não é possível atualizar.${NC}\n\n" "$SCRIPT_DIR" >&2
+      fi
+      continue # Volta ao início do loop para perguntar novamente
+      ;;
 
     *)
       # shellcheck disable=SC2059
-      printf "${RED}Opção inválida: '%s'. Por favor, escolha uma das opções listadas (1, 2 ou 3).${NC}\n\n" "$user_choice" >&2
+      printf "${RED}Opção inválida: '%s'. Por favor, escolha uma das opções listadas (1, 2, 3 ou 4).${NC}\n\n" "$user_choice" >&2
       ;;
   esac
 done
