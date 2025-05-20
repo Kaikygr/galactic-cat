@@ -1,3 +1,4 @@
+/* eslint-disable no-undef */
 /**
  * @file Gerencia a conexão com o WhatsApp, o tratamento de eventos e a lógica de reconexão usando Baileys.
  * Este módulo é responsável por inicializar o cliente WhatsApp, lidar com diversos
@@ -7,12 +8,17 @@
  * @see {@link https://github.com/WhiskeySockets/Baileys |Baileys WASocket} para detalhes da API do cliente.
  */
 
-const { default: makeWASocket, Browsers, useMultiFileAuthState, DisconnectReason } = require('baileys');
+const {
+  default: makeWASocket,
+  Browsers,
+  useMultiFileAuthState,
+  DisconnectReason,
+} = require('baileys');
 const pino = require('pino');
 const path = require('path');
 const qrcode = require('qrcode-terminal');
 const fs = require('fs');
-const { cleanEnv, str, num, bool } = require('envalid');
+const { cleanEnv, num, bool } = require('envalid');
 
 require('dotenv').config();
 
@@ -28,10 +34,22 @@ require('dotenv').config();
  * @see {@link https://github.com/af/envalid|envalid} para mais informações sobre validação de variáveis de ambiente.
  */
 const env = cleanEnv(process.env, {
-  DEFAULT_INITIAL_RECONNECT_DELAY: num({ default: 1000, desc: 'Atraso inicial padrão para reconexão em ms.' }),
-  INITIAL_CONNECT_FAIL_DELAY: num({ default: 1500, desc: 'Atraso para reconexão em caso de falha na conexão inicial em ms.' }),
-  DEFAULT_MAX_RECONNECT_DELAY: num({ default: 60000, desc: 'Atraso máximo padrão para reconexão em ms.' }),
-  DEFAULT_RECONNECT_MAX_EXPONENT: num({ default: 10, desc: 'Expoente máximo padrão para o cálculo do backoff de reconexão.' }),
+  DEFAULT_INITIAL_RECONNECT_DELAY: num({
+    default: 1000,
+    desc: 'Atraso inicial padrão para reconexão em ms.',
+  }),
+  INITIAL_CONNECT_FAIL_DELAY: num({
+    default: 1500,
+    desc: 'Atraso para reconexão em caso de falha na conexão inicial em ms.',
+  }),
+  DEFAULT_MAX_RECONNECT_DELAY: num({
+    default: 60000,
+    desc: 'Atraso máximo padrão para reconexão em ms.',
+  }),
+  DEFAULT_RECONNECT_MAX_EXPONENT: num({
+    default: 10,
+    desc: 'Expoente máximo padrão para o cálculo do backoff de reconexão.',
+  }),
   SYNC_FULL_HISTORY: bool({ default: false, desc: 'Sincronizar histórico completo de mensagens.' }),
   DEBUG_BAILEYS: bool({ default: false, desc: 'Habilitar logs de debug do Baileys.' }),
 });
@@ -81,34 +99,78 @@ class ConnectionManager {
    */
   constructor(options) {
     if (!options || typeof options !== 'object') {
-      throw new TypeError('Opções de configuração para ConnectionManager são obrigatórias e devem ser um objeto.');
+      throw new TypeError(
+        'Opções de configuração para ConnectionManager são obrigatórias e devem ser um objeto.',
+      );
     }
 
-    if (!options.loggerInstance || typeof options.loggerInstance.info !== 'function' || typeof options.loggerInstance.error !== 'function' || typeof options.loggerInstance.debug !== 'function') {
-      console.error('[ConnectionManager.constructor] loggerInstance inválida ou não fornecida. Deve ser uma instância de logger compatível (ex: Pino).');
+    if (
+      !options.loggerInstance ||
+      typeof options.loggerInstance.info !== 'function' ||
+      typeof options.loggerInstance.error !== 'function' ||
+      typeof options.loggerInstance.debug !== 'function'
+    ) {
+      console.error(
+        '[ConnectionManager.constructor] loggerInstance inválida ou não fornecida. Deve ser uma instância de logger compatível (ex: Pino).',
+      );
       throw new TypeError('loggerInstance inválida ou não fornecida.');
     }
     /** @type {import('pino').Logger} Instância do logger. */
     this.logger = options.loggerInstance;
 
     if (!options.authStatePath || typeof options.authStatePath !== 'string') {
-      this.logger.error('[ConnectionManager.constructor] authStatePath é obrigatório e deve ser uma string.');
+      this.logger.error(
+        '[ConnectionManager.constructor] authStatePath é obrigatório e deve ser uma string.',
+      );
       throw new TypeError('authStatePath é obrigatório e deve ser uma string.');
     }
 
     const requiredDbFunctions = ['initDatabase', 'closePool'];
-    if (!options.dbFunctions || typeof options.dbFunctions !== 'object' || !requiredDbFunctions.every((fnName) => typeof options.dbFunctions[fnName] === 'function')) {
-      this.logger.error(`[ConnectionManager.constructor] dbFunctions inválido ou funções obrigatórias (${requiredDbFunctions.join(', ')}) ausentes/não são funções.`);
-      throw new TypeError(`dbFunctions inválido ou funções obrigatórias (${requiredDbFunctions.join(', ')}) ausentes/não são funções.`);
+    if (
+      !options.dbFunctions ||
+      typeof options.dbFunctions !== 'object' ||
+      !requiredDbFunctions.every((fnName) => typeof options.dbFunctions[fnName] === 'function')
+    ) {
+      this.logger.error(
+        `[ConnectionManager.constructor] dbFunctions inválido ou funções obrigatórias (${requiredDbFunctions.join(
+          ', ',
+        )}) ausentes/não são funções.`,
+      );
+      throw new TypeError(
+        `dbFunctions inválido ou funções obrigatórias (${requiredDbFunctions.join(
+          ', ',
+        )}) ausentes/não são funções.`,
+      );
     }
 
-    const requiredControllerFunctions = ['createTables', 'processUserData', 'processParticipantUpdate', 'botController'];
-    if (!options.controllerFunctions || typeof options.controllerFunctions !== 'object' || !requiredControllerFunctions.every((fnName) => typeof options.controllerFunctions[fnName] === 'function')) {
-      this.logger.error(`[ConnectionManager.constructor] controllerFunctions inválido ou funções obrigatórias (${requiredControllerFunctions.join(', ')}) ausentes/não são funções.`);
-      throw new TypeError(`controllerFunctions inválido ou funções obrigatórias (${requiredControllerFunctions.join(', ')}) ausentes/não são funções.`);
+    const requiredControllerFunctions = [
+      'createTables',
+      'processUserData',
+      'processParticipantUpdate',
+      'botController',
+    ];
+    if (
+      !options.controllerFunctions ||
+      typeof options.controllerFunctions !== 'object' ||
+      !requiredControllerFunctions.every(
+        (fnName) => typeof options.controllerFunctions[fnName] === 'function',
+      )
+    ) {
+      this.logger.error(
+        `[ConnectionManager.constructor] controllerFunctions inválido ou funções obrigatórias (${requiredControllerFunctions.join(
+          ', ',
+        )}) ausentes/não são funções.`,
+      );
+      throw new TypeError(
+        `controllerFunctions inválido ou funções obrigatórias (${requiredControllerFunctions.join(
+          ', ',
+        )}) ausentes/não são funções.`,
+      );
     }
 
-    this.logger.debug('[ConnectionManager.constructor] Opções e dependências validadas com sucesso.');
+    this.logger.debug(
+      '[ConnectionManager.constructor] Opções e dependências validadas com sucesso.',
+    );
 
     /** @type {string} Caminho para armazenar o estado de autenticação. */
     this.AUTH_STATE_PATH = options.authStatePath;
@@ -151,15 +213,25 @@ class ConnectionManager {
       label: 'scheduleReconnect',
     },
   ) {
-    this.logger.debug(`[ ${options.label} ] Iniciando scheduleReconnect. Tentativas atuais: ${this.reconnectAttempts}. Timeout existente: ${!!this.reconnectTimeout}`);
+    this.logger.debug(
+      `[ ${options.label} ] Iniciando scheduleReconnect. Tentativas atuais: ${
+        this.reconnectAttempts
+      }. Timeout existente: ${!!this.reconnectTimeout}`,
+    );
     if (this.reconnectTimeout) return;
 
     this.reconnectAttempts = Math.min(this.reconnectAttempts + 1, options.maxExponent + 10);
     const exponent = Math.min(this.reconnectAttempts, options.maxExponent);
     const delay = Math.min(options.initialDelay * 2 ** exponent, options.maxDelay);
 
-    this.logger.debug(`[ ${options.label} ] Calculado delay: ${delay}ms. Expoente: ${exponent}. Tentativa: ${this.reconnectAttempts}`);
-    this.logger.warn(`[ ${options.label} ] Conexão perdida. Tentando reconectar em ${delay / 1000}s... Tentativa: ${this.reconnectAttempts}`);
+    this.logger.debug(
+      `[ ${options.label} ] Calculado delay: ${delay}ms. Expoente: ${exponent}. Tentativa: ${this.reconnectAttempts}`,
+    );
+    this.logger.warn(
+      `[ ${options.label} ] Conexão perdida. Tentando reconectar em ${
+        delay / 1000
+      }s... Tentativa: ${this.reconnectAttempts}`,
+    );
 
     this.reconnectTimeout = setTimeout(() => {
       this.reconnectTimeout = null;
@@ -218,8 +290,16 @@ class ConnectionManager {
     const statusCode = lastDisconnect?.error?.output?.statusCode;
     const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
 
-    this.logger.debug('[ _handleDisconnection ] Detalhes da desconexão:', { error: lastDisconnect?.error, statusCode, shouldReconnect });
-    this.logger.error(`[ _handleDisconnection ] Conexão fechada. Razão: ${DisconnectReason[statusCode] || 'Desconhecida'} Código: ${statusCode}`);
+    this.logger.debug('[ _handleDisconnection ] Detalhes da desconexão:', {
+      error: lastDisconnect?.error,
+      statusCode,
+      shouldReconnect,
+    });
+    this.logger.error(
+      `[ _handleDisconnection ] Conexão fechada. Razão: ${
+        DisconnectReason[statusCode] || 'Desconhecida'
+      } Código: ${statusCode}`,
+    );
 
     if (shouldReconnect) {
       this.logger.info('[ _handleDisconnection ] Tentando reconectar...');
@@ -230,8 +310,12 @@ class ConnectionManager {
         label: 'WhatsAppConnection',
       });
     } else {
-      this.logger.warn('[ _handleDisconnection ] Reconexão não será tentada devido ao DisconnectReason.loggedOut.');
-      this.logger.error("[ _handleDisconnection ]  Não foi possível reconectar: Deslogado. Exclua a pasta 'temp/auth_state' e reinicie para gerar um novo QR Code.");
+      this.logger.warn(
+        '[ _handleDisconnection ] Reconexão não será tentada devido ao DisconnectReason.loggedOut.',
+      );
+      this.logger.error(
+        "[ _handleDisconnection ]  Não foi possível reconectar: Deslogado. Exclua a pasta 'temp/auth_state' e reinicie para gerar um novo QR Code.",
+      );
     }
   }
 
@@ -289,7 +373,10 @@ class ConnectionManager {
    * @returns {Promise<void>}
    */
   async handleMessagesUpsert(data) {
-    this.logger.debug('[ handleMessagesUpsert ] Recebido evento messages.upsert:', { messageCount: data.messages?.length, type: data.type });
+    this.logger.debug('[ handleMessagesUpsert ] Recebido evento messages.upsert:', {
+      messageCount: data.messages?.length,
+      type: data.type,
+    });
     if (!this.clientInstance) {
       this.logger.error('[ handleMessagesUpsert ] Instância do cliente inválida.');
       return;
@@ -297,20 +384,28 @@ class ConnectionManager {
 
     const msg = data.messages?.[0];
     if (!msg?.key?.remoteJid || !msg.message) {
-      this.logger.debug('[ handleMessagesUpsert ] Mensagem ignorada: sem remoteJid ou conteúdo da mensagem.', { key: msg?.key, message: msg?.message });
+      this.logger.debug(
+        '[ handleMessagesUpsert ] Mensagem ignorada: sem remoteJid ou conteúdo da mensagem.',
+        { key: msg?.key, message: msg?.message },
+      );
       return;
     }
 
-    this.logger.debug(`[ handleMessagesUpsert ] Agendando processamento para mensagem ID: ${msg.key.id} de ${msg.key.remoteJid}`);
+    this.logger.debug(
+      `[ handleMessagesUpsert ] Agendando processamento para mensagem ID: ${msg.key.id} de ${msg.key.remoteJid}`,
+    );
     setImmediate(async () => {
       try {
         await this.processMessage(data, msg);
       } catch (error) {
-        this.logger.error(`[ handleMessagesUpsert.setImmediate ] Erro não capturado ao processar mensagem ID: ${msg?.key?.id} de ${msg?.key?.remoteJid}. Isso indica um erro inesperado dentro de processMessage não tratado pelos try/catch internos.`, {
-          message: error.message,
-          stack: error.stack,
-          originalData: data,
-        });
+        this.logger.error(
+          `[ handleMessagesUpsert.setImmediate ] Erro não capturado ao processar mensagem ID: ${msg?.key?.id} de ${msg?.key?.remoteJid}. Isso indica um erro inesperado dentro de processMessage não tratado pelos try/catch internos.`,
+          {
+            message: error.message,
+            stack: error.stack,
+            originalData: data,
+          },
+        );
       }
     });
   }
@@ -326,15 +421,20 @@ class ConnectionManager {
   async processMessage(data, msg) {
     const messageId = msg.key.id;
     const remoteJid = msg.key.remoteJid;
-    this.logger.debug(`[ processMessage ] Iniciando processamento da mensagem ID: ${messageId} de ${remoteJid}`);
+    this.logger.debug(
+      `[ processMessage ] Iniciando processamento da mensagem ID: ${messageId} de ${remoteJid}`,
+    );
 
     try {
       await this.controllers.processUserData(data, this.clientInstance);
     } catch (err) {
       this.logger.debug('[ processMessage ] Erro detalhado em processUserData:', err);
-      this.logger.error(`[ processMessage ] ID:${messageId} Erro em processUserData para ${remoteJid}: ${err.message}`, {
-        stack: err.stack,
-      });
+      this.logger.error(
+        `[ processMessage ] ID:${messageId} Erro em processUserData para ${remoteJid}: ${err.message}`,
+        {
+          stack: err.stack,
+        },
+      );
       return;
     }
 
@@ -343,9 +443,12 @@ class ConnectionManager {
     } catch (err) {
       this.logger.debug('[ processMessage ] Erro detalhado em botController:', err);
       const messageType = Object.keys(msg.message || {})[0] || 'tipo desconhecido';
-      this.logger.error(`[ processMessage ] ID:${messageId} Erro em botController com tipo '${messageType}' no JID ${remoteJid}: ${err.message}`, {
-        stack: err.stack,
-      });
+      this.logger.error(
+        `[ processMessage ] ID:${messageId} Erro em botController com tipo '${messageType}' no JID ${remoteJid}: ${err.message}`,
+        {
+          stack: err.stack,
+        },
+      );
       return;
     }
   }
@@ -364,15 +467,24 @@ class ConnectionManager {
     }
 
     if (!Array.isArray(updates)) {
-      this.logger.warn('[ handleGroupsUpdate ] Atualizações de grupo recebidas não são um array. Recebido:', typeof updates, updates);
+      this.logger.warn(
+        '[ handleGroupsUpdate ] Atualizações de grupo recebidas não são um array. Recebido:',
+        typeof updates,
+        updates,
+      );
       return;
     }
 
-    this.logger.info(`[ handleGroupsUpdate ]  Recebido ${updates.length} evento(s) de atualização de grupo.`);
+    this.logger.info(
+      `[ handleGroupsUpdate ]  Recebido ${updates.length} evento(s) de atualização de grupo.`,
+    );
     updates.forEach((groupUpdate) => {
       const groupId = groupUpdate.id;
       if (groupId) {
-        this.logger.debug(`[ handleGroupsUpdate ] Evento de atualização para o grupo ${groupId}:`, groupUpdate);
+        this.logger.debug(
+          `[ handleGroupsUpdate ] Evento de atualização para o grupo ${groupId}:`,
+          groupUpdate,
+        );
       } else {
         this.logger.warn('[ handleGroupsUpdate ] Evento de atualização de grupo sem JID.');
       }
@@ -386,14 +498,20 @@ class ConnectionManager {
    * @returns {Promise<void>}
    */
   async handleGroupParticipantsUpdate(event) {
-    this.logger.debug('[ handleGroupParticipantsUpdate ] Recebido evento group-participants.update:', event);
+    this.logger.debug(
+      '[ handleGroupParticipantsUpdate ] Recebido evento group-participants.update:',
+      event,
+    );
     if (!this.clientInstance) {
       this.logger.error('[ handleGroupParticipantsUpdate ] Instância do cliente inválida.');
       return;
     }
 
     if (!event || typeof event !== 'object' || !event.id || !Array.isArray(event.participants)) {
-      this.logger.warn('[ handleGroupParticipantsUpdate ] Evento de participantes inválido ou malformado. Recebido:', event);
+      this.logger.warn(
+        '[ handleGroupParticipantsUpdate ] Evento de participantes inválido ou malformado. Recebido:',
+        event,
+      );
       return;
     }
 
@@ -401,16 +519,23 @@ class ConnectionManager {
     const action = event.action || 'ação desconhecida';
     const participants = event.participants.join(', ');
 
-    this.logger.info(`[ handleGroupParticipantsUpdate ] Evento recebido para grupo ${groupId}. Ação: ${action}. Participantes: ${participants}`);
+    this.logger.info(
+      `[ handleGroupParticipantsUpdate ] Evento recebido para grupo ${groupId}. Ação: ${action}. Participantes: ${participants}`,
+    );
 
     try {
       await this.controllers.processParticipantUpdate(event, this.clientInstance);
-      this.logger.debug(`[ handleGroupParticipantsUpdate ] Evento para grupo ${groupId} processado com sucesso.`);
+      this.logger.debug(
+        `[ handleGroupParticipantsUpdate ] Evento para grupo ${groupId} processado com sucesso.`,
+      );
     } catch (error) {
-      this.logger.error(`[ handleGroupParticipantsUpdate ] Erro ao processar evento para ${groupId}: ${error.message}`, {
-        eventDetails: event,
-        stack: error.stack,
-      });
+      this.logger.error(
+        `[ handleGroupParticipantsUpdate ] Erro ao processar evento para ${groupId}: ${error.message}`,
+        {
+          eventDetails: event,
+          stack: error.stack,
+        },
+      );
     }
   }
 
@@ -423,7 +548,9 @@ class ConnectionManager {
   registerAllEventHandlers(saveCreds) {
     this.logger.debug('[ registerAllEventHandlers ] Registrando manipuladores de eventos Baileys.');
     if (!this.clientInstance) {
-      this.logger.error('[ registerAllEventHandlers ] Tentativa de registrar handlers sem instância de cliente.');
+      this.logger.error(
+        '[ registerAllEventHandlers ] Tentativa de registrar handlers sem instância de cliente.',
+      );
       return;
     }
     this.clientInstance.ev.on('connection.update', this.handleConnectionUpdate);
@@ -443,20 +570,31 @@ class ConnectionManager {
     this.logger.info('[ connectToWhatsApp ] Tentando conectar ao WhatsApp...');
     try {
       if (!fs.existsSync(this.AUTH_STATE_PATH)) {
-        this.logger.info(`[ connectToWhatsApp ] Diretório de estado de autenticação não encontrado em ${this.AUTH_STATE_PATH}. Criando...`);
+        this.logger.info(
+          `[ connectToWhatsApp ] Diretório de estado de autenticação não encontrado em ${this.AUTH_STATE_PATH}. Criando...`,
+        );
         try {
           fs.mkdirSync(this.AUTH_STATE_PATH, { recursive: true });
-          this.logger.info(`[ connectToWhatsApp ] Diretório ${this.AUTH_STATE_PATH} criado com sucesso.`);
+          this.logger.info(
+            `[ connectToWhatsApp ] Diretório ${this.AUTH_STATE_PATH} criado com sucesso.`,
+          );
         } catch (mkdirError) {
-          this.logger.error(`[ connectToWhatsApp ] Falha ao criar o diretório ${this.AUTH_STATE_PATH}: ${mkdirError.message}`, { stack: mkdirError.stack });
+          this.logger.error(
+            `[ connectToWhatsApp ] Falha ao criar o diretório ${this.AUTH_STATE_PATH}: ${mkdirError.message}`,
+            { stack: mkdirError.stack },
+          );
           throw mkdirError;
         }
       }
 
-      this.logger.info(`[ connectToWhatsApp ] Usando diretório de estado de autenticação: ${this.AUTH_STATE_PATH}`);
+      this.logger.info(
+        `[ connectToWhatsApp ] Usando diretório de estado de autenticação: ${this.AUTH_STATE_PATH}`,
+      );
       const { state, saveCreds } = await useMultiFileAuthState(this.AUTH_STATE_PATH);
       this.logger.debug('[ connectToWhatsApp ] Estado de autenticação carregado/criado.');
-      this.logger.debug(`[ connectToWhatsApp ] Configurações de ambiente relevantes: SYNC_FULL_HISTORY=${env.SYNC_FULL_HISTORY}, DEBUG_BAILEYS=${env.DEBUG_BAILEYS}`);
+      this.logger.debug(
+        `[ connectToWhatsApp ] Configurações de ambiente relevantes: SYNC_FULL_HISTORY=${env.SYNC_FULL_HISTORY}, DEBUG_BAILEYS=${env.DEBUG_BAILEYS}`,
+      );
 
       this.logger.info('[ connectToWhatsApp ] Iniciando a conexão com o WhatsApp...');
 
@@ -477,19 +615,30 @@ class ConnectionManager {
 
       return this.clientInstance;
     } catch (error) {
-      this.logger.error(`[ connectToWhatsApp ] Erro ao iniciar a conexão com o WhatsApp: ${error.message}`, {
-        code: error.code,
-        stack: error.stack,
-      });
+      this.logger.error(
+        `[ connectToWhatsApp ] Erro ao iniciar a conexão com o WhatsApp: ${error.message}`,
+        {
+          code: error.code,
+          stack: error.stack,
+        },
+      );
 
-      const isLikelyAuthStateError = (error.message && (error.message.includes(this.AUTH_STATE_PATH) || error.message.toLowerCase().includes('auth') || error.message.toLowerCase().includes('creds'))) || (error.code && ['ENOENT', 'EACCES', 'EBADF', 'EPERM', 'EISDIR', 'ENOTDIR'].includes(error.code));
+      const isLikelyAuthStateError =
+        (error.message &&
+          (error.message.includes(this.AUTH_STATE_PATH) ||
+            error.message.toLowerCase().includes('auth') ||
+            error.message.toLowerCase().includes('creds'))) ||
+        (error.code &&
+          ['ENOENT', 'EACCES', 'EBADF', 'EPERM', 'EISDIR', 'ENOTDIR'].includes(error.code));
 
       if (isLikelyAuthStateError) {
         const fatalMessage = `[ connectToWhatsApp ] Erro crítico e possivelmente irrecuperável relacionado ao estado de autenticação em ${this.AUTH_STATE_PATH}. Verifique as permissões, a integridade da pasta ou se o caminho é válido. Não será tentada a reconexão automática. Detalhes: ${error.message}`;
         this.logger.fatal(fatalMessage);
         throw new Error(fatalMessage, { cause: error });
       } else {
-        this.logger.warn(`[ connectToWhatsApp ] Agendando reconexão devido a erro não relacionado ao estado de autenticação: ${error.message}`);
+        this.logger.warn(
+          `[ connectToWhatsApp ] Agendando reconexão devido a erro não relacionado ao estado de autenticação: ${error.message}`,
+        );
         this.scheduleReconnect(this.connectToWhatsApp, {
           initialDelay: INITIAL_CONNECT_FAIL_DELAY,
           maxDelay: DEFAULT_MAX_RECONNECT_DELAY,
@@ -513,19 +662,28 @@ class ConnectionManager {
       this.logger.debug('[ ConnectionManager.initialize ] Fase 1: Inicializando banco de dados.');
 
       await this.db.initDatabase();
-      this.logger.info('[ ConnectionManager.initialize ] Pool de conexões do banco de dados inicializado.');
+      this.logger.info(
+        '[ ConnectionManager.initialize ] Pool de conexões do banco de dados inicializado.',
+      );
       this.logger.debug('[ ConnectionManager.initialize ] Fase 2: Criando/Verificando tabelas.');
 
       await this.controllers.createTables();
-      this.logger.info('[ ConnectionManager.initialize ] Tabelas do banco de dados verificadas/criadas.');
+      this.logger.info(
+        '[ ConnectionManager.initialize ] Tabelas do banco de dados verificadas/criadas.',
+      );
       this.logger.debug('[ ConnectionManager.initialize ] Fase 3: Conectando ao WhatsApp.');
 
       await this.connectToWhatsApp();
-      this.logger.debug('[ ConnectionManager.initialize ] Conexão com WhatsApp iniciada (ou agendada para reconexão).');
+      this.logger.debug(
+        '[ ConnectionManager.initialize ] Conexão com WhatsApp iniciada (ou agendada para reconexão).',
+      );
     } catch (error) {
-      this.logger.error(`[ ConnectionManager.initialize ] Falha crítica durante a inicialização da aplicação: ${error.message}`, {
-        stack: error.cause?.stack || error.stack,
-      });
+      this.logger.error(
+        `[ ConnectionManager.initialize ] Falha crítica durante a inicialização da aplicação: ${error.message}`,
+        {
+          stack: error.cause?.stack || error.stack,
+        },
+      );
       process.exit(1);
     }
   }

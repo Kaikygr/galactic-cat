@@ -6,7 +6,8 @@
   "private": true,
   "scripts": {
     "start": "chmod +x ./run.sh && ./run.sh",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint": "eslint ."
   },
   "author": {
     "name": "Kaikygr",
@@ -74,5 +75,10 @@
   "funding": {
     "type": "individual",
     "url": "https://bit.ly/m/Kaally"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.27.0",
+    "eslint": "^9.27.0",
+    "globals": "^16.1.0"
   }
 }
