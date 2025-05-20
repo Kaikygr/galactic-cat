@@ -2,11 +2,10 @@
   "name": "galactic-cat",
   "version": "0.1.2",
   "description": "Chatbot open-source robusto e extensível para automação no WhatsApp, construído com Node.js e a biblioteca baileys. Projetado para ser eficiente e confiável, ele oferece uma base sólida para desenvolvedores criarem interações complexas e automatizadas, desde respostas simples até integrações com serviços de IA e gerenciamento avançado de grupos.",
-  "main": "./src/auth/connection.js",
+  "main": "src",
   "private": true,
   "scripts": {
-    "start": "chmod +x ./run.sh && ./run.sh production",
-    "dev": "chmod +x ./run.sh && ./run.sh development",
+    "start": "chmod +x ./run.sh && ./run.sh",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": {
@@ -63,7 +62,6 @@
     "gemini",
     "mysql",
     "sticker",
-    "pm2",
     "winston"
   ],
   "bugs": {
